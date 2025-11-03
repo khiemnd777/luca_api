@@ -1,0 +1,27 @@
+# scripts/create_module/templates/config.yaml.tmpl
+server:
+  host: "127.0.0.1"
+  port: 8085
+  route: "/api/audit"
+external: false
+database:
+  provider: "postgres"
+  automigrate: true
+  postgres:
+    host: "127.0.0.1"
+    port: 5432
+    user: "samson_with_hair"
+    password: "samson_with_hair"
+    name: "lucadb"
+    sslmode: "disable"
+
+shared_database:
+  provider: "postgres"
+  automigrate: true
+  postgres:
+    host: "127.0.0.1"
+    port: 5432
+    user: "samson_with_hair"
+    password: "samson_with_hair"
+    name: "lucadb"
+    sslmode: "disable"

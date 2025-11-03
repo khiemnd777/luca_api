@@ -1,0 +1,17 @@
+server:
+  host: ${M_FOLDER_HOST}
+  port: ${M_FOLDER_PORT}
+  route: "/api/folder"
+
+external: true
+
+database:
+  provider: ${DB_PROVIDER}
+  automigrate: true
+  postgres:
+    host: ${PG_HOST}
+    port: ${PG_PORT}
+    user: ${PG_USER}
+    password: ${PG_PASSWORD}
+    name: ${PG_DBNAME}
+    sslmode: ${PG_SSL}

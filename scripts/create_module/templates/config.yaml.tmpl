@@ -1,0 +1,18 @@
+# scripts/create_module/templates/config.yaml.tmpl
+server:
+  host: "{{.ServerHost}}"
+  port: {{.ServerPort}}
+  route: "{{.ServerRoute}}"
+
+external: true
+
+database:
+  provider: "postgres"
+  automigrate: true
+  postgres:
+    host: "{{.DBHost}}"
+    port: {{.DBPort}}
+    user: "{{.DBUser}}"
+    password: "{{.DBPassword}}"
+    name: "{{.DBName}}"
+    sslmode: "{{.DBSSLMode}}"

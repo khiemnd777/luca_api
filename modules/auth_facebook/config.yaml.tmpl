@@ -1,0 +1,27 @@
+# scripts/create_module/templates/config.yaml.tmpl
+server:
+  host: "127.0.0.1"
+  port: 8087
+  route: "/api/auth-facebook"
+
+external: true
+
+authfacebook:
+  clientid: "000"
+  clientsecret: "def000"
+  redirecturi: "http://10.0.2.2:8000/api/auth-facebook/callback"
+  authurl: "https://www.facebook.com/v17.0/dialog/oauth"
+  tokenurl: "https://graph.facebook.com/v17.0/oauth/access_token"
+  userinfourl: "https://graph.facebook.com/me?fields=id,name,email,picture"
+  appredirectbase: "honvang://auth"
+
+database:
+  provider: "postgres"
+  automigrate: true
+  postgres:
+    host: "127.0.0.1"
+    port: 5432
+    user: "samson_with_hair"
+    password: "samson_with_hair"
+    name: "lucadb"
+    sslmode: "disable"

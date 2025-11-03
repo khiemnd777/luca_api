@@ -1,0 +1,78 @@
+# === Golang build ===
+/bin/
+/dist/
+/build/
+*.exe
+*.test
+*.out
+*_api
+
+# === Golang vendor (if usage) ===
+/vendor/
+
+# === Go modules cache ===
+/go.sum
+
+# === Ent generated (shared + modules) ===
+/shared/db/ent/generated/
+/ent/generated/
+/modules/**/ent/generated/
+
+# === Keep ent/schema & generate.go in each module
+!/modules/**/ent/schema/
+!/modules/**/ent/generate.go
+
+# === Flyway ===
+flyway.conf
+/flyway/sql/*.lock
+/flyway/sql/*.tmp
+
+# === Config & secrets ===
+*.env
+*.env.*
+*.secret.yaml
+*.yaml
+!version.yaml
+
+# === IDEs ===
+.vscode/
+.idea/
+
+# === Logs ===
+*.log
+/logs/
+/debug/
+
+# === Redis dump (if uses at local) ===
+dump.rdb
+appendonly.aof
+
+# === OS specific ===
+.DS_Store
+Thumbs.db
+
+# === Scripts build (if needed) ===
+/scripts/**/bin/
+/scripts/**/build/
+
+# === Test & coverage ===
+*.coverprofile
+*.testresult
+coverage.out
+
+# === Temporary files ===
+*.swp
+*.swo
+*.tmp
+*.bak
+/tmp/
+/storage/*
+
+# === Private files ===
+/private/
+/modules/**/private/
+
+# === Editor-specific ===
+*.iml
+*.sublime-workspace
+*.sublime-project

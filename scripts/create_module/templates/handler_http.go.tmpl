@@ -1,0 +1,37 @@
+// scripts/create_module/templates/handler_http.go.tmpl
+package handler
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/service"
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/config"
+	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/app"
+)
+
+type {{.Module}}Handler struct {
+	svc 	*service.{{.Module}}Service
+	deps 	*module.ModuleDeps[config.ModuleConfig]
+}
+
+func New{{.Module}}Handler(svc *service.{{.Module}}Service, deps *module.ModuleDeps[config.ModuleConfig]) *{{.Module}}Handler {
+	return &{{.Module}}Handler{
+		svc: svc,
+		deps: deps,
+	}
+}
+
+func (h *{{.Module}}Handler) RegisterRoutes(router fiber.Router) {
+  // as a template
+	// app.RouterGet(router, "", h.GetAll)
+}
+
+/* as a template
+func (h *{{.Module}}Handler) GetAll(c *fiber.Ctx) error {
+	items, err := h.svc.GetAll(c.UserContext())
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.JSON(items)
+}
+*/

@@ -1,0 +1,21 @@
+# scripts/create_module/templates/config.yaml.tmpl
+server:
+  host: "127.0.0.1"
+  port: 8092
+  route: "/api/photo"
+
+external: true
+
+storage:
+  photo_path: "./storage/photo"
+
+database:
+  provider: "postgres"
+  automigrate: true
+  postgres:
+    host: "127.0.0.1"
+    port: 5432
+    user: "samson_with_hair"
+    password: "samson_with_hair"
+    name: "lucadb"
+    sslmode: "disable"

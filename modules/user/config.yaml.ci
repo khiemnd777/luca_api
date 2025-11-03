@@ -1,0 +1,17 @@
+server:
+  host: ${M_USER_HOST}
+  port: ${M_USER_PORT}
+  route: "/api/user"
+
+external: true
+
+database:
+  provider: ${DB_PROVIDER}
+  automigrate: true
+  postgres:
+    host: ${PG_HOST}
+    port: ${PG_PORT}
+    user: ${PG_USER}
+    password: ${PG_PASSWORD}
+    name: ${PG_DBNAME}
+    sslmode: ${PG_SSL}

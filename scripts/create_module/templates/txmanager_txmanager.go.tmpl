@@ -1,0 +1,45 @@
+package txmanager
+
+import (
+	"context"
+
+  "github.com/khiemnd777/andy_api/shared/logger"
+
+  {{if .WithEnt}}
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/ent/generated"
+	{{else}}
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	{{end}}
+)
+
+type TxManager interface {
+	NewTx(ctx context.Context) (*generated.Tx, error)
+	Commit(tx *generated.Tx) error
+	Rollback(tx *generated.Tx)
+}
+
+type EntTxManager struct {
+	client *generated.Client
+}
+
+func NewEntTxManager(client *generated.Client) *EntTxManager {
+	return &EntTxManager{client: client}
+}
+
+func (m *EntTxManager) NewTx(ctx context.Context) (*generated.Tx, error) {
+	return m.client.Tx(ctx)
+}
+
+func (m *EntTxManager) Commit(tx *generated.Tx) error {
+	if tx == nil {
+		logger.Error("tx is nil")
+		return nil
+	}
+	return tx.Commit()
+}
+
+func (m *EntTxManager) Rollback(tx *generated.Tx) {
+	if tx != nil {
+		_ = tx.Rollback()
+	}
+}

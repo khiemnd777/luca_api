@@ -1,0 +1,6 @@
+#!/bin/bash
+# 🚀 Building project...
+./init_project.sh
+
+#🚀 Boosting up...
+./run.sh

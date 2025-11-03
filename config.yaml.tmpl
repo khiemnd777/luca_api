@@ -1,0 +1,88 @@
+project:
+  name: "api"
+  baseapiprefix: "/api"
+  version: "v1"
+
+server:
+  host: "127.0.0.1"
+  port: 3000
+  body_limit_mb: 50
+
+auth:
+  secret: "super-secret-jwt"
+  internalauthtoken: "s3cr3t-shared-token"
+  internallogtoken: "s3cr3t-log-token"
+
+retry:
+  maxattempts: 3
+  delay: 100ms
+
+database:
+  provider: postgres  # "mongodb", "sqlite", "mysql"
+  automigrate: true
+  postgres:
+    host: "127.0.0.1"
+    port: 5432
+    user: "samson_with_hair"
+    password: "samson-with-hair"
+    name: "mydb"
+    sslmode: "disable"
+  mongodb:
+    uri: mongodb://127.0.0.1:27017
+    database: "mydb"
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    user: root
+    password: "samson-with-hair"
+    name: "mydb"
+
+cron:
+  clear_refresh_token:
+    enabled: true
+    schedule: "@every 1h"
+  clear_deleted_photo:
+    enabled: true
+    schedule: "0 0 * * *"
+  delete_all_expired_guests:
+    enabled: true
+    schedule: "0 0 * * *"
+
+cache:
+  ttl:
+    short: 2m
+    medium: 5m
+    long: 20m
+    static: 6h
+
+redis:
+  instances:
+    cache:
+      host: "127.0.0.1"
+      port: 6379
+      username: ""
+      password: ""
+      db: 0
+      iscluster: false
+      usetls: false
+    pubsub:
+      host: "127.0.0.1"
+      port: 6379
+      username: ""
+      password: ""
+      db: 1
+      iscluster: false
+      usetls: false
+    status:
+      host: "127.0.0.1"
+      port: 6379
+      username: ""
+      password: ""
+      db: 2
+      iscluster: false
+      usetls: false
+
+circuitbreaker:
+  interval: 30s
+  timeout: 10s
+  consecutivefailures: 5

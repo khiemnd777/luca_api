@@ -1,0 +1,18 @@
+# scripts/create_module/templates/config.yaml.tmpl
+server:
+  host: ${M_NOTIFICATION_HOST}
+  port: ${M_NOTIFICATION_PORT}
+  route: "/api/notification"
+
+external: true
+
+database:
+  provider: ${DB_PROVIDER} # or "mongodb"
+  automigrate: true
+  postgres:
+    host: ${PG_HOST}
+    port: ${PG_PORT}
+    user: ${PG_USER}
+    password: ${PG_PASSWORD}
+    name: ${PG_DBNAME}
+    sslmode: ${PG_SSL}

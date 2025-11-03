@@ -1,0 +1,20 @@
+server:
+  host: ${M_PHOTO_HOST}
+  port: ${M_PHOTO_PORT}
+  route: "/api/photo"
+
+external: true
+
+storage:
+  photo_path: "${M_PHOTO_STORAGE_PATH}"
+
+database:
+  provider: ${DB_PROVIDER}
+  automigrate: true
+  postgres:
+    host: ${PG_HOST}
+    port: ${PG_PORT}
+    user: ${PG_USER}
+    password: ${PG_PASSWORD}
+    name: ${PG_DBNAME}
+    sslmode: ${PG_SSL}

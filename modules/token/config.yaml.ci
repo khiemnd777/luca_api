@@ -1,0 +1,17 @@
+server:
+  host: ${M_TOKEN_HOST}
+  port: ${M_TOKEN_PORT}
+  route: "/api/token"
+
+external: true
+
+database:
+  provider: ${DB_PROVIDER}
+  automigrate: true
+  postgres:
+    host: ${PG_HOST}
+    port: ${PG_PORT}
+    user: ${PG_USER}
+    password: ${PG_PASSWORD}
+    name: ${PG_DBNAME}
+    sslmode: ${PG_SSL}

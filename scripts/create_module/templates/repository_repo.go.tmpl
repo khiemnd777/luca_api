@@ -1,0 +1,31 @@
+// scripts/create_module/templates/repository_repo.go.tmpl
+package repository
+
+import (
+	// "context"
+  {{if .WithEnt}}
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/ent/generated"
+	{{else}}
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	{{end}}
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/config"
+	"github.com/khiemnd777/andy_api/shared/module"
+)
+
+type {{.Module}}Repository struct {
+	client 	*generated.Client
+	deps 		*module.ModuleDeps[config.ModuleConfig]
+}
+
+func New{{.Module}}Repository(client *generated.Client, deps *module.ModuleDeps[config.ModuleConfig]) *{{.Module}}Repository {
+	return &{{.Module}}Repository{
+		client: client,
+		deps: deps,
+	}
+}
+
+/* as a template
+func (r *{{.Module}}Repository) List(ctx context.Context) ([]*generated.{{.Module}}, error) {
+	return r.client.{{.Module}}.Query().All(ctx)
+}
+*/

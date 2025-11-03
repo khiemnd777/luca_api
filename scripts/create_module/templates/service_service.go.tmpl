@@ -1,0 +1,35 @@
+// scripts/create_module/templates/service_service.go.tmpl
+package service
+
+import (
+	// "context"
+	{{if .WithEnt}}
+	// "github.com/khiemnd777/andy_api/modules/{{.module}}/ent/generated"
+	{{else}}
+	// "github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	{{end}}
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/txmanager"
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/config"
+	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/modules/{{.module}}/repository"
+)
+
+type {{.Module}}Service struct {
+	txManager txmanager.TxManager
+	repo *repository.{{.Module}}Repository
+	deps *module.ModuleDeps[config.ModuleConfig]
+}
+
+func New{{.Module}}Service(txManager txmanager.TxManager, repo *repository.{{.Module}}Repository, deps *module.ModuleDeps[config.ModuleConfig]) *{{.Module}}Service {
+	return &{{.Module}}Service{
+		txManager: txManager,
+		repo: repo,
+		deps: deps,
+	}
+}
+
+/* as a template
+func (s *{{.Module}}Service) GetAll(ctx context.Context) ([]*generated.{{.Module}}, error) {
+	return s.repo.List(ctx)
+}
+*/
