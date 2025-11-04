@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/khiemnd777/andy_api/shared/logger"
 )
 
 type ErrorResponse struct {
@@ -22,6 +23,7 @@ func ResponseError(c *fiber.Ctx, statusCode int, err error, extraMessage ...stri
 			message = fmt.Sprintf("%s\n%s", message, err.Error())
 		}
 	}
+	logger.Debug(fmt.Sprintf("[ERROR] %s", message))
 	errResp := ErrorResponse{
 		Code:    statusCode,
 		Message: message,
