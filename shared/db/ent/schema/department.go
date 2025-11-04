@@ -21,8 +21,8 @@ func (Department) Fields() []ent.Field {
 			Default("Luca"),
 
 		field.String("slug").
-			NotEmpty().
-			Default("luca"),
+			Optional().
+			Nillable(),
 
 		field.String("logo").
 			Optional().

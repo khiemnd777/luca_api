@@ -60,7 +60,7 @@ func invalidateDept(id int, slug string) {
 func (s *departmentService) Create(ctx context.Context, input model.DepartmentDTO) (*model.DepartmentDTO, error) {
 	res, err := s.repo.Create(ctx, input)
 	if err == nil {
-		invalidateDept(res.ID, res.Slug)
+		invalidateDept(res.ID, *res.Slug)
 	}
 	return res, err
 }
@@ -68,7 +68,7 @@ func (s *departmentService) Create(ctx context.Context, input model.DepartmentDT
 func (s *departmentService) Update(ctx context.Context, input model.DepartmentDTO) (*model.DepartmentDTO, error) {
 	res, err := s.repo.Update(ctx, input)
 	if err == nil {
-		invalidateDept(res.ID, res.Slug)
+		invalidateDept(res.ID, *res.Slug)
 	}
 	return res, err
 }
@@ -119,7 +119,7 @@ func (s *departmentService) Delete(ctx context.Context, id int) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
-	invalidateDept(id, res.Slug)
+	invalidateDept(id, *res.Slug)
 	return nil
 }
 

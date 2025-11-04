@@ -30,16 +30,14 @@ func main() {
 			svc := service.NewDepartmentService(repo, deps)
 			svcDeptGuard := service.NewGuardService(repo)
 
-			groupDeptRouter := app.Group(utils.GetModuleRoute(deps.Config.Server.Route),
-				middleware.RequireAuth(),
+			groupRouter := app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth())
+
+			groupRouter.Use("/:dept_id<int>/*",
 				middleware.RequireDepartmentMember(svcDeptGuard, "dept_id"),
 			)
 
-			groupAuthOnlyRouter := app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth())
-
 			h := handler.NewDepartmentHandler(svc, deps)
-			h.RegisterRoutes(groupDeptRouter)
-			h.RegisterAuthOnlyRoutes(groupAuthOnlyRouter)
+			h.RegisterRoutes(groupRouter)
 		},
 	})
 }

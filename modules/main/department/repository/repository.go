@@ -37,7 +37,7 @@ func (r *departmentRepo) Create(ctx context.Context, input model.DepartmentDTO) 
 	q := r.db.Department.Create().
 		SetActive(input.Active).
 		SetName(input.Name).
-		SetSlug(input.Slug).
+		SetNillableSlug(input.Slug).
 		SetNillableLogo(input.Logo).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
@@ -58,7 +58,7 @@ func (r *departmentRepo) Update(ctx context.Context, input model.DepartmentDTO) 
 	entity, err := r.db.Department.UpdateOneID(input.ID).
 		SetActive(input.Active).
 		SetName(input.Name).
-		SetSlug(input.Slug).
+		SetNillableSlug(input.Slug).
 		SetNillableLogo(input.Logo).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).

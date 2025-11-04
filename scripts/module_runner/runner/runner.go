@@ -71,13 +71,11 @@ func StartModule(module string) error {
 		return err
 	}
 
-	dPort := getDestPort(port)
-
-	if utils.CheckPortOpen(host, dPort) {
-		return fmt.Errorf("❌ Port %d on host %s is already in use", dPort, host)
+	if utils.CheckPortOpen(host, port) {
+		return fmt.Errorf("❌ Port %d on host %s is already in use", port, host)
 	}
 
-	fmt.Printf("🚀 Starting module '%s' on %s:%d...\n", module, host, dPort)
+	fmt.Printf("🚀 Starting module '%s' on %s:%d...\n", module, host, port)
 	cmd := exec.Command("go", "run", utils.GetFullPath("modules", module, "main.go"))
 	cmd.Env = append(os.Environ(), "GATEWAY_MODE=true")
 	cmd.Stdout = os.Stdout

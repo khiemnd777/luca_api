@@ -10,7 +10,6 @@ import (
 
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/config"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"gopkg.in/yaml.v3"
 )
@@ -77,10 +76,6 @@ func Register(name, route, host string, port int, external bool) error {
 func getDestPort(port int) int {
 	mCfg, _ := utils.LoadConfig[config.AppConfig](utils.GetFullPath("config.yaml"))
 	mPort := mCfg.Server.Port
-	dstPort := mPort + port
-	logger.Debug(fmt.Sprintf("[PORT] mPort: %d", mPort))
-	logger.Debug(fmt.Sprintf("[PORT] port: %d", port))
-	logger.Debug(fmt.Sprintf("[PORT] destPort: %d", dstPort))
 	return mPort + port
 }
 

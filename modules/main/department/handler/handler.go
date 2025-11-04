@@ -24,17 +24,13 @@ func NewDepartmentHandler(svc service.DepartmentService, deps *module.ModuleDeps
 	return &DepartmentHandler{svc: svc, deps: deps}
 }
 func (h *DepartmentHandler) RegisterRoutes(router fiber.Router) {
-	app.RouterGet(router, "/", h.List)
+	app.RouterGet(router, "/:dept_id", h.List)
 	app.RouterGet(router, "/:dept_id", h.GetByID)
-	app.RouterGet(router, "/slug/:slug", h.GetBySlug)
 	app.RouterGet(router, "/:dept_id/children", h.ChildrenList)
 	app.RouterPost(router, "/:dept_id", h.Create)
 	app.RouterPut(router, "/:dept_id", h.Update)
 	app.RouterDelete(router, "/:dept_id", h.Delete)
-}
-
-func (h *DepartmentHandler) RegisterAuthOnlyRoutes(router fiber.Router) {
-	app.RouterGet(router, "/first", h.MyFirstDepartment)
+	app.RouterGet(router, "/me", h.MyFirstDepartment)
 }
 
 func (h *DepartmentHandler) List(c *fiber.Ctx) error {
@@ -52,7 +48,7 @@ func (h *DepartmentHandler) List(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) GetByID(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
+	id, err := strconv.Atoi(c.Params("dept_id"))
 	if err != nil || id <= 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}

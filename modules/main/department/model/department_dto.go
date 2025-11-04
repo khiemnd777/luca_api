@@ -4,7 +4,7 @@ import "time"
 
 type DepartmentDTO struct {
 	ID          int       `json:"id,omitempty"`
-	Slug        string    `json:"slug,omitempty"`
+	Slug        *string   `json:"slug,omitempty"`
 	Active      bool      `json:"active,omitempty"`
 	Name        string    `json:"name,omitempty"`
 	Logo        *string   `json:"logo,omitempty"`
