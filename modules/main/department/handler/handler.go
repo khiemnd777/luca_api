@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/department/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -24,16 +25,17 @@ func NewDepartmentHandler(svc service.DepartmentService, deps *module.ModuleDeps
 	return &DepartmentHandler{svc: svc, deps: deps}
 }
 func (h *DepartmentHandler) RegisterRoutes(router fiber.Router) {
-	app.RouterGet(router, "/:dept_id", h.List)
-	app.RouterGet(router, "/:dept_id", h.GetByID)
-	app.RouterGet(router, "/:dept_id/children", h.ChildrenList)
-	app.RouterPost(router, "/:dept_id", h.Create)
-	app.RouterPut(router, "/:dept_id", h.Update)
-	app.RouterDelete(router, "/:dept_id", h.Delete)
+	app.RouterGet(router, "/:dept_id<int>", h.List)
+	app.RouterGet(router, "/:dept_id<int>", h.GetByID)
+	app.RouterGet(router, "/:dept_id<int>/children", h.ChildrenList)
+	app.RouterPost(router, "/:dept_id<int>", h.Create)
+	app.RouterPut(router, "/:dept_id<int>", h.Update)
+	app.RouterDelete(router, "/:dept_id<int>", h.Delete)
 	app.RouterGet(router, "/me", h.MyFirstDepartment)
 }
 
 func (h *DepartmentHandler) List(c *fiber.Ctx) error {
+	logger.Debug("[Here] List")
 	limit := parseIntDefault(c.Query("limit"), 50, 1, 200)
 	offset := parseIntDefault(c.Query("offset"), 0, 0, 1<<31-1)
 
@@ -69,6 +71,7 @@ func (h *DepartmentHandler) GetBySlug(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) MyFirstDepartment(c *fiber.Ctx) error {
+	logger.Debug("[Here] MyFirstDepartment")
 	userID, _ := utils.GetUserIDInt(c)
 	res, err := h.svc.GetFirstDepartmentOfUser(c.UserContext(), userID)
 	if err != nil {
@@ -78,7 +81,8 @@ func (h *DepartmentHandler) MyFirstDepartment(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) ChildrenList(c *fiber.Ctx) error {
-	parentID, err := strconv.Atoi(c.Params("id"))
+	logger.Debug("[Here] ChildrenList")
+	parentID, err := strconv.Atoi(c.Params("dept_id"))
 	if err != nil || parentID <= 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
@@ -96,7 +100,7 @@ func (h *DepartmentHandler) ChildrenList(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) Create(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department:manage"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.manage"); err != nil {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 	var in model.DepartmentDTO
@@ -114,11 +118,11 @@ func (h *DepartmentHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) Update(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department:manage"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.manage"); err != nil {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	id, err := strconv.Atoi(c.Params("id"))
+	id, err := strconv.Atoi(c.Params("dept_id"))
 	if err != nil || id <= 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
@@ -138,7 +142,7 @@ func (h *DepartmentHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) Delete(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
+	id, err := strconv.Atoi(c.Params("dept_id"))
 	if err != nil || id <= 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
