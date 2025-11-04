@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/khiemnd777/andy_api/shared/app"
+	"github.com/khiemnd777/andy_api/shared/config"
+	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/khiemnd777/andy_api/shared/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -71,6 +74,16 @@ func Register(name, route, host string, port int, external bool) error {
 	return SaveRegistry(reg)
 }
 
+func getDestPort(port int) int {
+	mCfg, _ := utils.LoadConfig[config.AppConfig](utils.GetFullPath("config.yaml"))
+	mPort := mCfg.Server.Port
+	dstPort := mPort + port
+	logger.Debug(fmt.Sprintf("[PORT] mPort: %d", mPort))
+	logger.Debug(fmt.Sprintf("[PORT] port: %d", port))
+	logger.Debug(fmt.Sprintf("[PORT] destPort: %d", dstPort))
+	return mPort + port
+}
+
 // GenerateRegistry duyệt modules/, gán host = "127.0.0.1",
 //   - Nếu config.yaml có port>0  ➜ giữ nguyên
 //   - Nếu port==0               ➜ auto-allocate
@@ -98,7 +111,8 @@ func GenerateRegistry(modDir string) (Registry, []*app.Reserved, error) {
 		}
 
 		host := hostFromCfg
-		r, portErr := app.EnsurePortAvailable(host, portFromCfg)
+		port := getDestPort(portFromCfg)
+		r, portErr := app.EnsurePortAvailable(host, port)
 		if portErr != nil {
 			fmt.Printf("🛑  cannot alloc port for %s\n", name)
 			continue

@@ -27,7 +27,7 @@ func (h *FieldHandler) ListByCollection(c *fiber.Ctx) error {
 	if err != nil || cid <= 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid collection_id")
 	}
-	out, err := h.svc.ListByCollection(c.Context(), cid)
+	out, err := h.svc.ListByCollection(c.UserContext(), cid)
 	if err != nil {
 		logger.Error("fields.list failed", "err", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to list fields")
@@ -40,7 +40,7 @@ func (h *FieldHandler) Get(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
-	out, err := h.svc.Get(c.Context(), id)
+	out, err := h.svc.Get(c.UserContext(), id)
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "field not found")
 	}
@@ -52,7 +52,7 @@ func (h *FieldHandler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&in); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
-	out, err := h.svc.Create(c.Context(), in)
+	out, err := h.svc.Create(c.UserContext(), in)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -68,7 +68,7 @@ func (h *FieldHandler) Update(c *fiber.Ctx) error {
 	if err := c.BodyParser(&in); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
-	out, err := h.svc.Update(c.Context(), id, in)
+	out, err := h.svc.Update(c.UserContext(), id, in)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -80,7 +80,7 @@ func (h *FieldHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.UserContext(), id); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "failed to delete")
 	}
 	return c.SendStatus(fiber.StatusNoContent)
