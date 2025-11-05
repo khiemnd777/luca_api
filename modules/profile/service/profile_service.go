@@ -33,7 +33,15 @@ func (s *ProfileService) GetProfile(ctx context.Context, userID int) (*generated
 	})
 }
 
-func (s *ProfileService) UpdateProfile(ctx context.Context, userID int, name, avatar string, phone, email, bankQRCode *string) (*generated.User, error) {
+func (s *ProfileService) CheckEmailExists(ctx context.Context, userID int, email string) (bool, error) {
+	return s.repo.CheckEmailExists(ctx, userID, email)
+}
+
+func (s *ProfileService) CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error) {
+	return s.repo.CheckPhoneExists(ctx, userID, phone)
+}
+
+func (s *ProfileService) UpdateProfile(ctx context.Context, userID int, name, avatar string, phone, email *string) (*generated.User, error) {
 	// Check email
 	if email != nil && *email != "" {
 		if exists, _ := s.repo.CheckEmailExists(ctx, userID, *email); exists {
@@ -63,7 +71,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID int, name, av
 		var err error
 		refCode := uuid.NewString()
 		qrCode := utils.GenerateQRCodeStringForUser(refCode)
-		updated, err = s.repo.UpdateByID(ctx, userID, name, normalizedPhone, email, &avatar, bankQRCode, &refCode, &qrCode)
+		updated, err = s.repo.UpdateByID(ctx, userID, name, normalizedPhone, email, &avatar, &refCode, &qrCode)
 
 		return err
 	})

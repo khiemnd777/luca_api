@@ -27,7 +27,7 @@ func (r *ProfileRepository) GetByID(ctx context.Context, id int) (*generated.Use
 	return r.db.User.Query().Where(user.ID(id), user.Active(true)).Only(ctx)
 }
 
-func (r *ProfileRepository) UpdateByID(ctx context.Context, id int, name string, phone, email, avatar *string, bankQRCode *string, refCode *string, qrCode *string) (*generated.User, error) {
+func (r *ProfileRepository) UpdateByID(ctx context.Context, id int, name string, phone, email, avatar *string, refCode *string, qrCode *string) (*generated.User, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
