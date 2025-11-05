@@ -31,7 +31,7 @@ func (h *CollectionHandler) List(c *fiber.Ctx) error {
 		Offset:     c.QueryInt("offset", 0),
 		WithFields: c.QueryBool("with_fields", false),
 	}
-	items, total, err := h.svc.List(c.Context(), in)
+	items, total, err := h.svc.List(c.UserContext(), in)
 	if err != nil {
 		logger.Error("collections.list failed", "err", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to list collections")
@@ -44,7 +44,7 @@ func (h *CollectionHandler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&in); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
-	out, err := h.svc.Create(c.Context(), in)
+	out, err := h.svc.Create(c.UserContext(), in)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -56,14 +56,14 @@ func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
 	idOrSlug := c.Params("idOrSlug")
 	// nếu là số → ID
 	if id, err := strconv.Atoi(idOrSlug); err == nil {
-		out, err := h.svc.GetByID(c.Context(), id, withFields)
+		out, err := h.svc.GetByID(c.UserContext(), id, withFields)
 		if err != nil {
 			return fiber.NewError(fiber.StatusNotFound, "collection not found")
 		}
 		return c.JSON(out)
 	}
 	// slug
-	out, err := h.svc.GetBySlug(c.Context(), idOrSlug, withFields)
+	out, err := h.svc.GetBySlug(c.UserContext(), idOrSlug, withFields)
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "collection not found")
 	}
@@ -79,7 +79,7 @@ func (h *CollectionHandler) Update(c *fiber.Ctx) error {
 	if err := c.BodyParser(&in); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
-	out, err := h.svc.Update(c.Context(), id, in)
+	out, err := h.svc.Update(c.UserContext(), id, in)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -91,7 +91,7 @@ func (h *CollectionHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.UserContext(), id); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "failed to delete")
 	}
 	return c.SendStatus(fiber.StatusNoContent)

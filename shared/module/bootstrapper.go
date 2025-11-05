@@ -121,6 +121,11 @@ func StartModule[T any](opts ModuleOptions[T]) {
 	StartFiber(fiberApp, opts.ModuleName)
 }
 
+func getDestPort(port int) int {
+	mPort := config.Get().Server.Port
+	return mPort + port
+}
+
 func StartFiber(fiberApp *fiber.App, moduleName string) {
 	// 1) Lấy entry của chính module trong tmp/runtime.json
 	reg, err := runtime.LoadRegistry()
@@ -135,6 +140,7 @@ func StartFiber(fiberApp *fiber.App, moduleName string) {
 	}
 
 	host, port := rm.Host, rm.Port
+	// destPort := getDestPort(port)
 	addr := fmt.Sprintf("%s:%d", host, port)
 
 	// 2) Bind đúng cổng (KHÔNG ListenOnAvailablePort nữa)

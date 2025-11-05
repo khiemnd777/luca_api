@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/khiemnd777/andy_api/shared/config"
 	"github.com/khiemnd777/andy_api/shared/runtime"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"gopkg.in/yaml.v3"
@@ -56,6 +57,12 @@ func loadModuleConfig(module string) (host string, port int, err error) {
 	}
 
 	return cfg.Server.Host, cfg.Server.Port, nil
+}
+
+func getDestPort(port int) int {
+	mCfg, _ := utils.LoadConfig[config.AppConfig](utils.GetFullPath("config.yaml"))
+	mPort := mCfg.Server.Port
+	return mPort + port
 }
 
 func StartModule(module string) error {
@@ -176,7 +183,8 @@ func SyncRunningModules() error {
 				fmt.Printf("⚠️  Skipping module '%s': %v\n", name, err)
 				continue
 			}
-			host, port = h, p
+			dPort := getDestPort(p)
+			host, port = h, dPort
 		}
 		if utils.CheckPortOpen(host, port) {
 			pid, _ := utils.DetectPIDFromPort(port)

@@ -34,5 +34,8 @@ func (User) Edges() []ent.Edge {
 		edge.To("attributes", Attribute.Type),
 		edge.To("attribute_options", AttributeOption.Type),
 		edge.To("attribute_option_values", AttributeOptionValue.Type),
+
+		// O2M thực: User -> DepartmentMember
+		edge.To("dept_memberships", DepartmentMember.Type),
 	}
 }
