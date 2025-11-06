@@ -8,10 +8,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/modules/rbac/service"
 	"github.com/khiemnd777/andy_api/shared/app"
+	"github.com/khiemnd777/andy_api/shared/app/client_error"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/utils"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type RBACHandler struct {
@@ -138,13 +140,13 @@ func (h *RBACHandler) DeleteRole(c *fiber.Ctx) error {
 }
 
 func (h *RBACHandler) ListRoles(c *fiber.Ctx) error {
-	// if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
-	// 	return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
-	// }
-	limit, offset := parsePaging(c, 50, 0)
-	data, err := h.svc.ListRoles(c.UserContext(), limit, offset)
+	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	tablequery := table.ParseTableQuery(c, 50)
+	data, err := h.svc.ListRoles(c.UserContext(), tablequery)
 	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	return c.JSON(data)
 }

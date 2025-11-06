@@ -12,6 +12,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type ListResult[T any] struct {
@@ -25,7 +26,7 @@ type RBACService interface {
 	RenameRole(ctx context.Context, roleID int, newName string) error
 	UpdateRole(ctx context.Context, roleID int, newName, newDisplayName, newBrief string) error
 	DeleteRole(ctx context.Context, roleID int) error
-	ListRoles(ctx context.Context, limit, offset int) (*ListResult[*generated.Role], error)
+	ListRoles(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error)
 	ListUserRoles(ctx context.Context, userID, limit, offset int) ([]*generated.Role, error)
 
 	// Permission
@@ -54,7 +55,9 @@ const (
 	kPermListAll = "rbac:perms:list:*"
 )
 
-func kRoleList(limit, offset int) string { return fmt.Sprintf("rbac:roles:list:%d:%d", limit, offset) }
+func kRoleList(limit, offset int, orderBy *string, direction string) string {
+	return fmt.Sprintf("rbac:roles:list:l%d:of%d:o%s:d%s", limit, offset, *orderBy, direction)
+}
 func kPermList(limit, offset int) string { return fmt.Sprintf("rbac:perms:list:%d:%d", limit, offset) }
 func kUserRoles(userID, limit, offset int) string {
 	return fmt.Sprintf("user:%d:rbac:roles:%d:%d", userID, limit, offset)
@@ -112,19 +115,11 @@ func (s *rbacService) DeleteRole(ctx context.Context, roleID int) error {
 	return nil
 }
 
-func (s *rbacService) ListRoles(ctx context.Context, limit, offset int) (*ListResult[*generated.Role], error) {
-	key := kRoleList(limit, offset)
-	res, err := cache.Get(key, ttlMedium, func() (*ListResult[*generated.Role], error) {
-		items, total, err := s.roles.List(ctx, limit, offset)
-		if err != nil {
-			return nil, err
-		}
-		return &ListResult[*generated.Role]{Items: items, Total: total}, nil
+func (s *rbacService) ListRoles(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error) {
+	key := kRoleList(query.Limit, query.Offset, query.OrderBy, query.Direction)
+	return cache.Get(key, ttlMedium, func() (*table.TableListResult[generated.Role], error) {
+		return s.roles.List(ctx, query)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
 }
 func (s *rbacService) ListUserRoles(ctx context.Context, userID, limit, offset int) ([]*generated.Role, error) {
 	key := kUserRoles(userID, limit, offset)

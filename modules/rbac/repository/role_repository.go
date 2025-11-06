@@ -6,13 +6,14 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/role"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type RoleRepository interface {
 	Create(ctx context.Context, name, displayName, brief string) (*generated.Role, error)
 	GetByID(ctx context.Context, id int) (*generated.Role, error)
 	GetByName(ctx context.Context, name string) (*generated.Role, error)
-	List(ctx context.Context, limit, offset int) ([]*generated.Role, int, error)
+	List(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error)
 	ListByUser(ctx context.Context, userID, limit, offset int) ([]*generated.Role, int, error)
 	Update(ctx context.Context, id int, newName, newDisplayName, newBrief string) (*generated.Role, error)
 	UpdateName(ctx context.Context, id int, newName string) (*generated.Role, error)
@@ -45,14 +46,19 @@ func (r *roleRepository) GetByID(ctx context.Context, id int) (*generated.Role, 
 func (r *roleRepository) GetByName(ctx context.Context, name string) (*generated.Role, error) {
 	return r.db.Role.Query().Where(role.RoleNameEQ(name)).First(ctx)
 }
-func (r *roleRepository) List(ctx context.Context, limit, offset int) ([]*generated.Role, int, error) {
-	q := r.db.Role.Query()
-	total, err := q.Clone().Count(ctx)
+func (r *roleRepository) List(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Role.Query(),
+		query,
+		role.Table,
+		role.FieldID,
+		role.FieldID,
+	)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	items, err := q.Limit(limit).Offset(offset).Order(generated.Desc(role.FieldID)).All(ctx)
-	return items, total, err
+	return &list, nil
 }
 func (r *roleRepository) ListByUser(ctx context.Context, userID, limit, offset int) ([]*generated.Role, int, error) {
 	q := r.db.Role.Query().Where(role.HasUsersWith(user.IDEQ(userID)))

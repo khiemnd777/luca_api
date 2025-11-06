@@ -1,4 +1,3 @@
-// gateway/proxy/proxy.go
 package proxy
 
 import (
