@@ -29,6 +29,7 @@ type RBACService interface {
 	GetRole(ctx context.Context, roleID int) (*generated.Role, error)
 	ListRoles(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error)
 	ListUserRoles(ctx context.Context, userID, limit, offset int) ([]*generated.Role, error)
+	GetMatrix(ctx context.Context) (*RolePermissionMatrix, error)
 
 	// Permission
 	CreatePermission(ctx context.Context, name, value string) (int, error)
@@ -67,6 +68,7 @@ func kUserRoles(userID, limit, offset int) string {
 	return fmt.Sprintf("user:%d:rbac:roles:%d:%d", userID, limit, offset)
 }
 func kUserMatrix(userID int) string { return fmt.Sprintf("user:%d:rbac:matrix", userID) }
+func kMatrix() string               { return "rbac:matrix" }
 
 type rbacService struct {
 	roles RoleRepo
@@ -87,20 +89,20 @@ func (s *rbacService) CreateRole(ctx context.Context, name, displayName, brief s
 	if err != nil {
 		return 0, err
 	}
-	cache.InvalidateKeys(kRoleListAll)
+	cache.InvalidateKeys(kRoleListAll, kMatrix())
 	return r.ID, nil
 }
 func (s *rbacService) RenameRole(ctx context.Context, roleID int, newName string) error {
 	_, err := s.roles.UpdateName(ctx, roleID, strings.TrimSpace(newName))
 	if err == nil {
-		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID))
+		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID), kMatrix())
 	}
 	return err
 }
 func (s *rbacService) UpdateRole(ctx context.Context, roleID int, newName, newDisplayName, newBrief string) error {
 	_, err := s.roles.Update(ctx, roleID, strings.TrimSpace(newName), strings.TrimSpace(newDisplayName), strings.TrimSpace(newBrief))
 	if err == nil {
-		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID))
+		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID), kMatrix())
 	}
 	return err
 }
@@ -115,7 +117,7 @@ func (s *rbacService) DeleteRole(ctx context.Context, roleID int) error {
 		rbac.InvalidateUserPermissionSet(uid)
 		cache.InvalidateKeys(kUserMatrix(uid))
 	}
-	cache.InvalidateKeys(kRoleListAll, kRoleID(roleID))
+	cache.InvalidateKeys(kRoleListAll, kRoleID(roleID), kMatrix())
 	return nil
 }
 
@@ -184,9 +186,10 @@ type PermissionMeta struct {
 }
 
 type MatrixRow struct {
-	RoleID   int    `json:"role_id"`
-	RoleName string `json:"role_name"`
-	Flags    []bool `json:"flags"` // theo thứ tự PermissionIDs
+	RoleID      int     `json:"role_id"`
+	RoleName    string  `json:"role_name"`
+	DisplayName *string `json:"display_name"`
+	Flags       []bool  `json:"flags"` // theo thứ tự PermissionIDs
 }
 
 type RolePermissionMatrix struct {
@@ -288,13 +291,11 @@ func (s *rbacService) GetUserRolePermissionMatrix(ctx context.Context, userID in
 			indexByPermID[p.ID] = i
 		}
 
-		// 2️⃣ Lấy danh sách role của user
 		roles, _, err := s.roles.ListByUser(ctx, userID, 10000, 0)
 		if err != nil {
 			return nil, err
 		}
 
-		// 3️⃣ Tạo từng dòng (Role × Permission)
 		rows := make([]MatrixRow, 0, len(roles))
 		for _, r := range roles {
 			flags := make([]bool, len(permissionMetas))
@@ -308,9 +309,59 @@ func (s *rbacService) GetUserRolePermissionMatrix(ctx context.Context, userID in
 				}
 			}
 			rows = append(rows, MatrixRow{
-				RoleID:   r.ID,
-				RoleName: r.RoleName,
-				Flags:    flags,
+				RoleID:      r.ID,
+				RoleName:    r.RoleName,
+				DisplayName: r.DisplayName,
+				Flags:       flags,
+			})
+		}
+
+		return &RolePermissionMatrix{
+			Permissions: permissionMetas,
+			Roles:       rows,
+		}, nil
+	})
+}
+func (s *rbacService) GetMatrix(ctx context.Context) (*RolePermissionMatrix, error) {
+	return cache.Get(kMatrix(), ttlMedium, func() (*RolePermissionMatrix, error) {
+		perms, _, err := s.perms.List(ctx, 10000, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		permissionMetas := make([]PermissionMeta, len(perms))
+		indexByPermID := make(map[int]int, len(perms))
+		for i, p := range perms {
+			permissionMetas[i] = PermissionMeta{
+				ID:    p.ID,
+				Name:  p.PermissionName,
+				Value: p.PermissionValue,
+			}
+			indexByPermID[p.ID] = i
+		}
+
+		roles, err := s.roles.GetAll(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		rows := make([]MatrixRow, 0, len(roles))
+		for _, r := range roles {
+			flags := make([]bool, len(permissionMetas))
+			pids, err := s.roles.PermissionIDsOfRole(ctx, r.ID)
+			if err != nil {
+				return nil, err
+			}
+			for _, pid := range pids {
+				if col, ok := indexByPermID[pid]; ok {
+					flags[col] = true
+				}
+			}
+			rows = append(rows, MatrixRow{
+				RoleID:      r.ID,
+				RoleName:    r.RoleName,
+				DisplayName: r.DisplayName,
+				Flags:       flags,
 			})
 		}
 

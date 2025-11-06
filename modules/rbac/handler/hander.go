@@ -71,7 +71,7 @@ func (h *RBACHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/matrix/me", h.GetMyPermissionMatrix)
 	app.RouterGet(router, "/matrix/users/:id", h.GetUserPermissionMatrix)
 	app.RouterGet(router, "/matrix/roles/:id", h.GetRolePermissions)
-	app.RouterGet(router, "/matrix", h.GetRolePermissionMatrix)
+	app.RouterGet(router, "/matrix", h.GetMatrix)
 }
 
 // ---------- Handlers (all require rbac.manage)
@@ -279,11 +279,11 @@ func (h *RBACHandler) GetRolePermissions(c *fiber.Ctx) error {
 }
 func (h *RBACHandler) GetRolePermissionMatrix(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
-	raw := c.Query("role_ids", "")
+	raw := utils.GetQueryAsString(c, "role_ids")
 	if strings.TrimSpace(raw) == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "role_ids is required (comma-separated)"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "role_ids is required (comma-separated)")
 	}
 
 	parts := strings.Split(raw, ",")
@@ -295,17 +295,17 @@ func (h *RBACHandler) GetRolePermissionMatrix(c *fiber.Ctx) error {
 		}
 		id, err := strconv.Atoi(p)
 		if err != nil || id <= 0 {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role_ids value: " + p})
+			return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 		}
 		roleIDs = append(roleIDs, id)
 	}
 	if len(roleIDs) == 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "No valid role_ids"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "No valid role_ids")
 	}
 
 	matrix, err := h.svc.GetRolePermissionMatrix(c.UserContext(), roleIDs)
 	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	// matrix: map[int][]int. Đổi key sang string để JSON friendly nếu thích.
 	out := fiber.Map{}
@@ -360,6 +360,18 @@ func (h *RBACHandler) GetUserPermissionMatrix(c *fiber.Ctx) error {
 	matrix, err := h.svc.GetUserRolePermissionMatrix(c.UserContext(), uid)
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(matrix)
+}
+
+func (h *RBACHandler) GetMatrix(c *fiber.Ctx) error {
+	userID, ok := utils.GetUserIDInt(c)
+	if !ok || userID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "Unauthorized")
+	}
+	matrix, err := h.svc.GetMatrix(c.UserContext())
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	return c.JSON(matrix)
 }
