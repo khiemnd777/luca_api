@@ -27,12 +27,13 @@ func NewRBACHandler(db *generated.Client, svc service.RBACService) *RBACHandler 
 
 // ---------- DTOs
 type createOrUpdateRoleReq struct {
-	Name        string `json:"name"`
+	ID          int    `json:"id"`
+	RoleName    string `json:"role_name"`
 	DisplayName string `json:"display_name"`
 	Brief       string `json:"brief"`
 }
 type renameRoleReq struct {
-	Name string `json:"name"`
+	RoleName string `json:"role_name"`
 }
 
 type createPermReq struct {
@@ -55,6 +56,7 @@ func (h *RBACHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/roles", h.ListRoles)
 	app.RouterPut(router, "/roles/:id/rename", h.RenameRole)
 	app.RouterPut(router, "/roles/:id", h.UpdateRole)
+	app.RouterGet(router, "/roles/:id", h.GetRole)
 	app.RouterDelete(router, "/roles/:id", h.DeleteRole)
 
 	// Permission
@@ -78,10 +80,10 @@ func (h *RBACHandler) CreateRole(c *fiber.Ctx) error {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 	var req createOrUpdateRoleReq
-	if err := c.BodyParser(&req); err != nil || req.Name == "" {
+	if err := c.BodyParser(&req); err != nil || req.RoleName == "" {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
 	}
-	id, err := h.svc.CreateRole(c.UserContext(), req.Name, req.DisplayName, req.Brief)
+	id, err := h.svc.CreateRole(c.UserContext(), req.RoleName, req.DisplayName, req.Brief)
 	if err != nil {
 		logger.Error("CreateRole failed: " + err.Error())
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
@@ -94,14 +96,14 @@ func (h *RBACHandler) RenameRole(c *fiber.Ctx) error {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 	var req renameRoleReq
-	if err := c.BodyParser(&req); err != nil || req.Name == "" {
+	if err := c.BodyParser(&req); err != nil || req.RoleName == "" {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
 	}
 	roleID, err := c.ParamsInt("id")
 	if err != nil || roleID <= 0 {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role id"})
 	}
-	if err := h.svc.RenameRole(c.UserContext(), roleID, req.Name); err != nil {
+	if err := h.svc.RenameRole(c.UserContext(), roleID, req.RoleName); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.SendStatus(http.StatusNoContent)
@@ -109,20 +111,35 @@ func (h *RBACHandler) RenameRole(c *fiber.Ctx) error {
 
 func (h *RBACHandler) UpdateRole(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	var req createOrUpdateRoleReq
-	if err := c.BodyParser(&req); err != nil || req.Name == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
+	if err := c.BodyParser(&req); err != nil || req.RoleName == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "Invalid payload")
 	}
 	roleID, err := c.ParamsInt("id")
 	if err != nil || roleID <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role id"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "Invalid role id")
 	}
-	if err := h.svc.UpdateRole(c.UserContext(), roleID, req.Name, req.DisplayName, req.Brief); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	if err := h.svc.UpdateRole(c.UserContext(), roleID, req.RoleName, req.DisplayName, req.Brief); err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	return c.SendStatus(http.StatusNoContent)
+}
+
+func (h *RBACHandler) GetRole(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	roleID, err := utils.GetParamAsInt(c, "id")
+	if err != nil || roleID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid role id")
+	}
+	result, err := h.svc.GetRole(c.UserContext(), roleID)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.JSON(result)
 }
 
 func (h *RBACHandler) DeleteRole(c *fiber.Ctx) error {

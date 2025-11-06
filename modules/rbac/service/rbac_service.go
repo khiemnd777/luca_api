@@ -26,6 +26,7 @@ type RBACService interface {
 	RenameRole(ctx context.Context, roleID int, newName string) error
 	UpdateRole(ctx context.Context, roleID int, newName, newDisplayName, newBrief string) error
 	DeleteRole(ctx context.Context, roleID int) error
+	GetRole(ctx context.Context, roleID int) (*generated.Role, error)
 	ListRoles(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error)
 	ListUserRoles(ctx context.Context, userID, limit, offset int) ([]*generated.Role, error)
 
@@ -58,6 +59,9 @@ const (
 func kRoleList(limit, offset int, orderBy *string, direction string) string {
 	return fmt.Sprintf("rbac:roles:list:l%d:of%d:o%s:d%s", limit, offset, *orderBy, direction)
 }
+func kRoleID(id int) string {
+	return fmt.Sprintf("rbac:roles:i%d", id)
+}
 func kPermList(limit, offset int) string { return fmt.Sprintf("rbac:perms:list:%d:%d", limit, offset) }
 func kUserRoles(userID, limit, offset int) string {
 	return fmt.Sprintf("user:%d:rbac:roles:%d:%d", userID, limit, offset)
@@ -89,14 +93,14 @@ func (s *rbacService) CreateRole(ctx context.Context, name, displayName, brief s
 func (s *rbacService) RenameRole(ctx context.Context, roleID int, newName string) error {
 	_, err := s.roles.UpdateName(ctx, roleID, strings.TrimSpace(newName))
 	if err == nil {
-		cache.InvalidateKeys(kRoleListAll)
+		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID))
 	}
 	return err
 }
 func (s *rbacService) UpdateRole(ctx context.Context, roleID int, newName, newDisplayName, newBrief string) error {
 	_, err := s.roles.Update(ctx, roleID, strings.TrimSpace(newName), strings.TrimSpace(newDisplayName), strings.TrimSpace(newBrief))
 	if err == nil {
-		cache.InvalidateKeys(kRoleListAll)
+		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID))
 	}
 	return err
 }
@@ -111,8 +115,15 @@ func (s *rbacService) DeleteRole(ctx context.Context, roleID int) error {
 		rbac.InvalidateUserPermissionSet(uid)
 		cache.InvalidateKeys(kUserMatrix(uid))
 	}
-	cache.InvalidateKeys(kRoleListAll)
+	cache.InvalidateKeys(kRoleListAll, kRoleID(roleID))
 	return nil
+}
+
+func (s *rbacService) GetRole(ctx context.Context, roleID int) (*generated.Role, error) {
+	key := kRoleID(roleID)
+	return cache.Get(key, ttlShort, func() (*generated.Role, error) {
+		return s.roles.GetByID(ctx, roleID)
+	})
 }
 
 func (s *rbacService) ListRoles(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error) {
