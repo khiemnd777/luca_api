@@ -6,6 +6,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/gofiber/fiber/v2"
+	"github.com/iancoleman/strcase"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -36,6 +37,11 @@ func ParseTableQuery(c *fiber.Ctx, defLimit int) TableQuery {
 	offset := (page - 1) * limit
 
 	orderBy := utils.GetQueryAsString(c, "order_by")
+
+	if orderBy != "" {
+		orderBy = strcase.ToSnake(orderBy)
+	}
+
 	direction := utils.GetQueryAsString(c, "direction")
 	if direction == "" {
 		direction = "asc"

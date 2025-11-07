@@ -27,12 +27,13 @@ func NewRBACHandler(db *generated.Client, svc service.RBACService) *RBACHandler 
 
 // ---------- DTOs
 type createOrUpdateRoleReq struct {
-	Name        string `json:"name"`
+	ID          int    `json:"id"`
+	RoleName    string `json:"role_name"`
 	DisplayName string `json:"display_name"`
 	Brief       string `json:"brief"`
 }
 type renameRoleReq struct {
-	Name string `json:"name"`
+	RoleName string `json:"role_name"`
 }
 
 type createPermReq struct {
@@ -55,6 +56,7 @@ func (h *RBACHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/roles", h.ListRoles)
 	app.RouterPut(router, "/roles/:id/rename", h.RenameRole)
 	app.RouterPut(router, "/roles/:id", h.UpdateRole)
+	app.RouterGet(router, "/roles/:id", h.GetRole)
 	app.RouterDelete(router, "/roles/:id", h.DeleteRole)
 
 	// Permission
@@ -69,7 +71,7 @@ func (h *RBACHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/matrix/me", h.GetMyPermissionMatrix)
 	app.RouterGet(router, "/matrix/users/:id", h.GetUserPermissionMatrix)
 	app.RouterGet(router, "/matrix/roles/:id", h.GetRolePermissions)
-	app.RouterGet(router, "/matrix", h.GetRolePermissionMatrix)
+	app.RouterGet(router, "/matrix", h.GetMatrix)
 }
 
 // ---------- Handlers (all require rbac.manage)
@@ -78,10 +80,10 @@ func (h *RBACHandler) CreateRole(c *fiber.Ctx) error {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 	var req createOrUpdateRoleReq
-	if err := c.BodyParser(&req); err != nil || req.Name == "" {
+	if err := c.BodyParser(&req); err != nil || req.RoleName == "" {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
 	}
-	id, err := h.svc.CreateRole(c.UserContext(), req.Name, req.DisplayName, req.Brief)
+	id, err := h.svc.CreateRole(c.UserContext(), req.RoleName, req.DisplayName, req.Brief)
 	if err != nil {
 		logger.Error("CreateRole failed: " + err.Error())
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
@@ -94,14 +96,14 @@ func (h *RBACHandler) RenameRole(c *fiber.Ctx) error {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 	var req renameRoleReq
-	if err := c.BodyParser(&req); err != nil || req.Name == "" {
+	if err := c.BodyParser(&req); err != nil || req.RoleName == "" {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
 	}
 	roleID, err := c.ParamsInt("id")
 	if err != nil || roleID <= 0 {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role id"})
 	}
-	if err := h.svc.RenameRole(c.UserContext(), roleID, req.Name); err != nil {
+	if err := h.svc.RenameRole(c.UserContext(), roleID, req.RoleName); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.SendStatus(http.StatusNoContent)
@@ -109,20 +111,35 @@ func (h *RBACHandler) RenameRole(c *fiber.Ctx) error {
 
 func (h *RBACHandler) UpdateRole(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	var req createOrUpdateRoleReq
-	if err := c.BodyParser(&req); err != nil || req.Name == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
+	if err := c.BodyParser(&req); err != nil || req.RoleName == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "Invalid payload")
 	}
 	roleID, err := c.ParamsInt("id")
 	if err != nil || roleID <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role id"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "Invalid role id")
 	}
-	if err := h.svc.UpdateRole(c.UserContext(), roleID, req.Name, req.DisplayName, req.Brief); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	if err := h.svc.UpdateRole(c.UserContext(), roleID, req.RoleName, req.DisplayName, req.Brief); err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	return c.SendStatus(http.StatusNoContent)
+}
+
+func (h *RBACHandler) GetRole(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	roleID, err := utils.GetParamAsInt(c, "id")
+	if err != nil || roleID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid role id")
+	}
+	result, err := h.svc.GetRole(c.UserContext(), roleID)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.JSON(result)
 }
 
 func (h *RBACHandler) DeleteRole(c *fiber.Ctx) error {
@@ -205,14 +222,14 @@ func (h *RBACHandler) ListPermissions(c *fiber.Ctx) error {
 // ---- Matrix
 func (h *RBACHandler) ReplaceRolePermissions(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	var req matrixReq
 	if err := c.BodyParser(&req); err != nil || req.RoleID <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid payload")
 	}
 	if err := h.svc.ReplaceRolePermissions(c.UserContext(), req.RoleID, req.PermIDs); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	return c.SendStatus(http.StatusNoContent)
 }
@@ -262,11 +279,11 @@ func (h *RBACHandler) GetRolePermissions(c *fiber.Ctx) error {
 }
 func (h *RBACHandler) GetRolePermissionMatrix(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
-	raw := c.Query("role_ids", "")
+	raw := utils.GetQueryAsString(c, "role_ids")
 	if strings.TrimSpace(raw) == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "role_ids is required (comma-separated)"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "role_ids is required (comma-separated)")
 	}
 
 	parts := strings.Split(raw, ",")
@@ -278,17 +295,17 @@ func (h *RBACHandler) GetRolePermissionMatrix(c *fiber.Ctx) error {
 		}
 		id, err := strconv.Atoi(p)
 		if err != nil || id <= 0 {
-			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role_ids value: " + p})
+			return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 		}
 		roleIDs = append(roleIDs, id)
 	}
 	if len(roleIDs) == 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "No valid role_ids"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "No valid role_ids")
 	}
 
 	matrix, err := h.svc.GetRolePermissionMatrix(c.UserContext(), roleIDs)
 	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	// matrix: map[int][]int. Đổi key sang string để JSON friendly nếu thích.
 	out := fiber.Map{}
@@ -343,6 +360,18 @@ func (h *RBACHandler) GetUserPermissionMatrix(c *fiber.Ctx) error {
 	matrix, err := h.svc.GetUserRolePermissionMatrix(c.UserContext(), uid)
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(matrix)
+}
+
+func (h *RBACHandler) GetMatrix(c *fiber.Ctx) error {
+	userID, ok := utils.GetUserIDInt(c)
+	if !ok || userID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "Unauthorized")
+	}
+	matrix, err := h.svc.GetMatrix(c.UserContext())
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	return c.JSON(matrix)
 }
