@@ -222,14 +222,14 @@ func (h *RBACHandler) ListPermissions(c *fiber.Ctx) error {
 // ---- Matrix
 func (h *RBACHandler) ReplaceRolePermissions(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	var req matrixReq
 	if err := c.BodyParser(&req); err != nil || req.RoleID <= 0 {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid payload")
 	}
 	if err := h.svc.ReplaceRolePermissions(c.UserContext(), req.RoleID, req.PermIDs); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
 	return c.SendStatus(http.StatusNoContent)
 }

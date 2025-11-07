@@ -202,6 +202,7 @@ func (s *rbacService) ReplaceRolePermissions(ctx context.Context, roleID int, pe
 		return err
 	}
 	s.invalidateUsersOfRole(ctx, roleID)
+	cache.InvalidateKeys(kMatrix())
 	return nil
 }
 func (s *rbacService) AddRolePermissions(ctx context.Context, roleID int, permIDs []int) error {
