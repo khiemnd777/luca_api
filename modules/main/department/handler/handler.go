@@ -11,7 +11,6 @@ import (
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -80,7 +79,6 @@ func (h *DepartmentHandler) MyFirstDepartment(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) ChildrenList(c *fiber.Ctx) error {
-	logger.Debug("[Here] ChildrenList")
 	parentID, err := strconv.Atoi(c.Params("dept_id"))
 	if err != nil || parentID <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")

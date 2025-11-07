@@ -6,6 +6,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/role"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
+	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -58,6 +59,10 @@ func (r *roleRepository) List(ctx context.Context, query table.TableQuery) (*tab
 		role.Table,
 		role.FieldID,
 		role.FieldID,
+		func(src []*generated.Role) []*generated.Role {
+			mapped := mapper.MapListAs[*generated.Role, *generated.Role](src)
+			return mapped
+		},
 	)
 	if err != nil {
 		return nil, err
