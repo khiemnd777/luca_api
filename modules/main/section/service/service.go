@@ -31,11 +31,11 @@ func NewSectionService(repo repository.SectionRepository, deps *module.ModuleDep
 }
 
 func kSectionByID(id int) string {
-	return fmt.Sprintf("section:by_id:%d", id)
+	return fmt.Sprintf("section:id:%d", id)
 }
 
 func kSectionAll() string {
-	return "section:all"
+	return "section:list:*"
 }
 
 func kSectionList(q table.TableQuery) string {

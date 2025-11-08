@@ -17,8 +17,7 @@ type Section struct {
 func (Section) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("name").
-			NotEmpty().
-			Unique(),
+			NotEmpty(),
 
 		field.String("code").
 			Optional().
@@ -27,7 +26,7 @@ func (Section) Fields() []ent.Field {
 
 		field.String("description").
 			Optional().
-			MaxLen(255),
+			MaxLen(300),
 
 		field.Bool("active").
 			Default(true),
