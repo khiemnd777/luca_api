@@ -115,6 +115,7 @@ func buildSQLOptions[O ~func(*sql.Selector)](table, field string, desc bool, pkF
 // Q: query type (vd: *generated.RoleQuery)
 func TableList[
 	T any,
+	R any,
 	O ~func(*sql.Selector),
 	Q interface {
 		Clone() Q
@@ -128,32 +129,42 @@ func TableList[
 	ctx context.Context,
 	q Q,
 	opts TableQuery,
-	table string, // tên bảng (vd: role.Table)
-	pkField string, // PK để tie-breaker
+	table string, // ví dụ: role.Table
+	pkField string, // field PK để tie-breaker
 	defaultField string, // field mặc định khi order_by rỗng
-) (TableListResult[T], error) {
+	mapItems func(src []*T) []*R, // optional mapper
+) (TableListResult[R], error) {
 
-	// Count
 	total, err := q.Clone().Count(ctx)
 	if err != nil {
-		return TableListResult[T]{}, err
+		return TableListResult[R]{}, err
 	}
 
-	// Paging + order
 	limit, offset := normalizePaging(opts.Limit, opts.Offset)
 	field, _ := resolveOrderField(opts.OrderBy, defaultField)
 	desc := isDesc(opts.Direction)
 	orderOpts := buildSQLOptions[O](table, field, desc, pkField)
 
-	// Page
-	items, err := q.
+	// Query dữ liệu
+	srcItems, err := q.
 		Limit(limit).
 		Offset(offset).
 		Order(orderOpts...).
 		All(ctx)
 	if err != nil {
-		return TableListResult[T]{}, err
+		return TableListResult[R]{}, err
 	}
 
-	return TableListResult[T]{Items: items, Total: total}, nil
+	// Nếu có mapper, thì map sang DTO
+	if mapItems != nil {
+		dstItems := mapItems(srcItems)
+		return TableListResult[R]{Items: dstItems, Total: total}, nil
+	}
+
+	anyItems := make([]*R, len(srcItems))
+	for i, item := range srcItems {
+		anyItems[i] = any(*item).(*R)
+	}
+
+	return TableListResult[R]{Items: anyItems, Total: total}, nil
 }
