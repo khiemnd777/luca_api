@@ -8,6 +8,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/section/model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/section"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -17,8 +18,8 @@ type SectionRepository interface {
 	Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	GetByID(ctx context.Context, id int) (*model.SectionDTO, error)
-	All(ctx context.Context) ([]*model.SectionDTO, int, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
+	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -77,20 +78,6 @@ func (r *sectionRepo) GetByID(ctx context.Context, id int) (*model.SectionDTO, e
 	return dto, nil
 }
 
-func (r *sectionRepo) All(ctx context.Context) ([]*model.SectionDTO, int, error) {
-	entities, err := r.db.Section.Query().
-		Where(section.DeletedAtIsNil()).
-		Order(generated.Asc(section.FieldName)).
-		All(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	items := mapper.MapListAs[*generated.Section, *model.SectionDTO](entities)
-	total := len(items)
-	return items, total, nil
-}
-
 func (r *sectionRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.SectionDTO], error) {
 	list, err := table.TableList(
 		ctx,
@@ -110,6 +97,26 @@ func (r *sectionRepo) List(ctx context.Context, query table.TableQuery) (table.T
 		return zero, err
 	}
 	return list, nil
+}
+
+func (r *sectionRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error) {
+	return dbutils.Search(
+		ctx,
+		r.db.Section.Query().
+			Where(section.DeletedAtIsNil()),
+		[]string{
+			dbutils.GetNormField(section.FieldName),
+		},
+		query,
+		section.Table,
+		section.FieldID,
+		section.FieldID,
+		section.Or,
+		func(src []*generated.Section) []*model.SectionDTO {
+			mapped := mapper.MapListAs[*generated.Section, *model.SectionDTO](src)
+			return mapped
+		},
+	)
 }
 
 func (r *sectionRepo) Delete(ctx context.Context, id int) error {

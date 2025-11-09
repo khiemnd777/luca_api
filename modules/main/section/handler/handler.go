@@ -8,6 +8,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/section/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -24,7 +25,7 @@ func NewSectionHandler(svc service.SectionService, deps *module.ModuleDeps[confi
 
 func (h *SectionHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/section/list", h.List)
-	app.RouterGet(router, "/:dept_id<int>/section/all", h.All)
+	app.RouterGet(router, "/:dept_id<int>/section/search", h.List)
 	app.RouterGet(router, "/:dept_id<int>/section/:id<int>", h.GetByID)
 	app.RouterPost(router, "/:dept_id<int>/section", h.Create)
 	app.RouterPut(router, "/:dept_id<int>/section/:id<int>", h.Update)
@@ -32,24 +33,21 @@ func (h *SectionHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *SectionHandler) List(c *fiber.Ctx) error {
-	// Parse TableQuery (dùng helper chuẩn của bạn)
-	q := table.ParseTableQuery(c, 20) // defLimit=20 (tuỳ chỉnh)
-	res, err := h.svc.List(c.Context(), q)
+	q := table.ParseTableQuery(c, 20)
+	res, err := h.svc.List(c.UserContext(), q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
-func (h *SectionHandler) All(c *fiber.Ctx) error {
-	items, total, err := h.svc.All(c.Context())
+func (h *SectionHandler) Search(c *fiber.Ctx) error {
+	q := dbutils.ParseSearchQuery(c, 20)
+	res, err := h.svc.Search(c.UserContext(), q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"items": items,
-		"total": total,
-	})
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *SectionHandler) GetByID(c *fiber.Ctx) error {
@@ -58,7 +56,7 @@ func (h *SectionHandler) GetByID(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
 	}
 
-	dto, err := h.svc.GetByID(c.Context(), id)
+	dto, err := h.svc.GetByID(c.UserContext(), id)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -70,12 +68,11 @@ func (h *SectionHandler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&payload); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
-	// Name required (tối thiểu)
 	if payload.Name == "" {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "name is required")
 	}
 
-	dto, err := h.svc.Create(c.Context(), payload)
+	dto, err := h.svc.Create(c.UserContext(), payload)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -94,7 +91,7 @@ func (h *SectionHandler) Update(c *fiber.Ctx) error {
 	}
 	payload.ID = id
 
-	dto, err := h.svc.Update(c.Context(), payload)
+	dto, err := h.svc.Update(c.UserContext(), payload)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -106,7 +103,7 @@ func (h *SectionHandler) Delete(c *fiber.Ctx) error {
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.UserContext(), id); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)

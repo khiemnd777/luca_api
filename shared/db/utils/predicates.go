@@ -1,24 +1,58 @@
-package utils
+package dbutils
 
 import (
+	"fmt"
 	"strings"
 
 	"entgo.io/ent/dialect/sql"
-	"github.com/khiemnd777/andy_api/shared/db/ent/generated/predicate"
+	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 func buildWildPattern(normalizedKeyword string) string {
-	parts := strings.Fields(normalizedKeyword)  // "mang   cut" -> ["mang", "cut"]
+	parts := strings.Fields(normalizedKeyword) // "mang   cut" -> ["mang", "cut"]
+	for i := range parts {
+		parts[i] = escapeLike(parts[i])
+	}
 	return "%" + strings.Join(parts, "%") + "%" // "mang cut" -> "%mang%cut%"
 }
 
-func LikeNorm(column, normalizedKeyword string) func(*sql.Selector) {
+type EntPredicate interface{ ~func(*sql.Selector) }
+
+// Usage:
+//
+// import: dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+//
+// q.Where(utils.LikeNorm[predicate.User]("name", keyword))
+func LikeNorm[P EntPredicate](column, normalizedKeyword string) P {
 	pattern := buildWildPattern(normalizedKeyword)
-	return func(s *sql.Selector) {
+	return P(func(s *sql.Selector) {
 		s.Where(sql.Like(s.C(column), pattern))
-	}
+	})
 }
 
-func LikeNormUser(column, normalizedKeyword string) predicate.User {
-	return func(s *sql.Selector) { LikeNorm(column, normalizedKeyword)(s) }
+func LikeNormWithMultiColumns[P ~func(*sql.Selector)](kw string, columns ...string) []P {
+	norm := utils.NormalizeSearchKeyword(kw)
+	out := make([]P, 0, len(columns))
+	for _, c := range columns {
+		out = append(out, LikeNorm[P](c, norm))
+	}
+	return out
+}
+
+func GetNormField(field string) string {
+	return fmt.Sprintf("%s_norm", field)
+}
+
+func TrimHasMore[T any](items []*T, limit int) ([]*T, bool) {
+	if len(items) > limit {
+		return items[:limit], true
+	}
+	return items, false
 }
