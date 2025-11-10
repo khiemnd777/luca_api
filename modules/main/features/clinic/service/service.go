@@ -1,0 +1,141 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/khiemnd777/andy_api/modules/main/config"
+	"github.com/khiemnd777/andy_api/modules/main/features/clinic/model"
+	"github.com/khiemnd777/andy_api/modules/main/features/clinic/repository"
+	"github.com/khiemnd777/andy_api/shared/cache"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
+)
+
+type ClinicService interface {
+	Create(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error)
+	Update(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error)
+	GetByID(ctx context.Context, id int) (*model.ClinicDTO, error)
+	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
+	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error)
+	Delete(ctx context.Context, id int) error
+}
+
+type clinicService struct {
+	repo repository.ClinicRepository
+	deps *module.ModuleDeps[config.ModuleConfig]
+}
+
+func NewClinicService(repo repository.ClinicRepository, deps *module.ModuleDeps[config.ModuleConfig]) ClinicService {
+	return &clinicService{repo: repo, deps: deps}
+}
+
+func kClinicByID(id int) string {
+	return fmt.Sprintf("clinic:id:%d", id)
+}
+
+func kClinicAll() []string {
+	return []string{kClinicListAll(), kClinicSearchAll()}
+}
+
+func kClinicListAll() string {
+	return "clinic:list:*"
+}
+
+func kClinicSearchAll() string {
+	return "clinic:search:*"
+}
+
+func kClinicList(q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("clinic:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kClinicSearch(q dbutils.SearchQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("clinic:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func (s *clinicService) Create(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error) {
+	dto, err := s.repo.Create(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	cache.InvalidateKeys(kClinicAll()...)
+	if dto != nil && dto.ID > 0 {
+		cache.InvalidateKeys(kClinicByID(dto.ID))
+	}
+	return dto, nil
+}
+
+func (s *clinicService) Update(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error) {
+	dto, err := s.repo.Update(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	if dto != nil {
+		cache.InvalidateKeys(kClinicByID(dto.ID))
+	}
+	cache.InvalidateKeys(kClinicAll()...)
+	return dto, nil
+}
+
+func (s *clinicService) GetByID(ctx context.Context, id int) (*model.ClinicDTO, error) {
+	return cache.Get(kClinicByID(id), cache.TTLMedium, func() (*model.ClinicDTO, error) {
+		return s.repo.GetByID(ctx, id)
+	})
+}
+
+func (s *clinicService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
+	type boxed = table.TableListResult[model.ClinicDTO]
+	key := kClinicList(q)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.List(ctx, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
+func (s *clinicService) Delete(ctx context.Context, id int) error {
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	cache.InvalidateKeys(kClinicAll()...)
+	cache.InvalidateKeys(kClinicByID(id))
+	return nil
+}
+
+func (s *clinicService) Search(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error) {
+	type boxed = dbutils.SearchResult[model.ClinicDTO]
+	key := kClinicSearch(q)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.Search(ctx, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}

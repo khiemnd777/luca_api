@@ -9,7 +9,8 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/department/handler"
 	"github.com/khiemnd777/andy_api/modules/main/department/repository"
 	"github.com/khiemnd777/andy_api/modules/main/department/service"
-	"github.com/khiemnd777/andy_api/modules/main/section"
+	_ "github.com/khiemnd777/andy_api/modules/main/features"
+	"github.com/khiemnd777/andy_api/modules/main/registry"
 	"github.com/khiemnd777/andy_api/shared/db/ent"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/middleware"
@@ -29,19 +30,21 @@ func main() {
 		OnRegistry: func(app *fiber.App, deps *module.ModuleDeps[config.ModuleConfig]) {
 			repo := repository.NewDepartmentRepository(deps.Ent.(*generated.Client), deps)
 			svcDeptGuard := service.NewGuardService(repo)
-			groupRouter := app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth())
+			router := app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth())
 
-			groupRouter.Use("/:dept_id<int>/*",
+			router.Use("/:dept_id<int>/*",
 				middleware.RequireDepartmentMember(svcDeptGuard, "dept_id"),
 			)
 
 			// Department
 			svc := service.NewDepartmentService(repo, deps)
 			h := handler.NewDepartmentHandler(svc, deps)
-			h.RegisterRoutes(groupRouter)
+			h.RegisterRoutes(router)
 
-			// Section
-			section.NewSection(deps, groupRouter)
+			// Features
+			registry.Init(router, deps, registry.InitOptions{
+				EnabledIDs: deps.Config.Features.Enabled,
+			})
 		},
 	})
 }
