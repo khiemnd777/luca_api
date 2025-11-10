@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
-	"github.com/khiemnd777/andy_api/modules/main/features/section/model"
+	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/section/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
