@@ -18,6 +18,10 @@ func (Dentist) Fields() []ent.Field {
 		field.String("name").
 			NotEmpty(),
 
+		field.String("phone_number").
+			Optional().
+			Nillable(),
+
 		field.String("brief").
 			Optional().
 			Nillable().

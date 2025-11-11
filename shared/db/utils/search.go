@@ -145,41 +145,56 @@ func Search[
 	extras ...KwPred[P],
 ) (SearchResult[R], error) {
 	norm := utils.NormalizeSearchKeyword(sq.Keyword)
-	if norm == "" {
-		return SearchResult[R]{}, nil
+
+	// xử lý 2 trường hợp:
+	// - keyword rỗng  => không áp WHERE, list all theo limit/offset/order
+	// - keyword có giá trị => áp điều kiện LIKE/EXTRA
+	query := q
+
+	if norm != "" {
+		// WHERE ... OR (likes..., extras...)
+		preds := LikeNormWithMultiColumns[P](norm, likeColumns...)
+		for _, f := range extras {
+			preds = append(preds, f(norm))
+		}
+		query = query.Where(orFn(preds...))
 	}
 
-	total, err := q.Clone().Count(ctx)
+	// TOTAL (đếm theo cùng điều kiện hiện tại; nếu keyword rỗng = đếm tất cả)
+	total, err := query.Clone().Count(ctx)
 	if err != nil {
 		return SearchResult[R]{}, err
 	}
-
-	// WHERE ... OR (likes..., extras...)
-	preds := LikeNormWithMultiColumns[P](norm, likeColumns...)
-	for _, f := range extras {
-		preds = append(preds, f(norm))
-	}
-	q = q.Where(orFn(preds...))
 
 	// ORDER BY
 	field := resolveOrderField(sq.OrderBy, defaultField)
 	desc := isDesc(sq.Direction)
 	orderOpts := buildSQLOptions[O](table, field, desc, pkField)
-	q = q.Order(orderOpts...)
+	query = query.Order(orderOpts...)
+
+	// Chuẩn hóa limit/offset (phòng khi limit không hợp lệ)
+	limit := sq.Limit
+	if limit <= 0 {
+		limit = 20 // fallback an toàn; nếu bạn đã chuẩn hóa ở nơi khác có thể bỏ dòng này
+	}
+	offset := sq.Offset
+	if offset < 0 {
+		offset = 0
+	}
 
 	// PAGING (limit + 1 cho hasMore)
-	q = q.Limit(sq.Limit + 1).Offset(sq.Offset)
+	query = query.Limit(limit + 1).Offset(offset)
 
 	// FETCH
-	srcItems, err := q.All(ctx)
+	srcItems, err := query.All(ctx)
 	if err != nil {
 		return SearchResult[R]{}, err
 	}
 
 	// hasMore
-	srcItems, hasMore := TrimHasMore(srcItems, sq.Limit)
+	srcItems, hasMore := TrimHasMore(srcItems, limit)
 
-	// MAP
+	// MAP (nếu có mapper)
 	if mapper != nil {
 		dstItems := mapper(srcItems)
 		return SearchResult[R]{
@@ -189,11 +204,12 @@ func Search[
 		}, nil
 	}
 
-	// cast if R == E
+	// Fallback cast nếu R == E
 	anyItems := make([]*R, len(srcItems))
 	for i, it := range srcItems {
 		anyItems[i] = any(*it).(*R)
 	}
+
 	return SearchResult[R]{
 		Items:   anyItems,
 		HasMore: hasMore,

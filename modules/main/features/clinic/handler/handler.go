@@ -25,7 +25,8 @@ func NewClinicHandler(svc service.ClinicService, deps *module.ModuleDeps[config.
 
 func (h *ClinicHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/clinic/list", h.List)
-	app.RouterGet(router, "/:dept_id<int>/clinic/search", h.List)
+	app.RouterGet(router, "/:dept_id<int>/clinic/search", h.Search)
+	app.RouterGet(router, "/:dept_id<int>/dentist/:dentist_id<int>/clinics", h.ListByDentistID)
 	app.RouterGet(router, "/:dept_id<int>/clinic/:id<int>", h.GetByID)
 	app.RouterPost(router, "/:dept_id<int>/clinic", h.Create)
 	app.RouterPut(router, "/:dept_id<int>/clinic/:id<int>", h.Update)
@@ -35,6 +36,16 @@ func (h *ClinicHandler) RegisterRoutes(router fiber.Router) {
 func (h *ClinicHandler) List(c *fiber.Ctx) error {
 	q := table.ParseTableQuery(c, 20)
 	res, err := h.svc.List(c.UserContext(), q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *ClinicHandler) ListByDentistID(c *fiber.Ctx) error {
+	q := table.ParseTableQuery(c, 20)
+	dentistID, _ := utils.GetParamAsInt(c, "dentist_id")
+	res, err := h.svc.ListByDentistID(c.UserContext(), dentistID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

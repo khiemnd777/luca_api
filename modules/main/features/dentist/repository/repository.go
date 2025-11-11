@@ -8,6 +8,7 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinic"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinicdentist"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/dentist"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
@@ -21,6 +22,7 @@ type DentistRepository interface {
 	Update(ctx context.Context, input model.DentistDTO) (*model.DentistDTO, error)
 	GetByID(ctx context.Context, id int) (*model.DentistDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.DentistDTO], error)
+	ListByClinicID(ctx context.Context, clinicID int, query table.TableQuery) (table.TableListResult[model.DentistDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.DentistDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -48,8 +50,8 @@ func (r *dentistRepo) Create(ctx context.Context, input model.DentistDTO) (*mode
 	}()
 
 	q := tx.Dentist.Create().
-		SetActive(input.Active).
 		SetName(input.Name).
+		SetNillablePhoneNumber(input.PhoneNumber).
 		SetNillableBrief(input.Brief)
 
 	// Edge
@@ -82,20 +84,30 @@ func (r *dentistRepo) Update(ctx context.Context, input model.DentistDTO) (*mode
 	}()
 
 	q := tx.Dentist.UpdateOneID(input.ID).
-		SetActive(input.Active).
 		SetName(input.Name).
+		SetNillablePhoneNumber(input.PhoneNumber).
 		SetNillableBrief(input.Brief)
 
 	// Edge
 	if input.ClinicIDs != nil {
 		clinicIDs := utils.DedupInt(input.ClinicIDs, -1)
-
-		if len(clinicIDs) == 0 {
-			q = q.ClearClinics()
-		} else {
-			q = q.
-				ClearClinics().
-				AddClinicIDs(clinicIDs...)
+		if _, err = tx.ClinicDentist.
+			Delete().
+			Where(clinicdentist.DentistIDEQ(input.ID)).
+			Exec(ctx); err != nil {
+			return nil, err
+		}
+		if len(clinicIDs) > 0 {
+			bulk := make([]*generated.ClinicDentistCreate, 0, len(clinicIDs))
+			for _, cid := range clinicIDs {
+				bulk = append(bulk, tx.ClinicDentist.Create().
+					SetDentistID(input.ID).
+					SetClinicID(cid),
+				)
+				if err = tx.ClinicDentist.CreateBulk(bulk...).Exec(ctx); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 
@@ -141,6 +153,27 @@ func (r *dentistRepo) List(ctx context.Context, query table.TableQuery) (table.T
 		ctx,
 		r.db.Dentist.Query().
 			Where(dentist.DeletedAtIsNil()),
+		query,
+		dentist.Table,
+		dentist.FieldID,
+		dentist.FieldID,
+		func(src []*generated.Dentist) []*model.DentistDTO {
+			mapped := mapper.MapListAs[*generated.Dentist, *model.DentistDTO](src)
+			return mapped
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.DentistDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *dentistRepo) ListByClinicID(ctx context.Context, clinicID int, query table.TableQuery) (table.TableListResult[model.DentistDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Dentist.Query().
+			Where(dentist.HasClinicsWith(clinicdentist.ClinicIDEQ(clinicID)), dentist.DeletedAtIsNil()),
 		query,
 		dentist.Table,
 		dentist.FieldID,
