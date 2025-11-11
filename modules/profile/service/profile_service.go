@@ -49,10 +49,8 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID int, name, av
 		}
 	}
 
-	// Normalize and check phone
-	normalizedPhone, _ := utils.NormalizeEnsuredPhone(phone)
-	if normalizedPhone != nil {
-		if exists, _ := s.repo.CheckPhoneExists(ctx, userID, *normalizedPhone); exists {
+	if utils.IsPhone(*phone) {
+		if exists, _ := s.repo.CheckPhoneExists(ctx, userID, *phone); exists {
 			return nil, profileError.ErrPhoneExists
 		}
 	}
@@ -71,7 +69,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID int, name, av
 		var err error
 		refCode := uuid.NewString()
 		qrCode := utils.GenerateQRCodeStringForUser(refCode)
-		updated, err = s.repo.UpdateByID(ctx, userID, name, normalizedPhone, email, &avatar, &refCode, &qrCode)
+		updated, err = s.repo.UpdateByID(ctx, userID, name, phone, email, &avatar, &refCode, &qrCode)
 
 		return err
 	})

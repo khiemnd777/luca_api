@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/khiemnd777/andy_api/modules/user/model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -30,7 +31,7 @@ func (r *UserRepository) Create(ctx context.Context, email, password, name strin
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id int) (*generated.User, error) {
-	return r.db.User.Query().Where(user.ID(id), user.Active(true)).Only(ctx)
+	return r.db.User.Query().Where(user.ID(id), user.DeletedAtIsNil()).Only(ctx)
 }
 
 func (r *UserRepository) GetAdminUserID(ctx context.Context) (*int, error) {
@@ -48,7 +49,7 @@ func (r *UserRepository) GetAdminUserID(ctx context.Context) (*int, error) {
 }
 
 func (r *UserRepository) GetQRCodeByUserID(ctx context.Context, userID int) (*model.QRCodeModel, error) {
-	user, err := r.db.User.Query().Where(user.ID(userID), user.Active(true)).Only(ctx)
+	user, err := r.db.User.Query().Where(user.ID(userID), user.DeletedAtIsNil()).Only(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +66,7 @@ func (r *UserRepository) GetQRCodeByUserID(ctx context.Context, userID int) (*mo
 }
 
 func (r *UserRepository) GeUserByRefCode(ctx context.Context, refCode string) (*generated.User, error) {
-	user, err := r.db.User.Query().Where(user.RefCode(refCode), user.Active(true)).Only(ctx)
+	user, err := r.db.User.Query().Where(user.RefCode(refCode), user.DeletedAtIsNil()).Only(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -127,5 +128,7 @@ func (r *UserRepository) Update(ctx context.Context, id int, name string, phone,
 }
 
 func (r *UserRepository) Delete(ctx context.Context, id int) error {
-	return r.db.User.DeleteOneID(id).Exec(ctx)
+	return r.db.User.UpdateOneID(id).
+		SetDeletedAt(time.Now()).
+		Exec(ctx)
 }

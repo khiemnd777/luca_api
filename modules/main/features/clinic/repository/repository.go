@@ -49,23 +49,33 @@ func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.
 		}
 	}()
 
-	q := tx.Clinic.Create().
+	entity, err := tx.Clinic.Create().
 		SetName(input.Name).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
 		SetNillableBrief(input.Brief).
-		SetNillableLogo(input.Logo)
+		SetNillableLogo(input.Logo).
+		Save(ctx)
 
-	// Edge
-	dentistIDs := utils.DedupInt(input.DentistIDs, -1)
-
-	if len(dentistIDs) > 0 {
-		q = q.AddDentistIDs(dentistIDs...)
-	}
-
-	entity, err := q.Save(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	// Edge
+	if input.DentistIDs != nil {
+		dentistIDs := utils.DedupInt(input.DentistIDs, -1)
+		if len(dentistIDs) > 0 {
+			bulk := make([]*generated.ClinicDentistCreate, 0, len(dentistIDs))
+			for _, did := range dentistIDs {
+				bulk = append(bulk, tx.ClinicDentist.Create().
+					SetClinicID(entity.ID).
+					SetDentistID(did),
+				)
+			}
+			if err = tx.ClinicDentist.CreateBulk(bulk...).Exec(ctx); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	dto := mapper.MapAs[*generated.Clinic, *model.ClinicDTO](entity)

@@ -42,6 +42,5 @@ func (ClinicDentist) Indexes() []ent.Index {
 		index.Fields("dentist_id", "clinic_id").Unique(),
 		index.Fields("clinic_id"),
 		index.Fields("dentist_id"),
-		index.Fields("dentist_id", "created_at"),
 	}
 }

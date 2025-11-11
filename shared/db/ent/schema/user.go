@@ -17,6 +17,9 @@ func (User) Fields() []ent.Field {
 		field.String("name").Default(""),
 		field.String("phone").Optional().Unique(),
 		field.Bool("active").Default(true),
+		field.Time("deleted_at").
+			Optional().
+			Nillable(),
 		field.String("avatar").Optional(),   // Avatar URL from Google, Facebook, ...
 		field.String("provider").Optional(), // 'google', 'facebook', ...
 		field.String("provider_id").Optional(),
@@ -34,8 +37,7 @@ func (User) Edges() []ent.Edge {
 		edge.To("attributes", Attribute.Type),
 		edge.To("attribute_options", AttributeOption.Type),
 		edge.To("attribute_option_values", AttributeOptionValue.Type),
-
-		// O2M thực: User -> DepartmentMember
 		edge.To("dept_memberships", DepartmentMember.Type),
+		edge.To("staff", Staff.Type).Unique(),
 	}
 }
