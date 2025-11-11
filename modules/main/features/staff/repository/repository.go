@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -15,12 +17,16 @@ import (
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type StaffRepository interface {
 	Create(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
 	Update(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
+	ChangePassword(ctx context.Context, id int, newPassword string) error
 	GetByID(ctx context.Context, id int) (*model.StaffDTO, error)
+	CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error)
+	CheckEmailExists(ctx context.Context, userID int, email string) (bool, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
@@ -49,13 +55,19 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 		}
 	}()
 
+	refCode := uuid.NewString()
+	qrCode := utils.GenerateQRCodeStringForUser(refCode)
+	pwdHash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+
 	userEnt, err := tx.User.Create().
 		SetName(input.Name).
-		SetNillableEmail(input.Email).
-		SetNillablePhone(input.Phone).
-		SetNillableActive(input.Active).
-		SetNillableAvatar(input.Avatar).
-		SetNillableQrCode(input.QrCode).
+		SetPassword(string(pwdHash)).
+		SetNillableEmail(&input.Email).
+		SetNillablePhone(&input.Phone).
+		SetNillableActive(&input.Active).
+		SetNillableAvatar(&input.Avatar).
+		SetNillableRefCode(&refCode).
+		SetNillableQrCode(&qrCode).
 		Save(ctx)
 
 	if err != nil {
@@ -105,22 +117,24 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 		}
 	}()
 
-	staffEnt, err := tx.Staff.
-		Query().
-		Where(staff.HasUserWith(user.IDEQ(input.ID))).
-		Only(ctx)
+	userQ := tx.User.UpdateOneID(input.ID).
+		SetName(input.Name).
+		SetNillableEmail(&input.Email).
+		SetNillablePhone(&input.Phone).
+		SetNillableActive(&input.Active).
+		SetNillableAvatar(&input.Avatar)
+
+	userEnt, err := userQ.Save(ctx)
+
 	if err != nil {
 		return nil, err
 	}
 
-	userEnt, err := tx.User.UpdateOneID(staffEnt.ID).
-		SetName(input.Name).
-		SetNillableEmail(input.Email).
-		SetNillablePhone(input.Phone).
-		SetNillableActive(input.Active).
-		SetNillableAvatar(input.Avatar).
-		SetNillableQrCode(input.QrCode).
-		Save(ctx)
+	staffEnt, err := tx.Staff.
+		Query().
+		Where(staff.HasUserWith(user.IDEQ(input.ID))).
+		Only(ctx)
+
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +144,7 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 
 		if _, err = tx.StaffSection.
 			Delete().
-			Where(staffsection.StaffIDEQ(input.ID)).
+			Where(staffsection.StaffIDEQ(staffEnt.ID)).
 			Exec(ctx); err != nil {
 			return nil, err
 		}
@@ -154,6 +168,33 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 	return dto, nil
 }
 
+func (r *staffRepo) ChangePassword(ctx context.Context, id int, newPassword string) error {
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	const updateQuery = `UPDATE users SET password = $2 WHERE id = $1`
+	_, err = r.deps.DB.ExecContext(ctx, updateQuery, id, string(newHash))
+	if err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	return nil
+}
+
+func (r *staffRepo) CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error) {
+	return r.db.User.Query().
+		Where(user.IDNEQ(userID), user.PhoneEQ(phone), user.DeletedAtIsNil()).
+		Exist(ctx)
+}
+
+func (r *staffRepo) CheckEmailExists(ctx context.Context, userID int, email string) (bool, error) {
+	return r.db.User.Query().
+		Where(user.IDNEQ(userID), user.EmailEQ(email), user.DeletedAtIsNil()).
+		Exist(ctx)
+}
+
 func (r *staffRepo) GetByID(ctx context.Context, id int) (*model.StaffDTO, error) {
 	userEnt, err := r.db.User.Query().
 		Where(
@@ -175,7 +216,8 @@ func (r *staffRepo) GetByID(ctx context.Context, id int) (*model.StaffDTO, error
 
 	sectionIDs, err := staffEnt.
 		QuerySections().
-		IDs(ctx)
+		Select(staffsection.FieldSectionID).
+		Ints(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -191,9 +233,9 @@ func (r *staffRepo) List(ctx context.Context, query table.TableQuery) (table.Tab
 		r.db.User.Query().
 			Where(user.DeletedAtIsNil()),
 		query,
-		staff.Table,
-		staff.FieldID,
-		staff.FieldID,
+		user.Table,
+		user.FieldID,
+		user.FieldID,
 		func(src []*generated.User) []*model.StaffDTO {
 			mapped := mapper.MapListAs[*generated.User, *model.StaffDTO](src)
 			return mapped

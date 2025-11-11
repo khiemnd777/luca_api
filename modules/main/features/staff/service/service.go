@@ -16,7 +16,10 @@ import (
 type StaffService interface {
 	Create(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
 	Update(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
+	ChangePassword(ctx context.Context, id int, newPassword string) error
 	GetByID(ctx context.Context, id int) (*model.StaffDTO, error)
+	CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error)
+	CheckEmailExists(ctx context.Context, userID int, email string) (bool, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
@@ -42,6 +45,10 @@ func kStaffAll() []string {
 
 func kStaffListAll() string {
 	return "staff:list:*"
+}
+
+func kSectionStaffAll(staffID int) string {
+	return fmt.Sprintf("section:staff:%d:*", staffID)
 }
 
 func kStaffSearchAll() string {
@@ -84,7 +91,7 @@ func (s *staffService) Create(ctx context.Context, input model.StaffDTO) (*model
 
 	cache.InvalidateKeys(kStaffAll()...)
 	if dto != nil && dto.ID > 0 {
-		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID))
+		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kSectionStaffAll(dto.ID))
 	}
 	return dto, nil
 }
@@ -96,10 +103,14 @@ func (s *staffService) Update(ctx context.Context, input model.StaffDTO) (*model
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID))
+		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kSectionStaffAll(dto.ID))
 	}
 	cache.InvalidateKeys(kStaffAll()...)
 	return dto, nil
+}
+
+func (s *staffService) ChangePassword(ctx context.Context, id int, newPassword string) error {
+	return s.repo.ChangePassword(ctx, id, newPassword)
 }
 
 func (s *staffService) GetByID(ctx context.Context, id int) (*model.StaffDTO, error) {
@@ -144,12 +155,20 @@ func (s *staffService) ListBySectionID(ctx context.Context, sectionID int, query
 	return *ptr, nil
 }
 
+func (s *staffService) CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error) {
+	return s.repo.CheckPhoneExists(ctx, userID, phone)
+}
+
+func (s *staffService) CheckEmailExists(ctx context.Context, userID int, email string) (bool, error) {
+	return s.repo.CheckEmailExists(ctx, userID, email)
+}
+
 func (s *staffService) Delete(ctx context.Context, id int) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	cache.InvalidateKeys(kStaffAll()...)
-	cache.InvalidateKeys(kStaffByID(id), kStaffSectionList(id))
+	cache.InvalidateKeys(kStaffByID(id), kStaffSectionList(id), kSectionStaffAll(id))
 	return nil
 }
 

@@ -29,7 +29,10 @@ func (h *StaffHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/section/:section_id<int>/staffs", h.ListBySectionID)
 	app.RouterGet(router, "/:dept_id<int>/staff/:id<int>", h.GetByID)
 	app.RouterPost(router, "/:dept_id<int>/staff", h.Create)
+	app.RouterPost(router, "/:dept_id<int>/staff/change-password", h.ChangePassword)
 	app.RouterPut(router, "/:dept_id<int>/staff/:id<int>", h.Update)
+	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/exists-phone", h.ExistsPhone)
+	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/exists-email", h.ExistsEmail)
 	app.RouterDelete(router, "/:dept_id<int>/staff/:id<int>", h.Delete)
 }
 
@@ -74,6 +77,54 @@ func (h *StaffHandler) GetByID(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(dto)
 }
 
+func (h *StaffHandler) ExistsEmail(c *fiber.Ctx) error {
+	id, _ := utils.GetParamAsInt(c, "id")
+	if id <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+	}
+
+	type ExistsEmailRequest struct {
+		Email string `json:"email"`
+	}
+
+	body, err := app.ParseBody[ExistsEmailRequest](c)
+	if err != nil {
+		return err
+	}
+
+	existed, err := h.svc.CheckEmailExists(c.UserContext(), id, body.Email)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.
+		Status(fiber.StatusOK).
+		JSON(existed)
+}
+
+func (h *StaffHandler) ExistsPhone(c *fiber.Ctx) error {
+	id, _ := utils.GetParamAsInt(c, "id")
+	if id <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+	}
+
+	type ExistsPhoneRequest struct {
+		Phone string `json:"phone"`
+	}
+
+	body, err := app.ParseBody[ExistsPhoneRequest](c)
+	if err != nil {
+		return err
+	}
+
+	existed, err := h.svc.CheckPhoneExists(c.UserContext(), id, body.Phone)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.
+		Status(fiber.StatusOK).
+		JSON(existed)
+}
+
 func (h *StaffHandler) Create(c *fiber.Ctx) error {
 	var payload model.StaffDTO
 	if err := c.BodyParser(&payload); err != nil {
@@ -107,6 +158,25 @@ func (h *StaffHandler) Update(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *StaffHandler) ChangePassword(c *fiber.Ctx) error {
+	type ChangePasswordRequest struct {
+		NewPassword string `json:"new_password"`
+	}
+
+	var body ChangePasswordRequest
+	if err := c.BodyParser(&body); err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "Invalid request body")
+	}
+
+	userID, _ := utils.GetUserIDInt(c)
+
+	if err := h.svc.ChangePassword(c.UserContext(), userID, body.NewPassword); err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.SendStatus(fiber.StatusAccepted)
 }
 
 func (h *StaffHandler) Delete(c *fiber.Ctx) error {

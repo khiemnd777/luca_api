@@ -25,7 +25,8 @@ func NewSectionHandler(svc service.SectionService, deps *module.ModuleDeps[confi
 
 func (h *SectionHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/section/list", h.List)
-	app.RouterGet(router, "/:dept_id<int>/section/search", h.List)
+	app.RouterGet(router, "/:dept_id<int>/section/search", h.Search)
+	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id<int>/sections", h.ListBySectionID)
 	app.RouterGet(router, "/:dept_id<int>/section/:id<int>", h.GetByID)
 	app.RouterPost(router, "/:dept_id<int>/section", h.Create)
 	app.RouterPut(router, "/:dept_id<int>/section/:id<int>", h.Update)
@@ -35,6 +36,16 @@ func (h *SectionHandler) RegisterRoutes(router fiber.Router) {
 func (h *SectionHandler) List(c *fiber.Ctx) error {
 	q := table.ParseTableQuery(c, 20)
 	res, err := h.svc.List(c.UserContext(), q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *SectionHandler) ListBySectionID(c *fiber.Ctx) error {
+	q := table.ParseTableQuery(c, 20)
+	staffID, _ := utils.GetParamAsInt(c, "staff_id")
+	res, err := h.svc.ListByStaffID(c.UserContext(), staffID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

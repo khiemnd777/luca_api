@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -25,6 +27,12 @@ func (User) Fields() []ent.Field {
 		field.String("provider_id").Optional(),
 		field.String("ref_code").Optional().Nillable(), // Ref. code
 		field.String("qr_code").Optional().Nillable(),  // User QR code
+		field.Time("created_at").
+			Default(time.Now).
+			Immutable(),
+		field.Time("updated_at").
+			Default(time.Now).
+			UpdateDefault(time.Now),
 	}
 }
 

@@ -8,6 +8,9 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/section"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staff"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staffsection"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -19,6 +22,7 @@ type SectionRepository interface {
 	Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	GetByID(ctx context.Context, id int) (*model.SectionDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
+	ListByStaffID(ctx context.Context, staffID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -83,6 +87,30 @@ func (r *sectionRepo) List(ctx context.Context, query table.TableQuery) (table.T
 		ctx,
 		r.db.Section.Query().
 			Where(section.DeletedAtIsNil()),
+		query,
+		section.Table,
+		section.FieldID,
+		section.FieldID,
+		func(src []*generated.Section) []*model.SectionDTO {
+			mapped := mapper.MapListAs[*generated.Section, *model.SectionDTO](src)
+			return mapped
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.SectionDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *sectionRepo) ListByStaffID(ctx context.Context, staffID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Section.Query().
+			Where(
+				section.DeletedAtIsNil(),
+				section.HasStaffsWith(staffsection.HasStaffWith(staff.HasUserWith(user.IDEQ(staffID)))),
+			),
 		query,
 		section.Table,
 		section.FieldID,
