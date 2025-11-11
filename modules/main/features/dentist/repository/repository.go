@@ -104,9 +104,9 @@ func (r *dentistRepo) Update(ctx context.Context, input model.DentistDTO) (*mode
 					SetDentistID(input.ID).
 					SetClinicID(cid),
 				)
-				if err = tx.ClinicDentist.CreateBulk(bulk...).Exec(ctx); err != nil {
-					return nil, err
-				}
+			}
+			if err = tx.ClinicDentist.CreateBulk(bulk...).Exec(ctx); err != nil {
+				return nil, err
 			}
 		}
 	}
