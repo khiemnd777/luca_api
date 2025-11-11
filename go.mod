@@ -4,12 +4,10 @@ go 1.24.1
 
 require (
 	entgo.io/ent v0.14.4
-	github.com/MicahParks/keyfunc v1.9.0
 	github.com/disintegration/imaging v1.6.2
 	github.com/fatih/color v1.18.0
 	github.com/gofiber/fiber/v2 v2.52.8
 	github.com/gofiber/websocket/v2 v2.2.1
-	github.com/golang-jwt/jwt/v4 v4.4.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/iancoleman/strcase v0.3.0

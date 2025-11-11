@@ -5,6 +5,9 @@ server:
 
 external: true
 
+features:
+  enabled: []
+
 database:
   provider: ${DB_PROVIDER}
   automigrate: true
