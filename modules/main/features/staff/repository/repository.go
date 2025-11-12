@@ -57,7 +57,7 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 
 	refCode := uuid.NewString()
 	qrCode := utils.GenerateQRCodeStringForUser(refCode)
-	pwdHash, _ := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	pwdHash, _ := bcrypt.GenerateFromPassword([]byte(*input.Password), bcrypt.DefaultCost)
 
 	userEnt, err := tx.User.Create().
 		SetName(input.Name).
@@ -137,6 +137,11 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 		SetNillablePhone(&input.Phone).
 		SetNillableActive(&input.Active).
 		SetNillableAvatar(&input.Avatar)
+
+	if input.Password != nil && *input.Password != "" {
+		pwdHash, _ := bcrypt.GenerateFromPassword([]byte(*input.Password), bcrypt.DefaultCost)
+		userQ.SetPassword(string(pwdHash))
+	}
 
 	userEnt, err := userQ.Save(ctx)
 
