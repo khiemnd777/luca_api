@@ -67,6 +67,10 @@ func kStaffSectionList(staffID int) string {
 	return fmt.Sprintf("section:staff:%d:*", staffID)
 }
 
+func kUserRoleList(staffID int) string {
+	return fmt.Sprintf("rbac:roles:user:%d:*", staffID)
+}
+
 func kStaffList(q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
@@ -99,7 +103,7 @@ func (s *staffService) Create(ctx context.Context, input model.StaffDTO) (*model
 
 	cache.InvalidateKeys(kStaffAll()...)
 	if dto != nil && dto.ID > 0 {
-		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kSectionStaffAll(dto.ID))
+		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kUserRoleList(dto.ID), kSectionStaffAll(dto.ID))
 	}
 	return dto, nil
 }
@@ -111,7 +115,7 @@ func (s *staffService) Update(ctx context.Context, input model.StaffDTO) (*model
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kSectionStaffAll(dto.ID))
+		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kUserRoleList(dto.ID), kSectionStaffAll(dto.ID))
 	}
 	cache.InvalidateKeys(kStaffAll()...)
 	return dto, nil
@@ -176,7 +180,7 @@ func (s *staffService) Delete(ctx context.Context, id int) error {
 		return err
 	}
 	cache.InvalidateKeys(kStaffAll()...)
-	cache.InvalidateKeys(kStaffByID(id), kStaffSectionList(id), kSectionStaffAll(id))
+	cache.InvalidateKeys(kStaffByID(id), kStaffSectionList(id), kUserRoleList(id), kSectionStaffAll(id))
 	return nil
 }
 

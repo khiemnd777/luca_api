@@ -12,6 +12,7 @@ type StaffDTO struct {
 	Avatar     string    `json:"avatar,omitempty"`
 	QrCode     *string   `json:"qr_code,omitempty"`
 	SectionIDs []int     `json:"section_ids,omitempty"`
+	RoleIDs    []int     `json:"role_ids,omitempty"`
 	CreatedAt  time.Time `json:"created_at,omitempty"`
 	UpdatedAt  time.Time `json:"updated_at,omitempty"`
 }

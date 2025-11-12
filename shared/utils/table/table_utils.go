@@ -163,7 +163,7 @@ func TableList[
 
 	anyItems := make([]*R, len(srcItems))
 	for i, item := range srcItems {
-		anyItems[i] = any(*item).(*R)
+		anyItems[i] = any(item).(*R)
 	}
 
 	return TableListResult[R]{Items: anyItems, Total: total}, nil

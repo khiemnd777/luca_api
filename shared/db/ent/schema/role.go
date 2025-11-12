@@ -27,10 +27,7 @@ func (Role) Fields() []ent.Field {
 
 func (Role) Edges() []ent.Edge {
 	return []ent.Edge{
-		// Role <-> Permission (M2M implicit — KHÔNG Through/pivot thủ công)
 		edge.To("permissions", Permission.Type),
-
-		// User <-> Role (M2M implicit)
 		edge.From("users", User.Type).Ref("roles"),
 	}
 }

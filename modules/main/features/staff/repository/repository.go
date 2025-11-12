@@ -82,7 +82,7 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 		return nil, err
 	}
 
-	// Edge
+	// Edge – Sections
 	if input.SectionIDs != nil {
 		sectionIDs := utils.DedupInt(input.SectionIDs, -1)
 		if len(sectionIDs) > 0 {
@@ -99,8 +99,22 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 		}
 	}
 
+	// Edge – Roles
+	if input.RoleIDs != nil {
+		roleIDs := utils.DedupInt(input.RoleIDs, -1)
+		if len(roleIDs) > 0 {
+			_, err = tx.User.UpdateOneID(userEnt.ID).
+				AddRoleIDs(roleIDs...).
+				Save(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
 	dto.SectionIDs = input.SectionIDs
+	dto.RoleIDs = input.RoleIDs
 	return dto, nil
 }
 
@@ -139,6 +153,7 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 		return nil, err
 	}
 
+	// Edge – Sections
 	if input.SectionIDs != nil {
 		sectionIDs := utils.DedupInt(input.SectionIDs, -1)
 
@@ -160,6 +175,19 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 			if err = tx.StaffSection.CreateBulk(bulk...).Exec(ctx); err != nil {
 				return nil, err
 			}
+		}
+	}
+
+	// Edge – Roles
+	if input.RoleIDs != nil {
+		roleIDs := utils.DedupInt(input.RoleIDs, -1)
+
+		upd := tx.User.UpdateOneID(userEnt.ID).ClearRoles()
+		if len(roleIDs) > 0 {
+			upd = upd.AddRoleIDs(roleIDs...)
+		}
+		if _, err = upd.Save(ctx); err != nil {
+			return nil, err
 		}
 	}
 
@@ -222,8 +250,15 @@ func (r *staffRepo) GetByID(ctx context.Context, id int) (*model.StaffDTO, error
 		return nil, err
 	}
 
+	roleIDs, err := userEnt.QueryRoles().IDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
 	dto.SectionIDs = sectionIDs
+	dto.RoleIDs = roleIDs
+
 	return dto, nil
 }
 

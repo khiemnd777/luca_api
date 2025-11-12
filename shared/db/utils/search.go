@@ -207,7 +207,7 @@ func Search[
 	// Fallback cast nếu R == E
 	anyItems := make([]*R, len(srcItems))
 	for i, it := range srcItems {
-		anyItems[i] = any(*it).(*R)
+		anyItems[i] = any(it).(*R)
 	}
 
 	return SearchResult[R]{
