@@ -18,6 +18,7 @@ type SectionService interface {
 	Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	GetByID(ctx context.Context, id int) (*model.SectionDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
+	ListByStaffID(ctx context.Context, staffID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -53,6 +54,14 @@ func kSectionList(q table.TableQuery) string {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("section:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kSectionStaffList(staffID int, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("section:staff:%d:list:l%d:p%d:o%s:d%s", staffID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kSectionSearch(q dbutils.SearchQuery) string {
@@ -101,6 +110,24 @@ func (s *sectionService) List(ctx context.Context, q table.TableQuery) (table.Ta
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
 		res, e := s.repo.List(ctx, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
+func (s *sectionService) ListByStaffID(ctx context.Context, staffID int, q table.TableQuery) (table.TableListResult[model.SectionDTO], error) {
+	type boxed = table.TableListResult[model.SectionDTO]
+	key := kSectionStaffList(staffID, q)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.ListByStaffID(ctx, staffID, q)
 		if e != nil {
 			return nil, e
 		}

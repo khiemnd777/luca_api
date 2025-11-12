@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -17,11 +19,20 @@ func (User) Fields() []ent.Field {
 		field.String("name").Default(""),
 		field.String("phone").Optional().Unique(),
 		field.Bool("active").Default(true),
+		field.Time("deleted_at").
+			Optional().
+			Nillable(),
 		field.String("avatar").Optional(),   // Avatar URL from Google, Facebook, ...
 		field.String("provider").Optional(), // 'google', 'facebook', ...
 		field.String("provider_id").Optional(),
 		field.String("ref_code").Optional().Nillable(), // Ref. code
 		field.String("qr_code").Optional().Nillable(),  // User QR code
+		field.Time("created_at").
+			Default(time.Now).
+			Immutable(),
+		field.Time("updated_at").
+			Default(time.Now).
+			UpdateDefault(time.Now),
 	}
 }
 
@@ -34,8 +45,7 @@ func (User) Edges() []ent.Edge {
 		edge.To("attributes", Attribute.Type),
 		edge.To("attribute_options", AttributeOption.Type),
 		edge.To("attribute_option_values", AttributeOptionValue.Type),
-
-		// O2M thực: User -> DepartmentMember
 		edge.To("dept_memberships", DepartmentMember.Type),
+		edge.To("staff", Staff.Type).Unique(),
 	}
 }

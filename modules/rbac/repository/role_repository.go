@@ -6,7 +6,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/role"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
-	"github.com/khiemnd777/andy_api/shared/mapper"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -15,8 +15,10 @@ type RoleRepository interface {
 	GetByID(ctx context.Context, id int) (*generated.Role, error)
 	GetByName(ctx context.Context, name string) (*generated.Role, error)
 	GetAll(ctx context.Context) ([]*generated.Role, error)
-	List(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error)
+	List(ctx context.Context, query table.TableQuery) (table.TableListResult[generated.Role], error)
 	ListByUser(ctx context.Context, userID, limit, offset int) ([]*generated.Role, int, error)
+	ListByUserID(ctx context.Context, userID int, query table.TableQuery) (table.TableListResult[generated.Role], error)
+	SearchRoles(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[generated.Role], error)
 	Update(ctx context.Context, id int, newName, newDisplayName, newBrief string) (*generated.Role, error)
 	UpdateName(ctx context.Context, id int, newName string) (*generated.Role, error)
 	Delete(ctx context.Context, id int) error
@@ -51,23 +53,16 @@ func (r *roleRepository) GetByName(ctx context.Context, name string) (*generated
 func (r *roleRepository) GetAll(ctx context.Context) ([]*generated.Role, error) {
 	return r.db.Role.Query().Order(generated.Asc(role.FieldID)).All(ctx)
 }
-func (r *roleRepository) List(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error) {
-	list, err := table.TableList(
+func (r *roleRepository) List(ctx context.Context, query table.TableQuery) (table.TableListResult[generated.Role], error) {
+	return table.TableList[generated.Role, generated.Role](
 		ctx,
 		r.db.Role.Query(),
 		query,
 		role.Table,
 		role.FieldID,
 		role.FieldID,
-		func(src []*generated.Role) []*generated.Role {
-			mapped := mapper.MapListAs[*generated.Role, *generated.Role](src)
-			return mapped
-		},
+		nil,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return &list, nil
 }
 func (r *roleRepository) ListByUser(ctx context.Context, userID, limit, offset int) ([]*generated.Role, int, error) {
 	q := r.db.Role.Query().Where(role.HasUsersWith(user.IDEQ(userID)))
@@ -78,9 +73,40 @@ func (r *roleRepository) ListByUser(ctx context.Context, userID, limit, offset i
 	items, err := q.Limit(limit).Offset(offset).Order(generated.Desc(role.FieldID)).All(ctx)
 	return items, total, err
 }
+func (r *roleRepository) ListByUserID(ctx context.Context, userID int, query table.TableQuery) (table.TableListResult[generated.Role], error) {
+	return table.TableList[generated.Role, generated.Role](
+		ctx,
+		r.db.Role.Query().
+			Where(role.HasUsersWith((user.IDEQ(userID)))),
+		query,
+		role.Table,
+		role.FieldID,
+		role.FieldID,
+		nil,
+	)
+}
+
+func (r *roleRepository) SearchRoles(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[generated.Role], error) {
+	return dbutils.Search[generated.Role, generated.Role](
+		ctx,
+		r.db.Role.Query(),
+		[]string{
+			dbutils.GetNormField(role.FieldDisplayName),
+			dbutils.GetNormField(role.FieldRoleName),
+		},
+		query,
+		role.Table,
+		role.FieldID,
+		role.FieldRoleName,
+		role.Or,
+		nil,
+	)
+}
+
 func (r *roleRepository) UpdateName(ctx context.Context, id int, newName string) (*generated.Role, error) {
 	return r.db.Role.UpdateOneID(id).SetRoleName(newName).Save(ctx)
 }
+
 func (r *roleRepository) Update(ctx context.Context, id int, newName, newDisplayName, newBrief string) (*generated.Role, error) {
 	return r.db.Role.UpdateOneID(id).
 		SetRoleName(newName).

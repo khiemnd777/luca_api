@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 )
@@ -46,7 +47,9 @@ func (Section) Fields() []ent.Field {
 }
 
 func (Section) Edges() []ent.Edge {
-	return nil
+	return []ent.Edge{
+		edge.To("staffs", StaffSection.Type),
+	}
 }
 
 func (Section) Indexes() []ent.Index {

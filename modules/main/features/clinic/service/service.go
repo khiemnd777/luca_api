@@ -37,7 +37,11 @@ func kClinicByID(id int) string {
 }
 
 func kClinicAll() []string {
-	return []string{kClinicListAll(), kClinicSearchAll()}
+	return []string{
+		kClinicListAll(),
+		kClinicSearchAll(),
+		kClinicDentistAll(),
+	}
 }
 
 func kClinicListAll() string {
@@ -46,6 +50,10 @@ func kClinicListAll() string {
 
 func kClinicSearchAll() string {
 	return "clinic:search:*"
+}
+
+func kClinicDentistAll() string {
+	return "clinic:dentist:*"
 }
 
 func kClinicDentistList(clinicID int) string {

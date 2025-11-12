@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/khiemnd777/andy_api/modules/profile/config"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -24,7 +25,7 @@ func NewProfileRepository(db *generated.Client, deps *module.ModuleDeps[config.M
 }
 
 func (r *ProfileRepository) GetByID(ctx context.Context, id int) (*generated.User, error) {
-	return r.db.User.Query().Where(user.ID(id), user.Active(true)).Only(ctx)
+	return r.db.User.Query().Where(user.ID(id), user.DeletedAtIsNil()).Only(ctx)
 }
 
 func (r *ProfileRepository) UpdateByID(ctx context.Context, id int, name string, phone, email, avatar *string, refCode *string, qrCode *string) (*generated.User, error) {
@@ -88,13 +89,13 @@ func (r *ProfileRepository) ChangePassword(ctx context.Context, id int, currentP
 
 func (r *ProfileRepository) CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error) {
 	return r.db.User.Query().
-		Where(user.IDNEQ(userID), user.PhoneEQ(phone), user.Active(true)).
+		Where(user.IDNEQ(userID), user.PhoneEQ(phone), user.DeletedAtIsNil()).
 		Exist(ctx)
 }
 
 func (r *ProfileRepository) CheckEmailExists(ctx context.Context, userID int, email string) (bool, error) {
 	return r.db.User.Query().
-		Where(user.IDNEQ(userID), user.EmailEQ(email), user.Active(true)).
+		Where(user.IDNEQ(userID), user.EmailEQ(email), user.DeletedAtIsNil()).
 		Exist(ctx)
 }
 
@@ -102,6 +103,7 @@ func (r *ProfileRepository) Delete(ctx context.Context, id int) error {
 	_, err := r.db.User.
 		UpdateOneID(id).
 		SetActive(false).
+		SetDeletedAt(time.Now()).
 		Save(ctx)
 	return err
 }

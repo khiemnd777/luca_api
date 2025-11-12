@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -54,6 +55,8 @@ func (h *RBACHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/roles/me", h.ListRolesOfMe)
 	app.RouterPost(router, "/roles", h.CreateRole)
 	app.RouterGet(router, "/roles", h.ListRoles)
+	app.RouterGet(router, "/user/:user_id<int>/roles", h.ListRolesByUserID)
+	app.RouterGet(router, "/roles/search", h.SearchRoles)
 	app.RouterPut(router, "/roles/:id/rename", h.RenameRole)
 	app.RouterPut(router, "/roles/:id", h.UpdateRole)
 	app.RouterGet(router, "/roles/:id", h.GetRole)
@@ -165,7 +168,33 @@ func (h *RBACHandler) ListRoles(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
-	return c.JSON(data)
+	return c.Status(fiber.StatusOK).JSON(data)
+}
+
+func (h *RBACHandler) ListRolesByUserID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	userID, _ := utils.GetParamAsInt(c, "user_id")
+	tablequery := table.ParseTableQuery(c, 50)
+	data, err := h.svc.ListRolesByUserID(c.UserContext(), userID, tablequery)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(data)
+}
+
+func (h *RBACHandler) SearchRoles(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	searchquery := dbutils.ParseSearchQuery(c, 20)
+	data, err := h.svc.SearchRoles(c.UserContext(), searchquery)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(data)
 }
 
 func (h *RBACHandler) ListRolesOfMe(c *fiber.Ctx) error {
@@ -175,7 +204,7 @@ func (h *RBACHandler) ListRolesOfMe(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.JSON(data)
+	return c.Status(fiber.StatusOK).JSON(data)
 }
 
 func (h *RBACHandler) CreatePermission(c *fiber.Ctx) error {
@@ -190,7 +219,7 @@ func (h *RBACHandler) CreatePermission(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.JSON(fiber.Map{"id": id})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"id": id})
 }
 
 func (h *RBACHandler) DeletePermission(c *fiber.Ctx) error {

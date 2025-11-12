@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/rbac/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -27,8 +28,10 @@ type RBACService interface {
 	UpdateRole(ctx context.Context, roleID int, newName, newDisplayName, newBrief string) error
 	DeleteRole(ctx context.Context, roleID int) error
 	GetRole(ctx context.Context, roleID int) (*generated.Role, error)
-	ListRoles(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error)
+	ListRoles(ctx context.Context, query table.TableQuery) (table.TableListResult[generated.Role], error)
+	ListRolesByUserID(ctx context.Context, userID int, query table.TableQuery) (table.TableListResult[generated.Role], error)
 	ListUserRoles(ctx context.Context, userID, limit, offset int) ([]*generated.Role, error)
+	SearchRoles(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[generated.Role], error)
 	GetMatrix(ctx context.Context) (*RolePermissionMatrix, error)
 
 	// Permission
@@ -53,12 +56,21 @@ const (
 	ttlLong   = 30 * time.Minute
 )
 const (
-	kRoleListAll = "rbac:roles:list:*"
-	kPermListAll = "rbac:perms:list:*"
+	kRoleListAll   = "rbac:roles:list:*"
+	kPermListAll   = "rbac:perms:list:*"
+	kRoleSearchAll = "rbac:role:search:*"
+	kUserRoleAll   = "rbac:roles:user:*"
 )
 
 func kRoleList(limit, offset int, orderBy *string, direction string) string {
 	return fmt.Sprintf("rbac:roles:list:l%d:of%d:o%s:d%s", limit, offset, *orderBy, direction)
+}
+func kUserRoleList(userID int, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("rbac:roles:user:%d:list:l%d:p%d:o%s:d%s", userID, q.Limit, q.Page, orderBy, q.Direction)
 }
 func kRoleID(id int) string {
 	return fmt.Sprintf("rbac:roles:i%d", id)
@@ -69,6 +81,14 @@ func kUserRoles(userID, limit, offset int) string {
 }
 func kUserMatrix(userID int) string { return fmt.Sprintf("user:%d:rbac:matrix", userID) }
 func kMatrix() string               { return "rbac:matrix" }
+
+func kRoleSearch(q dbutils.SearchQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("rbac:role:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+}
 
 type rbacService struct {
 	roles RoleRepo
@@ -89,7 +109,7 @@ func (s *rbacService) CreateRole(ctx context.Context, name, displayName, brief s
 	if err != nil {
 		return 0, err
 	}
-	cache.InvalidateKeys(kRoleListAll, kMatrix())
+	cache.InvalidateKeys(kRoleListAll, kMatrix(), kRoleSearchAll, kUserRoleAll)
 	return r.ID, nil
 }
 func (s *rbacService) RenameRole(ctx context.Context, roleID int, newName string) error {
@@ -102,7 +122,7 @@ func (s *rbacService) RenameRole(ctx context.Context, roleID int, newName string
 func (s *rbacService) UpdateRole(ctx context.Context, roleID int, newName, newDisplayName, newBrief string) error {
 	_, err := s.roles.Update(ctx, roleID, strings.TrimSpace(newName), strings.TrimSpace(newDisplayName), strings.TrimSpace(newBrief))
 	if err == nil {
-		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID), kMatrix())
+		cache.InvalidateKeys(kRoleListAll, kRoleID(roleID), kMatrix(), kRoleSearchAll, kUserRoleAll)
 	}
 	return err
 }
@@ -117,7 +137,7 @@ func (s *rbacService) DeleteRole(ctx context.Context, roleID int) error {
 		rbac.InvalidateUserPermissionSet(uid)
 		cache.InvalidateKeys(kUserMatrix(uid))
 	}
-	cache.InvalidateKeys(kRoleListAll, kRoleID(roleID), kMatrix())
+	cache.InvalidateKeys(kRoleListAll, kRoleID(roleID), kMatrix(), kRoleSearchAll, kUserRoleAll)
 	return nil
 }
 
@@ -128,11 +148,36 @@ func (s *rbacService) GetRole(ctx context.Context, roleID int) (*generated.Role,
 	})
 }
 
-func (s *rbacService) ListRoles(ctx context.Context, query table.TableQuery) (*table.TableListResult[generated.Role], error) {
+func (s *rbacService) ListRoles(ctx context.Context, query table.TableQuery) (table.TableListResult[generated.Role], error) {
 	key := kRoleList(query.Limit, query.Offset, query.OrderBy, query.Direction)
-	return cache.Get(key, ttlMedium, func() (*table.TableListResult[generated.Role], error) {
-		return s.roles.List(ctx, query)
+	ptr, err := cache.Get(key, ttlMedium, func() (*table.TableListResult[generated.Role], error) {
+		res, e := s.roles.List(ctx, query)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
 	})
+	if err != nil {
+		var zero table.TableListResult[generated.Role]
+		return zero, err
+	}
+	return *ptr, nil
+}
+func (s *rbacService) ListRolesByUserID(ctx context.Context, userID int, query table.TableQuery) (table.TableListResult[generated.Role], error) {
+	type boxed = table.TableListResult[generated.Role]
+	key := kUserRoleList(userID, query)
+	ptr, err := cache.Get(key, ttlMedium, func() (*boxed, error) {
+		res, e := s.roles.ListByUserID(ctx, userID, query)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
 }
 func (s *rbacService) ListUserRoles(ctx context.Context, userID, limit, offset int) ([]*generated.Role, error) {
 	key := kUserRoles(userID, limit, offset)
@@ -140,6 +185,23 @@ func (s *rbacService) ListUserRoles(ctx context.Context, userID, limit, offset i
 		items, _, err := s.roles.ListByUser(ctx, userID, limit, offset)
 		return items, err
 	})
+}
+func (s *rbacService) SearchRoles(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[generated.Role], error) {
+	type boxed = dbutils.SearchResult[generated.Role]
+	key := kRoleSearch(q)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.roles.SearchRoles(ctx, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
 }
 
 // -------- Permission

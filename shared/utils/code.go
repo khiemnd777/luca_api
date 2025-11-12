@@ -37,10 +37,10 @@ func GenerateQRCodeStringByID(typ string, id int) string {
 func GenerateQRCodeStringForProduct(typ, ref string) string {
 	buf := fmt.Sprintf("%s:%s", typ, ref)
 	encoded := base64.StdEncoding.EncodeToString([]byte(buf))
-	return fmt.Sprintf("honvang://qr/%s", encoded)
+	return fmt.Sprintf("qr/%s", encoded)
 }
 
 func GenerateQRCodeStringForUser(ref string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(ref))
-	return fmt.Sprintf("honvang://user/%s", encoded)
+	return fmt.Sprintf("user/%s", encoded)
 }
