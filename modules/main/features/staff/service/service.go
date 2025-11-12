@@ -40,7 +40,11 @@ func kStaffByID(id int) string {
 }
 
 func kStaffAll() []string {
-	return []string{kStaffListAll(), kStaffSearchAll()}
+	return []string{
+		kStaffListAll(),
+		kStaffSearchAll(),
+		kStaffSectionAll(),
+	}
 }
 
 func kStaffListAll() string {
@@ -53,6 +57,10 @@ func kSectionStaffAll(staffID int) string {
 
 func kStaffSearchAll() string {
 	return "staff:search:*"
+}
+
+func kStaffSectionAll() string {
+	return "staff:section:*"
 }
 
 func kStaffSectionList(staffID int) string {
