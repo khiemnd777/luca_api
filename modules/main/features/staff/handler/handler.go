@@ -79,7 +79,7 @@ func (h *StaffHandler) GetByID(c *fiber.Ctx) error {
 
 func (h *StaffHandler) ExistsEmail(c *fiber.Ctx) error {
 	id, _ := utils.GetParamAsInt(c, "id")
-	if id <= 0 {
+	if id < -1 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
 	}
 
@@ -103,7 +103,7 @@ func (h *StaffHandler) ExistsEmail(c *fiber.Ctx) error {
 
 func (h *StaffHandler) ExistsPhone(c *fiber.Ctx) error {
 	id, _ := utils.GetParamAsInt(c, "id")
-	if id <= 0 {
+	if id < -1 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
 	}
 
