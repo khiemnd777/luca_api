@@ -104,7 +104,7 @@ func (h *DepartmentHandler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&in); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
-	if in.Name == "" { // đổi lại theo field thực tế của bạn
+	if in.Name == "" {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "name is required")
 	}
 	res, err := h.svc.Create(c.UserContext(), in)
@@ -128,8 +128,8 @@ func (h *DepartmentHandler) Update(c *fiber.Ctx) error {
 	if err := c.BodyParser(&in); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
-	in.ID = id         // ensure path param wins
-	if in.Name == "" { // đổi lại theo field thực tế của bạn
+	in.ID = id
+	if in.Name == "" {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "name is required")
 	}
 	userID, _ := utils.GetUserIDInt(c)
