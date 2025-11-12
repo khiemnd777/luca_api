@@ -8,7 +8,9 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/staff/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -37,6 +39,9 @@ func (h *StaffHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *StaffHandler) List(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	q := table.ParseTableQuery(c, 20)
 	res, err := h.svc.List(c.UserContext(), q)
 	if err != nil {
@@ -46,6 +51,9 @@ func (h *StaffHandler) List(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) ListBySectionID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	q := table.ParseTableQuery(c, 20)
 	sectionID, _ := utils.GetParamAsInt(c, "section_id")
 	res, err := h.svc.ListBySectionID(c.UserContext(), sectionID, q)
@@ -56,6 +64,9 @@ func (h *StaffHandler) ListBySectionID(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) Search(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	q := dbutils.ParseSearchQuery(c, 20)
 	res, err := h.svc.Search(c.UserContext(), q)
 	if err != nil {
@@ -65,6 +76,9 @@ func (h *StaffHandler) Search(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) GetByID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
@@ -78,6 +92,9 @@ func (h *StaffHandler) GetByID(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) ExistsEmail(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id < -1 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
@@ -102,6 +119,9 @@ func (h *StaffHandler) ExistsEmail(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) ExistsPhone(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id < -1 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
@@ -126,6 +146,9 @@ func (h *StaffHandler) ExistsPhone(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) Create(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.create"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	var payload model.StaffDTO
 	if err := c.BodyParser(&payload); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
@@ -142,6 +165,9 @@ func (h *StaffHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) Update(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
@@ -161,6 +187,9 @@ func (h *StaffHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) ChangePassword(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	type ChangePasswordRequest struct {
 		NewPassword string `json:"new_password"`
 	}
@@ -180,6 +209,9 @@ func (h *StaffHandler) ChangePassword(c *fiber.Ctx) error {
 }
 
 func (h *StaffHandler) Delete(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.delete"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")

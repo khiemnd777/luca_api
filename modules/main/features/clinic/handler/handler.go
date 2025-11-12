@@ -8,7 +8,9 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/clinic/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -34,6 +36,9 @@ func (h *ClinicHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *ClinicHandler) List(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	q := table.ParseTableQuery(c, 20)
 	res, err := h.svc.List(c.UserContext(), q)
 	if err != nil {
@@ -43,6 +48,9 @@ func (h *ClinicHandler) List(c *fiber.Ctx) error {
 }
 
 func (h *ClinicHandler) ListByDentistID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	q := table.ParseTableQuery(c, 20)
 	dentistID, _ := utils.GetParamAsInt(c, "dentist_id")
 	res, err := h.svc.ListByDentistID(c.UserContext(), dentistID, q)
@@ -53,6 +61,9 @@ func (h *ClinicHandler) ListByDentistID(c *fiber.Ctx) error {
 }
 
 func (h *ClinicHandler) Search(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	q := dbutils.ParseSearchQuery(c, 20)
 	res, err := h.svc.Search(c.UserContext(), q)
 	if err != nil {
@@ -62,6 +73,9 @@ func (h *ClinicHandler) Search(c *fiber.Ctx) error {
 }
 
 func (h *ClinicHandler) GetByID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
@@ -75,6 +89,9 @@ func (h *ClinicHandler) GetByID(c *fiber.Ctx) error {
 }
 
 func (h *ClinicHandler) Create(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.create"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	var payload model.ClinicDTO
 	if err := c.BodyParser(&payload); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
@@ -91,6 +108,9 @@ func (h *ClinicHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *ClinicHandler) Update(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
@@ -110,6 +130,9 @@ func (h *ClinicHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *ClinicHandler) Delete(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.delete"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
