@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -19,6 +20,29 @@ func NewTokenRepository(db *generated.Client) *TokenRepository {
 
 func (r *TokenRepository) GetUserByID(ctx context.Context, id int) (*generated.User, error) {
 	return r.db.User.Query().Where(user.ID(id)).Only(ctx)
+}
+
+func (r *TokenRepository) GetPermissionsByUserID(ctx context.Context, id int) (*map[string]struct{}, error) {
+	perms, dbErr := r.db.User.
+		Query().
+		Where(user.IDEQ(id)).
+		QueryRoles().
+		QueryPermissions().
+		All(ctx)
+	if dbErr != nil {
+		return nil, dbErr
+	}
+	set := make(map[string]struct{}, len(perms))
+	for _, p := range perms {
+		if p == nil {
+			continue
+		}
+		val := strings.ToLower(strings.TrimSpace(p.PermissionValue))
+		if val != "" {
+			set[val] = struct{}{}
+		}
+	}
+	return &set, nil
 }
 
 func (r *TokenRepository) GetUserByEmail(ctx context.Context, email string) (*generated.User, error) {

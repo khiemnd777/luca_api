@@ -183,8 +183,20 @@ func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, p
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: no permission specified"})
 	}
 
+	if set, ok := utils.GetPermSetFromClaims(c); ok {
+		if allowed, missing := checkPerms(set, mode, req); allowed {
+			return nil
+		} else {
+			logger.Debug(fmt.Sprintf("GuardPermissions forbidden[claims]: userID=%d mode=%v have=%v need=%v missing=%v",
+				uid, mode, mapKeys(set), req, missing))
+			return c.Status(http.StatusForbidden).JSON(fiber.Map{
+				"error":   "Forbidden: missing permission",
+				"details": fiber.Map{"required": req, "missing": missing},
+			})
+		}
+	}
+
 	permSetPtr, err := cache.Get(userPermSetKey(uid), cache.TTLLong, func() (*map[string]struct{}, error) {
-		// User -> Roles -> Permissions (implicit M2M both sides)
 		perms, dbErr := dbEnt.User.
 			Query().
 			Where(user.IDEQ(uid)).
@@ -213,31 +225,8 @@ func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, p
 	}
 	permSet := *permSetPtr
 
-	allowed := false
-	missing := make([]string, 0, len(req))
-	switch mode {
-	case anyMode:
-		for _, want := range req {
-			if _, ok := permSet[want]; ok {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			missing = append(missing, req...)
-		}
-	case allMode:
-		allowed = true
-		for _, want := range req {
-			if _, ok := permSet[want]; !ok {
-				missing = append(missing, want)
-				allowed = false
-			}
-		}
-	}
-
-	if !allowed {
-		logger.Debug(fmt.Sprintf("GuardPermissions forbidden: userID=%d mode=%v have=%v need=%v missing=%v",
+	if allowed, missing := checkPerms(permSet, mode, req); !allowed {
+		logger.Debug(fmt.Sprintf("GuardPermissions forbidden[db]: userID=%d mode=%v have=%v need=%v missing=%v",
 			uid, mode, mapKeys(permSet), req, missing))
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{
 			"error":   "Forbidden: missing permission",
@@ -245,6 +234,28 @@ func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, p
 		})
 	}
 	return nil
+}
+
+func checkPerms(have map[string]struct{}, mode requireMode, req []string) (bool, []string) {
+	switch mode {
+	case anyMode:
+		for _, want := range req {
+			if _, ok := have[want]; ok {
+				return true, nil
+			}
+		}
+		return false, append([]string(nil), req...)
+	case allMode:
+		missing := make([]string, 0, len(req))
+		for _, want := range req {
+			if _, ok := have[want]; !ok {
+				missing = append(missing, want)
+			}
+		}
+		return len(missing) == 0, missing
+	default:
+		return false, req
+	}
 }
 
 // ==========================

@@ -1,0 +1,16 @@
+# scripts/create_module/templates/config.yaml.tmpl
+server:
+  host: "127.0.0.1"
+  port: 1
+  route: "/api/search"
+external: true
+database:
+  provider: "postgres"
+  automigrate: true
+  postgres:
+    host: "127.0.0.1"
+    port: 5432
+    user: "samson_with_hair"
+    password: "samson_with_hair"
+    name: "lucadb"
+    sslmode: "disable"
