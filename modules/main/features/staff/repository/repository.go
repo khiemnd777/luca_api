@@ -282,7 +282,8 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
 	dto.SectionIDs = input.SectionIDs
-	dto.SectionNames = input.SectionNames
+	dto.SectionNames = sectionNames
+	dto.RoleIDs = input.RoleIDs
 
 	return dto, nil
 }

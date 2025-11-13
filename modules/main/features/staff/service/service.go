@@ -111,20 +111,7 @@ func (s *staffService) Create(ctx context.Context, deptID int, input model.Staff
 	}
 
 	// search index
-	sectionNamesStr := strings.Join(dto.SectionNames, " - ")
-	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
-		EntityType: "staff",
-		EntityID:   int64(dto.ID),
-		Title:      dto.Name,
-		Subtitle:   utils.Ptr(dto.Email + " - " + sectionNamesStr),
-		Keywords:   utils.Ptr(dto.Name + " " + dto.Email + " " + dto.Phone),
-		Content:    nil,
-		Attributes: map[string]any{
-			"avatar": dto.Avatar,
-		},
-		OrgID:   utils.Ptr(int64(deptID)),
-		OwnerID: utils.Ptr(int64(dto.ID)),
-	})
+	upsertSearch(deptID, dto)
 
 	return dto, nil
 }
@@ -141,13 +128,19 @@ func (s *staffService) Update(ctx context.Context, deptID int, input model.Staff
 	cache.InvalidateKeys(kStaffAll()...)
 
 	// search index
-	sectionNamesStr := strings.Join(dto.SectionNames, " - ")
+	upsertSearch(deptID, dto)
+
+	return dto, nil
+}
+
+func upsertSearch(deptID int, dto *model.StaffDTO) {
+	sectionNamesStr := strings.Join(dto.SectionNames, "|")
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "staff",
 		EntityID:   int64(dto.ID),
 		Title:      dto.Name,
-		Subtitle:   utils.Ptr(dto.Email + " - " + sectionNamesStr),
-		Keywords:   utils.Ptr(dto.Name + " " + dto.Email + " " + dto.Phone),
+		Subtitle:   utils.Ptr(dto.Email),
+		Keywords:   utils.Ptr(sectionNamesStr + "|" + dto.Phone),
 		Content:    nil,
 		Attributes: map[string]any{
 			"avatar": dto.Avatar,
@@ -155,7 +148,6 @@ func (s *staffService) Update(ctx context.Context, deptID int, input model.Staff
 		OrgID:   utils.Ptr(int64(deptID)),
 		OwnerID: utils.Ptr(int64(dto.ID)),
 	})
-	return dto, nil
 }
 
 func (s *staffService) ChangePassword(ctx context.Context, id int, newPassword string) error {
