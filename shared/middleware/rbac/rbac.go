@@ -160,41 +160,17 @@ func GuardAllPermissions(c *fiber.Ctx, dbEnt *generated.Client, permValues ...st
 	return guardPermissions(c, dbEnt, allMode, permValues...)
 }
 
-func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, permValues ...string) error {
-	uid, ok := utils.GetUserIDInt(c)
-	logger.Debug(fmt.Sprintf("GuardPermissions: userID=%v mode=%v perms=%v", uid, mode, permValues))
-	if !ok || uid <= 0 {
-		logger.Debug(fmt.Sprintf("GuardPermissions: missing/invalid userID; mode=%v perms=%v", mode, permValues))
-		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
-	}
-
-	start := time.Now()
-	defer func() {
-		logger.Debug(fmt.Sprintf(
-			"GuardPermissions performance: userID=%v mode=%v perms=%v took=%v",
-			uid, mode, permValues, time.Since(start),
-		))
-	}()
-
-	ctx := c.UserContext()
-	req := normalizeStrings(permValues)
-	if len(req) == 0 {
-		logger.Warn("GuardPermissions: empty permValues")
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: no permission specified"})
-	}
-
+func getPerms(c *fiber.Ctx, dbEnt *generated.Client) (map[string]struct{}, error) {
 	if set, ok := utils.GetPermSetFromClaims(c); ok {
-		if allowed, missing := checkPerms(set, mode, req); allowed {
-			return nil
-		} else {
-			logger.Debug(fmt.Sprintf("GuardPermissions forbidden[claims]: userID=%d mode=%v have=%v need=%v missing=%v",
-				uid, mode, mapKeys(set), req, missing))
-			return c.Status(http.StatusForbidden).JSON(fiber.Map{
-				"error":   "Forbidden: missing permission",
-				"details": fiber.Map{"required": req, "missing": missing},
-			})
-		}
+		return set, nil
 	}
+
+	uid, ok := utils.GetUserIDInt(c)
+
+	if !ok || uid <= 0 {
+		return nil, c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+	ctx := c.UserContext()
 
 	permSetPtr, err := cache.Get(userPermSetKey(uid), cache.TTLLong, func() (*map[string]struct{}, error) {
 		perms, dbErr := dbEnt.User.
@@ -221,13 +197,51 @@ func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, p
 	})
 	if err != nil {
 		logger.Error(fmt.Sprintf("GuardPermissions: cache/DB error userID=%d err=%v", uid, err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "DB error"})
+		return nil, c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "DB error"})
 	}
+
 	permSet := *permSetPtr
 
+	return permSet, nil
+}
+
+func HasAnyPerm(have map[string]struct{}, permValues ...string) bool {
+	req := normalizeStrings(permValues)
+
+	if len(req) == 0 {
+		return false
+	}
+
+	allowed, _ := checkPerms(have, anyMode, req)
+
+	return allowed
+}
+
+func HasAllPerms(have map[string]struct{}, permValues ...string) bool {
+	req := normalizeStrings(permValues)
+
+	if len(req) == 0 {
+		return false
+	}
+
+	allowed, _ := checkPerms(have, allMode, req)
+
+	return allowed
+}
+
+func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, permValues ...string) error {
+	req := normalizeStrings(permValues)
+	if len(req) == 0 {
+		logger.Warn("GuardPermissions: empty permValues")
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: no permission specified"})
+	}
+
+	permSet, err := getPerms(c, dbEnt)
+	if err != nil {
+		return err
+	}
+
 	if allowed, missing := checkPerms(permSet, mode, req); !allowed {
-		logger.Debug(fmt.Sprintf("GuardPermissions forbidden[db]: userID=%d mode=%v have=%v need=%v missing=%v",
-			uid, mode, mapKeys(permSet), req, missing))
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{
 			"error":   "Forbidden: missing permission",
 			"details": fiber.Map{"required": req, "missing": missing},

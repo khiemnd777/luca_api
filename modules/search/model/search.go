@@ -14,7 +14,7 @@ type Row struct {
 }
 
 type Options struct {
-	Q               string            // raw keyword (có dấu). SQL sẽ unaccent.
+	Query           string            // raw keyword (có dấu). SQL sẽ unaccent.
 	Types           []string          // filter theo loại. Nil/empty = all.
 	OrgID           *int64            // scope theo org (nếu có)
 	OwnerID         *int64            // scope theo owner (optional)

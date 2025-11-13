@@ -34,6 +34,12 @@ func (s *TokenService) GetPermissionsByUserID(ctx context.Context, id int) (*map
 	})
 }
 
+func (s *TokenService) GetDepartmentByUserID(ctx context.Context, id int) (*int, error) {
+	return cache.Get("user:%d:dept", cache.TTLLong, func() (*int, error) {
+		return s.repo.GetDepartmentByUserID(ctx, id)
+	})
+}
+
 func (s *TokenService) GenerateTokens(ctx context.Context, id int) (*auth.AuthTokenPair, error) {
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
@@ -45,21 +51,28 @@ func (s *TokenService) GenerateTokens(ctx context.Context, id int) (*auth.AuthTo
 		return nil, errors.New("invalid credentials")
 	}
 
+	deptID, err := s.GetDepartmentByUserID(ctx, id)
+	if err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+
 	access, err := utils.GenerateJWTToken(s.secret, utils.JWTTokenPayload{
-		UserID:      user.ID,
-		Email:       user.Email,
-		Permissions: perms,
-		Exp:         time.Now().Add(s.accessTTL),
+		UserID:       user.ID,
+		Email:        user.Email,
+		DepartmentID: *deptID,
+		Permissions:  perms,
+		Exp:          time.Now().Add(s.accessTTL),
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	refresh, err := utils.GenerateJWTToken(s.secret, utils.JWTTokenPayload{
-		UserID:      user.ID,
-		Email:       user.Email,
-		Permissions: perms,
-		Exp:         time.Now().Add(s.refreshTTL),
+		UserID:       user.ID,
+		Email:        user.Email,
+		DepartmentID: *deptID,
+		Permissions:  perms,
+		Exp:          time.Now().Add(s.refreshTTL),
 	})
 	if err != nil {
 		return nil, err
@@ -92,21 +105,28 @@ func (s *TokenService) RefreshToken(ctx context.Context, refreshToken string) (*
 		return nil, errors.New("invalid credentials")
 	}
 
+	deptID, err := s.GetDepartmentByUserID(ctx, userID)
+	if err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+
 	newAccessToken, tokenErr := utils.GenerateJWTToken(s.secret, utils.JWTTokenPayload{
-		UserID:      userID,
-		Email:       email,
-		Permissions: perms,
-		Exp:         time.Now().Add(s.accessTTL),
+		UserID:       userID,
+		Email:        email,
+		DepartmentID: *deptID,
+		Permissions:  perms,
+		Exp:          time.Now().Add(s.accessTTL),
 	})
 	if tokenErr != nil {
 		return nil, tokenErr
 	}
 
 	newRefreshToken, tokenErr := utils.GenerateJWTToken(s.secret, utils.JWTTokenPayload{
-		UserID:      userID,
-		Email:       email,
-		Permissions: perms,
-		Exp:         time.Now().Add(s.refreshTTL),
+		UserID:       userID,
+		Email:        email,
+		DepartmentID: *deptID,
+		Permissions:  perms,
+		Exp:          time.Now().Add(s.refreshTTL),
 	})
 	if tokenErr != nil {
 		return nil, tokenErr

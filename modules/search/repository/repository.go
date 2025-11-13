@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/khiemnd777/andy_api/modules/auditlog/ent/generated"
 	"github.com/khiemnd777/andy_api/modules/search/config"
 	"github.com/khiemnd777/andy_api/modules/search/model"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
@@ -23,12 +22,11 @@ type SearchRepository interface {
 }
 
 type searchRepo struct {
-	db   *generated.Client
 	deps *module.ModuleDeps[config.ModuleConfig]
 }
 
-func NewSearchRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig]) SearchRepository {
-	return &searchRepo{db: db, deps: deps}
+func NewSearchRepository(deps *module.ModuleDeps[config.ModuleConfig]) SearchRepository {
+	return &searchRepo{deps: deps}
 }
 
 func (r *searchRepo) Upsert(ctx context.Context, d sharedmodel.Doc) error {
@@ -106,7 +104,7 @@ func (r *searchRepo) Search(ctx context.Context, opt model.Options) ([]model.Row
 	where += buildAttrPreds(opt.Filters, &args)
 
 	// Full-text CTE
-	args = append(args, opt.Q)         // $N-1
+	args = append(args, opt.Query)     // $N-1
 	args = append(args, limit, offset) // $N, $N+1
 	ft := fmt.Sprintf(`
 WITH q AS (SELECT plainto_tsquery('simple', unaccent($%d)) AS term)
@@ -126,7 +124,7 @@ LIMIT $%d OFFSET $%d`, len(args)-2, where, len(args)-1, len(args))
 
 	// Trigram fallback CTE
 	args2 := slices.Clone(args)
-	args2[len(args2)-2] = opt.Q // keep same $ positions
+	args2[len(args2)-2] = opt.Query // keep same $ positions
 	tr := fmt.Sprintf(`
 WITH q AS (SELECT unaccent(lower($%d)) AS uq)
 SELECT entity_type, entity_id, title, subtitle, keywords, attributes, updated_at,

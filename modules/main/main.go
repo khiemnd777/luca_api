@@ -29,11 +29,10 @@ func main() {
 		},
 		OnRegistry: func(app *fiber.App, deps *module.ModuleDeps[config.ModuleConfig]) {
 			repo := repository.NewDepartmentRepository(deps.Ent.(*generated.Client), deps)
-			svcDeptGuard := service.NewGuardService(repo)
 			router := app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth())
 
 			router.Use("/:dept_id<int>/*",
-				middleware.RequireDepartmentMember(svcDeptGuard, "dept_id"),
+				middleware.RequireDepartmentMember("dept_id"),
 			)
 
 			// Department

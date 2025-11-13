@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/departmentmember"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/refreshtoken"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
 )
@@ -43,6 +45,28 @@ func (r *TokenRepository) GetPermissionsByUserID(ctx context.Context, id int) (*
 		}
 	}
 	return &set, nil
+}
+
+func (r *TokenRepository) GetDepartmentByUserID(ctx context.Context, id int) (*int, error) {
+	dm, err := r.db.DepartmentMember.
+		Query().
+		Where(departmentmember.UserID(id)).
+		Order(departmentmember.ByCreatedAt()).
+		First(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	dept, err := dm.QueryDepartment().
+		Where(department.Deleted(false)).
+		Select(department.FieldID).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dept.ID, nil
 }
 
 func (r *TokenRepository) GetUserByEmail(ctx context.Context, email string) (*generated.User, error) {
