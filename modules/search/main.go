@@ -26,10 +26,10 @@ func main() {
 			}, cfg.Database.AutoMigrate)
 		},
 		OnRegistry: func(app *fiber.App, deps *module.ModuleDeps[config.ModuleConfig]) {
-			cltRepo := repository.NewSearchRepository(deps)
-			cltSvc := service.NewSearchService(cltRepo, deps)
-			cltH := handler.NewSearchHandler(cltSvc, deps)
-			cltH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
+			repo := repository.NewSearchRepository(deps)
+			svc := service.NewSearchService(repo, deps)
+			h := handler.NewSearchHandler(svc, deps)
+			h.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
 		},
 	})
 }
