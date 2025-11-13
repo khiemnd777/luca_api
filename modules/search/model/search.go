@@ -1,18 +1,5 @@
 package model
 
-import "time"
-
-type Row struct {
-	EntityType string         `json:"entity_type"`
-	EntityID   int64          `json:"entity_id"`
-	Title      string         `json:"title"`
-	Subtitle   *string        `json:"subtitle,omitempty"`
-	Keywords   *string        `json:"keywords,omitempty"`
-	Attributes map[string]any `json:"attributes,omitempty"`
-	Rank       *float64       `json:"rank,omitempty"` // ts_rank từ lớp full-text
-	UpdatedAt  time.Time      `json:"updated_at"`
-}
-
 type Options struct {
 	Query           string            // raw keyword (có dấu). SQL sẽ unaccent.
 	Types           []string          // filter theo loại. Nil/empty = all.

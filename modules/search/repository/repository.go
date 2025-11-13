@@ -18,7 +18,7 @@ import (
 type SearchRepository interface {
 	Upsert(ctx context.Context, d sharedmodel.Doc) error
 	Delete(ctx context.Context, entityType string, entityID int64) error
-	Search(ctx context.Context, opt model.Options) ([]model.Row, error)
+	Search(ctx context.Context, opt model.Options) ([]sharedmodel.Row, error)
 }
 
 type searchRepo struct {
@@ -76,7 +76,7 @@ func buildAttrPreds(filters map[string]string, args *[]any) string {
 }
 
 // Search with full-text first; optional trigram fallback
-func (r *searchRepo) Search(ctx context.Context, opt model.Options) ([]model.Row, error) {
+func (r *searchRepo) Search(ctx context.Context, opt model.Options) ([]sharedmodel.Row, error) {
 	limit := opt.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 20
@@ -155,17 +155,17 @@ LIMIT $%d OFFSET $%d`, ft, tr, len(args)-1, len(args)) // same limit/offset usag
 	return r.scanRows(ctx, union, args...)
 }
 
-func (r *searchRepo) scanRows(ctx context.Context, q string, args ...any) ([]model.Row, error) {
+func (r *searchRepo) scanRows(ctx context.Context, q string, args ...any) ([]sharedmodel.Row, error) {
 	rows, err := r.deps.DB.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := make([]model.Row, 0, 32)
+	out := make([]sharedmodel.Row, 0, 32)
 	for rows.Next() {
 		var (
-			row     model.Row
+			row     sharedmodel.Row
 			attrRaw []byte
 		)
 		if err := rows.Scan(&row.EntityType, &row.EntityID, &row.Title, &row.Subtitle, &row.Keywords, &attrRaw, &row.UpdatedAt, &row.Rank); err != nil {

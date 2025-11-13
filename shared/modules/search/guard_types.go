@@ -2,8 +2,8 @@ package search
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/khiemnd777/andy_api/modules/search/model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/modules/search/model"
 )
 
 type GuardCtx struct {
