@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/section"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staff"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staffsection"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
@@ -83,6 +85,9 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 	}
 
 	// Edge – Sections
+	var sectionNames []string
+	var sectionNamesStr string
+
 	if input.SectionIDs != nil {
 		sectionIDs := utils.DedupInt(input.SectionIDs, -1)
 		if len(sectionIDs) > 0 {
@@ -96,7 +101,44 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 			if err = tx.StaffSection.CreateBulk(bulk...).Exec(ctx); err != nil {
 				return nil, err
 			}
+
+			// get section names
+			rows := make([]struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			}, 0, len(sectionIDs))
+
+			if err := tx.Section.
+				Query().
+				Where(section.IDIn(sectionIDs...)).
+				Select(section.FieldID, section.FieldName).
+				Scan(ctx, &rows); err != nil {
+				return nil, err
+			}
+
+			// map id -> name
+			nameByID := make(map[int]string, len(rows))
+			for _, r := range rows {
+				nameByID[r.ID] = r.Name
+			}
+
+			sectionNames = make([]string, 0, len(sectionIDs))
+			for _, id := range sectionIDs {
+				if n, ok := nameByID[id]; ok {
+					sectionNames = append(sectionNames, n)
+				}
+			}
+
+			sectionNamesStr = strings.Join(sectionNames, "|")
 		}
+	}
+
+	_, err = tx.Staff.UpdateOneID(staffEnt.ID).
+		SetNillableSectionNames(&sectionNamesStr).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
 	}
 
 	// Edge – Roles
@@ -114,7 +156,9 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
 	dto.SectionIDs = input.SectionIDs
+	dto.SectionNames = sectionNames
 	dto.RoleIDs = input.RoleIDs
+
 	return dto, nil
 }
 
@@ -158,6 +202,9 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 		return nil, err
 	}
 
+	var sectionNamesStr string
+	var sectionNames []string
+
 	// Edge – Sections
 	if input.SectionIDs != nil {
 		sectionIDs := utils.DedupInt(input.SectionIDs, -1)
@@ -180,7 +227,44 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 			if err = tx.StaffSection.CreateBulk(bulk...).Exec(ctx); err != nil {
 				return nil, err
 			}
+
+			// get section names
+			rows := make([]struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			}, 0, len(sectionIDs))
+
+			if err := tx.Section.
+				Query().
+				Where(section.IDIn(sectionIDs...)).
+				Select(section.FieldID, section.FieldName).
+				Scan(ctx, &rows); err != nil {
+				return nil, err
+			}
+
+			// map id -> name
+			nameByID := make(map[int]string, len(rows))
+			for _, r := range rows {
+				nameByID[r.ID] = r.Name
+			}
+
+			sectionNames = make([]string, 0, len(sectionIDs))
+			for _, id := range sectionIDs {
+				if n, ok := nameByID[id]; ok {
+					sectionNames = append(sectionNames, n)
+				}
+			}
+
+			sectionNamesStr = strings.Join(sectionNames, "|")
 		}
+	}
+
+	_, err = tx.Staff.UpdateOneID(staffEnt.ID).
+		SetNillableSectionNames(&sectionNamesStr).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
 	}
 
 	// Edge – Roles
@@ -198,6 +282,8 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
 	dto.SectionIDs = input.SectionIDs
+	dto.SectionNames = input.SectionNames
+
 	return dto, nil
 }
 
@@ -264,6 +350,12 @@ func (r *staffRepo) GetByID(ctx context.Context, id int) (*model.StaffDTO, error
 	dto.SectionIDs = sectionIDs
 	dto.RoleIDs = roleIDs
 
+	if staffEnt.SectionNames != nil {
+		sn := staffEnt.SectionNames
+		sectionNames := strings.Split(*sn, "|")
+		dto.SectionNames = sectionNames
+	}
+
 	return dto, nil
 }
 
@@ -271,14 +363,36 @@ func (r *staffRepo) List(ctx context.Context, query table.TableQuery) (table.Tab
 	list, err := table.TableList(
 		ctx,
 		r.db.User.Query().
-			Where(user.DeletedAtIsNil()),
+			Where(
+				user.DeletedAtIsNil(),
+				user.HasStaff(),
+			).
+			WithStaff(func(sq *generated.StaffQuery) {
+				sq.WithSections(func(ssq *generated.StaffSectionQuery) {
+					ssq.WithSection()
+				})
+			}),
 		query,
 		user.Table,
 		user.FieldID,
 		user.FieldID,
 		func(src []*generated.User) []*model.StaffDTO {
-			mapped := mapper.MapListAs[*generated.User, *model.StaffDTO](src)
-			return mapped
+			out := make([]*model.StaffDTO, 0, len(src))
+			for _, u := range src {
+				dto := mapper.MapAs[*generated.User, *model.StaffDTO](u)
+				if u.Edges.Staff != nil {
+					st := u.Edges.Staff
+
+					for _, ss := range st.Edges.Sections {
+						if ss.Edges.Section != nil {
+							dto.SectionIDs = append(dto.SectionIDs, ss.SectionID)
+							dto.SectionNames = append(dto.SectionNames, ss.Edges.Section.Name)
+						}
+					}
+				}
+				out = append(out, dto)
+			}
+			return out
 		},
 	)
 	if err != nil {
@@ -298,7 +412,12 @@ func (r *staffRepo) ListBySectionID(ctx context.Context, sectionID int, query ta
 					staffsection.SectionIDEQ(sectionID),
 				),
 			),
-		)
+		).
+		WithStaff(func(sq *generated.StaffQuery) {
+			sq.WithSections(func(ssq *generated.StaffSectionQuery) {
+				ssq.WithSection()
+			})
+		})
 
 	return table.TableList(
 		ctx,
@@ -308,7 +427,22 @@ func (r *staffRepo) ListBySectionID(ctx context.Context, sectionID int, query ta
 		user.FieldID,
 		user.FieldID,
 		func(src []*generated.User) []*model.StaffDTO {
-			return mapper.MapListAs[*generated.User, *model.StaffDTO](src)
+			out := make([]*model.StaffDTO, 0, len(src))
+			for _, u := range src {
+				dto := mapper.MapAs[*generated.User, *model.StaffDTO](u)
+				if u.Edges.Staff != nil {
+					st := u.Edges.Staff
+
+					for _, ss := range st.Edges.Sections {
+						if ss.Edges.Section != nil {
+							dto.SectionIDs = append(dto.SectionIDs, ss.SectionID)
+							dto.SectionNames = append(dto.SectionNames, ss.Edges.Section.Name)
+						}
+					}
+				}
+				out = append(out, dto)
+			}
+			return out
 		},
 	)
 }

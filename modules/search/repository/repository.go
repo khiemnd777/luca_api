@@ -168,7 +168,16 @@ func (r *searchRepo) scanRows(ctx context.Context, q string, args ...any) ([]sha
 			row     sharedmodel.Row
 			attrRaw []byte
 		)
-		if err := rows.Scan(&row.EntityType, &row.EntityID, &row.Title, &row.Subtitle, &row.Keywords, &attrRaw, &row.UpdatedAt, &row.Rank); err != nil {
+		if err := rows.Scan(
+			&row.EntityType,
+			&row.EntityID,
+			&row.Title,
+			&row.Subtitle,
+			&row.Keywords,
+			&attrRaw,
+			&row.UpdatedAt,
+			&row.Rank,
+		); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(attrRaw, &row.Attributes)

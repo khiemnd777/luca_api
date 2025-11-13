@@ -28,9 +28,11 @@ func (h *SearchHandler) RegisterRoutes(router fiber.Router) {
 
 func (h *SearchHandler) Search(c *fiber.Ctx) error {
 	q := utils.GetQueryAsString(c, "q")
+	deptID, _ := utils.GetDeptIDInt(c)
 
 	rows, err := h.svc.Search(c.UserContext(), model.Options{
 		Query:           q,
+		OrgID:           utils.Ptr(int64(deptID)),
 		UseTrgmFallback: true,
 	})
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
@@ -110,11 +111,12 @@ func (s *staffService) Create(ctx context.Context, deptID int, input model.Staff
 	}
 
 	// search index
+	sectionNamesStr := strings.Join(dto.SectionNames, " - ")
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "staff",
 		EntityID:   int64(dto.ID),
 		Title:      dto.Name,
-		Subtitle:   utils.Ptr(dto.Email),
+		Subtitle:   utils.Ptr(dto.Email + " - " + sectionNamesStr),
 		Keywords:   utils.Ptr(dto.Name + " " + dto.Email + " " + dto.Phone),
 		Content:    nil,
 		Attributes: map[string]any{
@@ -139,11 +141,12 @@ func (s *staffService) Update(ctx context.Context, deptID int, input model.Staff
 	cache.InvalidateKeys(kStaffAll()...)
 
 	// search index
+	sectionNamesStr := strings.Join(dto.SectionNames, " - ")
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "staff",
 		EntityID:   int64(dto.ID),
 		Title:      dto.Name,
-		Subtitle:   utils.Ptr(dto.Email),
+		Subtitle:   utils.Ptr(dto.Email + " - " + sectionNamesStr),
 		Keywords:   utils.Ptr(dto.Name + " " + dto.Email + " " + dto.Phone),
 		Content:    nil,
 		Attributes: map[string]any{
