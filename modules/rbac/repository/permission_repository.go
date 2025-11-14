@@ -37,7 +37,7 @@ func (r *permissionRepository) List(ctx context.Context, limit, offset int) ([]*
 	if err != nil {
 		return nil, 0, err
 	}
-	items, err := q.Limit(limit).Offset(offset).Order(generated.Asc(permission.FieldID)).All(ctx)
+	items, err := q.Limit(limit).Offset(offset).Order(generated.Asc(permission.FieldPermissionValue)).All(ctx)
 	return items, total, err
 }
 func (r *permissionRepository) Delete(ctx context.Context, id int) error {

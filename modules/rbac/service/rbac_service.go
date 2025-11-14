@@ -337,7 +337,6 @@ func (s *rbacService) GetUserPermissionIDs(ctx context.Context, userID int) ([]i
 func (s *rbacService) GetUserRolePermissionMatrix(ctx context.Context, userID int) (*RolePermissionMatrix, error) {
 	key := kUserMatrix(userID)
 	return cache.Get(key, ttlMedium, func() (*RolePermissionMatrix, error) {
-		// 1️⃣ Lấy toàn bộ permissions (để có cột ổn định)
 		perms, _, err := s.perms.List(ctx, 10000, 0)
 		if err != nil {
 			return nil, err

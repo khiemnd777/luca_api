@@ -7,6 +7,12 @@ import (
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
+var guardRegistry = map[string]Guard{}
+
+func RegisterGuard(entityType string, g Guard) {
+	guardRegistry[entityType] = g
+}
+
 func GuardSearch(c *fiber.Ctx, dbEnt *generated.Client, in []model.Row) []model.Row {
 	if len(in) == 0 {
 		return in

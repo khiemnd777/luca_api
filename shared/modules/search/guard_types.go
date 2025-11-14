@@ -15,9 +15,3 @@ type GuardCtx struct {
 }
 
 type Guard func(ctx GuardCtx, rows []model.Row) []model.Row
-
-var guardRegistry = map[string]Guard{}
-
-func RegisterGuard(entityType string, g Guard) {
-	guardRegistry[entityType] = g
-}

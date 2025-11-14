@@ -6,6 +6,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/modules/search/config"
+	_ "github.com/khiemnd777/andy_api/modules/search/guard"
 	"github.com/khiemnd777/andy_api/modules/search/handler"
 	"github.com/khiemnd777/andy_api/modules/search/repository"
 	"github.com/khiemnd777/andy_api/modules/search/service"
