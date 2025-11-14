@@ -39,6 +39,22 @@ func GetUserIDInt(c *fiber.Ctx) (int, bool) {
 	return 0, false
 }
 
+func GetDeptIDInt(c *fiber.Ctx) (int, bool) {
+	val := c.Locals("deptID")
+	switch v := val.(type) {
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case string:
+		i, err := strconv.Atoi(v)
+		if err == nil {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // GetUserRole returns the user's role from context (assumed string)
 func GetUserRole(c *fiber.Ctx) string {
 	if role, ok := c.Locals("role").(string); ok {

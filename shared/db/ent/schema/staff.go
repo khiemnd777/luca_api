@@ -14,6 +14,10 @@ type Staff struct {
 
 func (Staff) Fields() []ent.Field {
 	return []ent.Field{
+		field.String("section_names").
+			Optional().
+			Nillable(),
+
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),

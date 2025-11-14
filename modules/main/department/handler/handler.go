@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -97,8 +96,8 @@ func (h *DepartmentHandler) ChildrenList(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) Create(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "settings.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	var in model.DepartmentDTO
 	if err := c.BodyParser(&in); err != nil {
@@ -115,8 +114,8 @@ func (h *DepartmentHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) Update(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.manage"); err != nil {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "settings.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 
 	id, err := strconv.Atoi(c.Params("dept_id"))
@@ -141,6 +140,9 @@ func (h *DepartmentHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *DepartmentHandler) Delete(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "settings.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, err := strconv.Atoi(c.Params("dept_id"))
 	if err != nil || id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")

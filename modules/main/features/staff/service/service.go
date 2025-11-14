@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
@@ -10,12 +11,15 @@ import (
 	"github.com/khiemnd777/andy_api/shared/cache"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/module"
+	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
+	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type StaffService interface {
-	Create(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
-	Update(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
+	Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
+	Update(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
 	ChangePassword(ctx context.Context, id int, newPassword string) error
 	GetByID(ctx context.Context, id int) (*model.StaffDTO, error)
 	CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error)
@@ -95,7 +99,7 @@ func kStaffSearch(q dbutils.SearchQuery) string {
 	return fmt.Sprintf("staff:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func (s *staffService) Create(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error) {
+func (s *staffService) Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error) {
 	dto, err := s.repo.Create(ctx, input)
 	if err != nil {
 		return nil, err
@@ -105,10 +109,14 @@ func (s *staffService) Create(ctx context.Context, input model.StaffDTO) (*model
 	if dto != nil && dto.ID > 0 {
 		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kUserRoleList(dto.ID), kSectionStaffAll(dto.ID))
 	}
+
+	// search index
+	upsertSearch(deptID, dto)
+
 	return dto, nil
 }
 
-func (s *staffService) Update(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error) {
+func (s *staffService) Update(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error) {
 	dto, err := s.repo.Update(ctx, input)
 	if err != nil {
 		return nil, err
@@ -118,7 +126,28 @@ func (s *staffService) Update(ctx context.Context, input model.StaffDTO) (*model
 		cache.InvalidateKeys(kStaffByID(dto.ID), kStaffSectionList(dto.ID), kUserRoleList(dto.ID), kSectionStaffAll(dto.ID))
 	}
 	cache.InvalidateKeys(kStaffAll()...)
+
+	// search index
+	upsertSearch(deptID, dto)
+
 	return dto, nil
+}
+
+func upsertSearch(deptID int, dto *model.StaffDTO) {
+	sectionNamesStr := strings.Join(dto.SectionNames, "|")
+	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
+		EntityType: "staff",
+		EntityID:   int64(dto.ID),
+		Title:      dto.Name,
+		Subtitle:   utils.Ptr(dto.Email),
+		Keywords:   utils.Ptr(sectionNamesStr + "|" + dto.Phone),
+		Content:    nil,
+		Attributes: map[string]any{
+			"avatar": dto.Avatar,
+		},
+		OrgID:   utils.Ptr(int64(deptID)),
+		OwnerID: utils.Ptr(int64(dto.ID)),
+	})
 }
 
 func (s *staffService) ChangePassword(ctx context.Context, id int, newPassword string) error {

@@ -10,12 +10,15 @@ import (
 	"github.com/khiemnd777/andy_api/shared/cache"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/module"
+	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
+	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type ClinicService interface {
-	Create(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error)
-	Update(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error)
+	Create(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error)
+	Update(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error)
 	GetByID(ctx context.Context, id int) (*model.ClinicDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
 	ListByDentistID(ctx context.Context, dentistID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
@@ -84,20 +87,23 @@ func kClinicSearch(q dbutils.SearchQuery) string {
 	return fmt.Sprintf("clinic:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func (s *clinicService) Create(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error) {
+func (s *clinicService) Create(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error) {
 	dto, err := s.repo.Create(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 
-	cache.InvalidateKeys(kClinicAll()...)
 	if dto != nil && dto.ID > 0 {
 		cache.InvalidateKeys(kClinicByID(dto.ID), kClinicDentistList(dto.ID))
 	}
+	cache.InvalidateKeys(kClinicAll()...)
+
+	upsertSearch(deptID, dto)
+
 	return dto, nil
 }
 
-func (s *clinicService) Update(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error) {
+func (s *clinicService) Update(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error) {
 	dto, err := s.repo.Update(ctx, input)
 	if err != nil {
 		return nil, err
@@ -107,7 +113,26 @@ func (s *clinicService) Update(ctx context.Context, input model.ClinicDTO) (*mod
 		cache.InvalidateKeys(kClinicByID(dto.ID), kClinicDentistList(dto.ID))
 	}
 	cache.InvalidateKeys(kClinicAll()...)
+
+	upsertSearch(deptID, dto)
+
 	return dto, nil
+}
+
+func upsertSearch(deptID int, dto *model.ClinicDTO) {
+	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
+		EntityType: "clinic",
+		EntityID:   int64(dto.ID),
+		Title:      dto.Name,
+		Subtitle:   nil,
+		Keywords:   utils.Ptr(*dto.PhoneNumber),
+		Content:    utils.Ptr(*dto.Brief),
+		Attributes: map[string]any{
+			"logo": dto.Logo,
+		},
+		OrgID:   utils.Ptr(int64(deptID)),
+		OwnerID: utils.Ptr(int64(dto.ID)),
+	})
 }
 
 func (s *clinicService) GetByID(ctx context.Context, id int) (*model.ClinicDTO, error) {

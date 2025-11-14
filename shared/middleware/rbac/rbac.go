@@ -160,31 +160,19 @@ func GuardAllPermissions(c *fiber.Ctx, dbEnt *generated.Client, permValues ...st
 	return guardPermissions(c, dbEnt, allMode, permValues...)
 }
 
-func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, permValues ...string) error {
+func getPerms(c *fiber.Ctx, dbEnt *generated.Client) (map[string]struct{}, error) {
+	if set, ok := utils.GetPermSetFromClaims(c); ok {
+		return set, nil
+	}
+
 	uid, ok := utils.GetUserIDInt(c)
-	logger.Debug(fmt.Sprintf("GuardPermissions: userID=%v mode=%v perms=%v", uid, mode, permValues))
+
 	if !ok || uid <= 0 {
-		logger.Debug(fmt.Sprintf("GuardPermissions: missing/invalid userID; mode=%v perms=%v", mode, permValues))
-		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+		return nil, c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
 	}
-
-	start := time.Now()
-	defer func() {
-		logger.Debug(fmt.Sprintf(
-			"GuardPermissions performance: userID=%v mode=%v perms=%v took=%v",
-			uid, mode, permValues, time.Since(start),
-		))
-	}()
-
 	ctx := c.UserContext()
-	req := normalizeStrings(permValues)
-	if len(req) == 0 {
-		logger.Warn("GuardPermissions: empty permValues")
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: no permission specified"})
-	}
 
 	permSetPtr, err := cache.Get(userPermSetKey(uid), cache.TTLLong, func() (*map[string]struct{}, error) {
-		// User -> Roles -> Permissions (implicit M2M both sides)
 		perms, dbErr := dbEnt.User.
 			Query().
 			Where(user.IDEQ(uid)).
@@ -209,42 +197,79 @@ func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, p
 	})
 	if err != nil {
 		logger.Error(fmt.Sprintf("GuardPermissions: cache/DB error userID=%d err=%v", uid, err))
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "DB error"})
+		return nil, c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "DB error"})
 	}
+
 	permSet := *permSetPtr
 
-	allowed := false
-	missing := make([]string, 0, len(req))
-	switch mode {
-	case anyMode:
-		for _, want := range req {
-			if _, ok := permSet[want]; ok {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			missing = append(missing, req...)
-		}
-	case allMode:
-		allowed = true
-		for _, want := range req {
-			if _, ok := permSet[want]; !ok {
-				missing = append(missing, want)
-				allowed = false
-			}
-		}
+	return permSet, nil
+}
+
+func HasAnyPerm(have map[string]struct{}, permValues ...string) bool {
+	req := normalizeStrings(permValues)
+
+	if len(req) == 0 {
+		return false
 	}
 
-	if !allowed {
-		logger.Debug(fmt.Sprintf("GuardPermissions forbidden: userID=%d mode=%v have=%v need=%v missing=%v",
-			uid, mode, mapKeys(permSet), req, missing))
+	allowed, _ := checkPerms(have, anyMode, req)
+
+	return allowed
+}
+
+func HasAllPerms(have map[string]struct{}, permValues ...string) bool {
+	req := normalizeStrings(permValues)
+
+	if len(req) == 0 {
+		return false
+	}
+
+	allowed, _ := checkPerms(have, allMode, req)
+
+	return allowed
+}
+
+func guardPermissions(c *fiber.Ctx, dbEnt *generated.Client, mode requireMode, permValues ...string) error {
+	req := normalizeStrings(permValues)
+	if len(req) == 0 {
+		logger.Warn("GuardPermissions: empty permValues")
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: no permission specified"})
+	}
+
+	permSet, err := getPerms(c, dbEnt)
+	if err != nil {
+		return err
+	}
+
+	if allowed, missing := checkPerms(permSet, mode, req); !allowed {
 		return c.Status(http.StatusForbidden).JSON(fiber.Map{
 			"error":   "Forbidden: missing permission",
 			"details": fiber.Map{"required": req, "missing": missing},
 		})
 	}
 	return nil
+}
+
+func checkPerms(have map[string]struct{}, mode requireMode, req []string) (bool, []string) {
+	switch mode {
+	case anyMode:
+		for _, want := range req {
+			if _, ok := have[want]; ok {
+				return true, nil
+			}
+		}
+		return false, append([]string(nil), req...)
+	case allMode:
+		missing := make([]string, 0, len(req))
+		for _, want := range req {
+			if _, ok := have[want]; !ok {
+				missing = append(missing, want)
+			}
+		}
+		return len(missing) == 0, missing
+	default:
+		return false, req
+	}
 }
 
 // ==========================

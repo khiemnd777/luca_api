@@ -157,7 +157,9 @@ func (h *StaffHandler) Create(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "name is required")
 	}
 
-	dto, err := h.svc.Create(c.UserContext(), payload)
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	dto, err := h.svc.Create(c.UserContext(), deptID, payload)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -179,7 +181,9 @@ func (h *StaffHandler) Update(c *fiber.Ctx) error {
 	}
 	payload.ID = id
 
-	dto, err := h.svc.Update(c.UserContext(), payload)
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	dto, err := h.svc.Update(c.UserContext(), deptID, payload)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
