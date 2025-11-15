@@ -45,9 +45,9 @@ func (h *CollectionHandler) List(c *fiber.Ctx) error {
 	items, total, err := h.svc.List(c.UserContext(), in)
 	if err != nil {
 		logger.Error("collections.list failed", "err", err)
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to list collections")
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(fiber.Map{"data": items, "total": total})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": items, "total": total})
 }
 
 func (h *CollectionHandler) Create(c *fiber.Ctx) error {
@@ -56,13 +56,13 @@ func (h *CollectionHandler) Create(c *fiber.Ctx) error {
 	}
 	var in service.CreateCollectionInput
 	if err := c.BodyParser(&in); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
 	out, err := h.svc.Create(c.UserContext(), in)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.Status(fiber.StatusCreated).JSON(out)
+	return c.Status(fiber.StatusOK).JSON(out)
 }
 
 func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
@@ -75,16 +75,16 @@ func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
 	if id, err := strconv.Atoi(idOrSlug); err == nil {
 		out, err := h.svc.GetByID(c.UserContext(), id, withFields)
 		if err != nil {
-			return fiber.NewError(fiber.StatusNotFound, "collection not found")
+			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 		}
 		return c.JSON(out)
 	}
 	// slug
 	out, err := h.svc.GetBySlug(c.UserContext(), idOrSlug, withFields)
 	if err != nil {
-		return fiber.NewError(fiber.StatusNotFound, "collection not found")
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(out)
+	return c.Status(fiber.StatusOK).JSON(out)
 }
 
 func (h *CollectionHandler) Update(c *fiber.Ctx) error {
@@ -93,17 +93,17 @@ func (h *CollectionHandler) Update(c *fiber.Ctx) error {
 	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
 	var in service.UpdateCollectionInput
 	if err := c.BodyParser(&in); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
 	out, err := h.svc.Update(c.UserContext(), id, in)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(out)
+	return c.Status(fiber.StatusOK).JSON(out)
 }
 
 func (h *CollectionHandler) Delete(c *fiber.Ctx) error {
@@ -112,10 +112,10 @@ func (h *CollectionHandler) Delete(c *fiber.Ctx) error {
 	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
 	if err := h.svc.Delete(c.UserContext(), id); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "failed to delete")
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

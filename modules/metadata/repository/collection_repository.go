@@ -6,11 +6,13 @@ import (
 	"fmt"
 
 	"github.com/khiemnd777/andy_api/modules/metadata/model"
+	"github.com/lib/pq"
 )
 
 type CollectionWithFields struct {
 	model.Collection
-	Fields []model.Field `json:"fields,omitempty"`
+	Fields      []model.Field `json:"fields,omitempty"`
+	FieldsCount int           `json:"fields_count,omitempty"`
 }
 
 type CollectionRepository struct {
@@ -58,13 +60,28 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 		total = len(list)
 	}
 
-	// preload fields nếu cần
-	if withFields {
-		for i := range list {
-			f, _ := r.GetFieldsByCollectionID(ctx, list[i].ID)
-			list[i].Fields = f
+	ids := make([]int, len(list))
+	for i := range list {
+		ids[i] = list[i].ID
+	}
+
+	counts, err := r.GetFieldCountsBatch(ctx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	for i := range list {
+		list[i].FieldsCount = counts[list[i].ID]
+
+		if withFields {
+			fields, err := r.GetFieldsByCollectionID(ctx, list[i].ID)
+			if err != nil {
+				return nil, 0, err
+			}
+			list[i].Fields = fields
 		}
 	}
+
 	return list, total, nil
 }
 
@@ -158,7 +175,21 @@ func (r *CollectionRepository) SlugExists(ctx context.Context, slug string, excl
 
 func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int) ([]model.Field, error) {
 	rows, err := r.DB.QueryContext(ctx, `
-		SELECT id, collection_id, name, label, type, required, "unique", default_value, options, order_index, visibility, relation
+		SELECT 
+			id, 
+			collection_id, 
+			name, 
+			label, 
+			type, 
+			required, 
+			"unique", 
+			"table", 
+			form, 
+			default_value, 
+			options, 
+			order_index, 
+			visibility, 
+			relation
 		FROM fields
 		WHERE collection_id = $1
 		ORDER BY order_index ASC
@@ -171,11 +202,61 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 	list := []model.Field{}
 	for rows.Next() {
 		var f model.Field
-		if err := rows.Scan(&f.ID, &f.CollectionID, &f.Name, &f.Label, &f.Type,
-			&f.Required, &f.Unique, &f.DefaultValue, &f.Options, &f.OrderIndex, &f.Visibility, &f.Relation); err != nil {
+		if err := rows.Scan(
+			&f.ID,
+			&f.CollectionID,
+			&f.Name,
+			&f.Label,
+			&f.Type,
+			&f.Required,
+			&f.Unique,
+			&f.Table,
+			&f.Form,
+			&f.DefaultValue,
+			&f.Options,
+			&f.OrderIndex,
+			&f.Visibility,
+			&f.Relation,
+		); err != nil {
 			return nil, err
 		}
 		list = append(list, f)
 	}
 	return list, nil
+}
+
+func (r *CollectionRepository) CountFieldsByCollectionID(ctx context.Context, collectionID int) (int, error) {
+	var count int
+	err := r.DB.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM fields
+		WHERE collection_id = $1
+	`, collectionID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *CollectionRepository) GetFieldCountsBatch(ctx context.Context, collectionIDs []int) (map[int]int, error) {
+	rows, err := r.DB.QueryContext(ctx, `
+		SELECT collection_id, COUNT(*)
+		FROM fields
+		WHERE collection_id = ANY($1)
+		GROUP BY collection_id
+	`, pq.Array(collectionIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[int]int)
+	for rows.Next() {
+		var cid, cnt int
+		if err := rows.Scan(&cid, &cnt); err != nil {
+			return nil, err
+		}
+		result[cid] = cnt
+	}
+	return result, nil
 }

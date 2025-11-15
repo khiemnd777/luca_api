@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/modules/metadata/config"
+	"github.com/khiemnd777/andy_api/modules/metadata/model"
 	"github.com/khiemnd777/andy_api/modules/metadata/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
@@ -68,16 +68,15 @@ func (h *FieldHandler) Create(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
-	var in service.FieldInput
+	var in model.FieldInput
 	if err := c.BodyParser(&in); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
-	logger.Debug(fmt.Sprintf("[FIELD] %v", in))
 	out, err := h.svc.Create(c.UserContext(), in)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.Status(fiber.StatusCreated).JSON(out)
+	return c.Status(fiber.StatusOK).JSON(out)
 }
 
 func (h *FieldHandler) Update(c *fiber.Ctx) error {
@@ -86,17 +85,17 @@ func (h *FieldHandler) Update(c *fiber.Ctx) error {
 	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
-	var in service.FieldInput
+	var in model.FieldInput
 	if err := c.BodyParser(&in); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
 	out, err := h.svc.Update(c.UserContext(), id, in)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(out)
+	return c.Status(fiber.StatusOK).JSON(out)
 }
 
 func (h *FieldHandler) Delete(c *fiber.Ctx) error {
@@ -105,10 +104,10 @@ func (h *FieldHandler) Delete(c *fiber.Ctx) error {
 	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
 	if err := h.svc.Delete(c.UserContext(), id); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "failed to delete")
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

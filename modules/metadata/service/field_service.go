@@ -22,20 +22,6 @@ func NewFieldService(f *repository.FieldRepository, c *repository.CollectionRepo
 	return &FieldService{fields: f, cols: c}
 }
 
-type FieldInput struct {
-	CollectionID int             `json:"collection_id"`
-	Name         string          `json:"name"`
-	Label        string          `json:"label"`
-	Type         string          `json:"type"`
-	Required     bool            `json:"required"`
-	Unique       bool            `json:"unique"`
-	DefaultValue json.RawMessage `json:"default_value"`
-	Options      json.RawMessage `json:"options"`
-	OrderIndex   int             `json:"order_index"`
-	Visibility   string          `json:"visibility"`
-	Relation     json.RawMessage `json:"relation"`
-}
-
 // TTL
 const (
 	ttlFieldList = 2 * time.Minute
@@ -83,7 +69,7 @@ func (s *FieldService) Get(ctx context.Context, id int) (*model.Field, error) {
 	})
 }
 
-func (s *FieldService) Create(ctx context.Context, in FieldInput) (*model.Field, error) {
+func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.Field, error) {
 	if _, err := s.cols.GetByID(ctx, in.CollectionID, false); err != nil {
 		return nil, fmt.Errorf("collection not found")
 	}
@@ -93,6 +79,24 @@ func (s *FieldService) Create(ctx context.Context, in FieldInput) (*model.Field,
 		return nil, fmt.Errorf("name/label required")
 	}
 
+	var df *sql.NullString = nil
+	if in.DefaultValue != nil && len(*in.DefaultValue) > 0 {
+		ns := toNullString(*in.DefaultValue)
+		df = &ns
+	}
+
+	var opt *sql.NullString = nil
+	if in.Options != nil && len(*in.Options) > 0 {
+		ns := toNullString(*in.Options)
+		opt = &ns
+	}
+
+	var rel *sql.NullString = nil
+	if in.Relation != nil && len(*in.Relation) > 0 {
+		ns := toNullString(*in.Relation)
+		rel = &ns
+	}
+
 	f := &model.Field{
 		CollectionID: in.CollectionID,
 		Name:         in.Name,
@@ -100,11 +104,13 @@ func (s *FieldService) Create(ctx context.Context, in FieldInput) (*model.Field,
 		Type:         in.Type,
 		Required:     in.Required,
 		Unique:       in.Unique,
-		DefaultValue: toNullString(in.DefaultValue),
-		Options:      toNullString(in.Options),
+		Table:        in.Table,
+		Form:         in.Form,
+		DefaultValue: df,
+		Options:      opt,
 		OrderIndex:   in.OrderIndex,
 		Visibility:   firstOrDefault(strings.TrimSpace(in.Visibility), "public"),
-		Relation:     toNullString(in.Relation),
+		Relation:     rel,
 	}
 
 	created, err := s.fields.Create(ctx, f)
@@ -121,7 +127,7 @@ func (s *FieldService) Create(ctx context.Context, in FieldInput) (*model.Field,
 	return created, nil
 }
 
-func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*model.Field, error) {
+func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) (*model.Field, error) {
 	cur, err := s.fields.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -144,22 +150,37 @@ func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*mode
 	if strings.TrimSpace(in.Type) != "" {
 		cur.Type = strings.TrimSpace(in.Type)
 	}
+
 	cur.Required = in.Required
 	cur.Unique = in.Unique
-	if len(in.DefaultValue) > 0 {
-		cur.DefaultValue = toNullString(in.DefaultValue)
+	cur.Table = in.Table
+	cur.Form = in.Form
+
+	if in.DefaultValue != nil && len(*in.DefaultValue) > 0 {
+		ns := toNullString(*in.DefaultValue)
+		cur.DefaultValue = &ns
+	} else {
+		cur.DefaultValue = nil
 	}
-	if len(in.Options) > 0 {
-		cur.Options = toNullString(in.Options)
+
+	if in.Options != nil && len(*in.Options) > 0 {
+		ns := toNullString(*in.Options)
+		cur.Options = &ns
+	} else {
+		cur.DefaultValue = nil
 	}
+
 	if in.OrderIndex != 0 {
 		cur.OrderIndex = in.OrderIndex
 	}
 	if strings.TrimSpace(in.Visibility) != "" {
 		cur.Visibility = strings.TrimSpace(in.Visibility)
 	}
-	if len(in.Relation) > 0 {
-		cur.Relation = toNullString(in.Relation)
+	if in.Relation != nil && len(*in.Relation) > 0 {
+		ns := toNullString(*in.Relation)
+		cur.Relation = &ns
+	} else {
+		cur.Relation = nil
 	}
 
 	updated, err := s.fields.Update(ctx, cur)
@@ -204,10 +225,11 @@ func (s *FieldService) Delete(ctx context.Context, id int) error {
 }
 
 func toNullString(b json.RawMessage) sql.NullString {
-	if len(b) == 0 {
+	s := strings.TrimSpace(string(b))
+	if s == "" || s == "null" || s == "\"\"" {
 		return sql.NullString{}
 	}
-	return sql.NullString{String: string(b), Valid: true}
+	return sql.NullString{String: s, Valid: true}
 }
 
 func firstOrDefault(v, def string) string {
