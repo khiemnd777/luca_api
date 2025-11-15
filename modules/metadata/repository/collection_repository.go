@@ -4,32 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/khiemnd777/andy_api/modules/metadata/model"
 )
 
-type Collection struct {
-	ID   int    `json:"id"`
-	Slug string `json:"slug"`
-	Name string `json:"name"`
-}
-
-type Field struct {
-	ID           int            `json:"id"`
-	CollectionID int            `json:"collection_id"`
-	Name         string         `json:"name"`
-	Label        string         `json:"label"`
-	Type         string         `json:"type"`
-	Required     bool           `json:"required"`
-	Unique       bool           `json:"unique"`
-	DefaultValue sql.NullString `json:"default_value"`
-	Options      sql.NullString `json:"options"`
-	OrderIndex   int            `json:"order_index"`
-	Visibility   string         `json:"visibility"`
-	Relation     sql.NullString `json:"relation"`
-}
-
 type CollectionWithFields struct {
-	Collection
-	Fields []Field `json:"fields,omitempty"`
+	model.Collection
+	Fields []model.Field `json:"fields,omitempty"`
 }
 
 type CollectionRepository struct {
@@ -64,7 +45,7 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 	defer rows.Close()
 
 	for rows.Next() {
-		var c Collection
+		var c model.Collection
 		if err := rows.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
 			return nil, 0, err
 		}
@@ -91,7 +72,7 @@ func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withF
 	row := r.DB.QueryRowContext(ctx, `
 		SELECT id, slug, name FROM collections WHERE slug = $1
 	`, slug)
-	var c Collection
+	var c model.Collection
 	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
 		return nil, err
 	}
@@ -108,7 +89,7 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields b
 	row := r.DB.QueryRowContext(ctx, `
 		SELECT id, slug, name FROM collections WHERE id = $1
 	`, id)
-	var c Collection
+	var c model.Collection
 	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
 		return nil, err
 	}
@@ -120,18 +101,18 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields b
 	return result, nil
 }
 
-func (r *CollectionRepository) Create(ctx context.Context, slug, name string) (*Collection, error) {
+func (r *CollectionRepository) Create(ctx context.Context, slug, name string) (*model.Collection, error) {
 	row := r.DB.QueryRowContext(ctx, `
 		INSERT INTO collections (slug, name) VALUES ($1, $2) RETURNING id, slug, name
 	`, slug, name)
-	var c Collection
+	var c model.Collection
 	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
 		return nil, err
 	}
 	return &c, nil
 }
 
-func (r *CollectionRepository) Update(ctx context.Context, id int, slug, name *string) (*Collection, error) {
+func (r *CollectionRepository) Update(ctx context.Context, id int, slug, name *string) (*model.Collection, error) {
 	q := "UPDATE collections SET "
 	args := []any{}
 	if slug != nil {
@@ -149,7 +130,7 @@ func (r *CollectionRepository) Update(ctx context.Context, id int, slug, name *s
 	q += fmt.Sprintf(" WHERE id=$%d RETURNING id, slug, name", len(args))
 
 	row := r.DB.QueryRowContext(ctx, q, args...)
-	var c Collection
+	var c model.Collection
 	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
 		return nil, err
 	}
@@ -175,7 +156,7 @@ func (r *CollectionRepository) SlugExists(ctx context.Context, slug string, excl
 	return cnt > 0, nil
 }
 
-func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int) ([]Field, error) {
+func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int) ([]model.Field, error) {
 	rows, err := r.DB.QueryContext(ctx, `
 		SELECT id, collection_id, name, label, type, required, "unique", default_value, options, order_index, visibility, relation
 		FROM fields
@@ -187,9 +168,9 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 	}
 	defer rows.Close()
 
-	list := []Field{}
+	list := []model.Field{}
 	for rows.Next() {
-		var f Field
+		var f model.Field
 		if err := rows.Scan(&f.ID, &f.CollectionID, &f.Name, &f.Label, &f.Type,
 			&f.Required, &f.Unique, &f.DefaultValue, &f.Options, &f.OrderIndex, &f.Visibility, &f.Relation); err != nil {
 			return nil, err

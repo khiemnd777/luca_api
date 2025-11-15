@@ -4,15 +4,23 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/khiemnd777/andy_api/modules/metadata/config"
 	"github.com/khiemnd777/andy_api/modules/metadata/service"
 	"github.com/khiemnd777/andy_api/shared/app"
+	"github.com/khiemnd777/andy_api/shared/app/client_error"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
+	"github.com/khiemnd777/andy_api/shared/module"
 )
 
-type CollectionHandler struct{ svc *service.CollectionService }
+type CollectionHandler struct {
+	svc  *service.CollectionService
+	deps *module.ModuleDeps[config.ModuleConfig]
+}
 
-func NewCollectionHandler(s *service.CollectionService) *CollectionHandler {
-	return &CollectionHandler{svc: s}
+func NewCollectionHandler(s *service.CollectionService, deps *module.ModuleDeps[config.ModuleConfig]) *CollectionHandler {
+	return &CollectionHandler{svc: s, deps: deps}
 }
 
 // Mount dưới /metadata
@@ -25,6 +33,9 @@ func (h *CollectionHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *CollectionHandler) List(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	in := service.ListCollectionsInput{
 		Query:      c.Query("query"),
 		Limit:      c.QueryInt("limit", 20),
@@ -40,6 +51,9 @@ func (h *CollectionHandler) List(c *fiber.Ctx) error {
 }
 
 func (h *CollectionHandler) Create(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	var in service.CreateCollectionInput
 	if err := c.BodyParser(&in); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
@@ -52,6 +66,9 @@ func (h *CollectionHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	withFields := c.QueryBool("withFields", false)
 	idOrSlug := c.Params("idOrSlug")
 	// nếu là số → ID
@@ -71,6 +88,9 @@ func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
 }
 
 func (h *CollectionHandler) Update(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
@@ -87,6 +107,9 @@ func (h *CollectionHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *CollectionHandler) Delete(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")

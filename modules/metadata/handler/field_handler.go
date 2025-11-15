@@ -1,17 +1,28 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/khiemnd777/andy_api/modules/metadata/config"
 	"github.com/khiemnd777/andy_api/modules/metadata/service"
 	"github.com/khiemnd777/andy_api/shared/app"
+	"github.com/khiemnd777/andy_api/shared/app/client_error"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
+	"github.com/khiemnd777/andy_api/shared/module"
 )
 
-type FieldHandler struct{ svc *service.FieldService }
+type FieldHandler struct {
+	svc  *service.FieldService
+	deps *module.ModuleDeps[config.ModuleConfig]
+}
 
-func NewFieldHandler(s *service.FieldService) *FieldHandler { return &FieldHandler{svc: s} }
+func NewFieldHandler(s *service.FieldService, deps *module.ModuleDeps[config.ModuleConfig]) *FieldHandler {
+	return &FieldHandler{svc: s, deps: deps}
+}
 
 // Mount dưới /metadata
 func (h *FieldHandler) RegisterRoutes(router fiber.Router) {
@@ -23,6 +34,9 @@ func (h *FieldHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *FieldHandler) ListByCollection(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	cid, err := strconv.Atoi(c.Query("collection_id", "0"))
 	if err != nil || cid <= 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid collection_id")
@@ -36,6 +50,9 @@ func (h *FieldHandler) ListByCollection(c *fiber.Ctx) error {
 }
 
 func (h *FieldHandler) Get(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
@@ -48,10 +65,14 @@ func (h *FieldHandler) Get(c *fiber.Ctx) error {
 }
 
 func (h *FieldHandler) Create(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	var in service.FieldInput
 	if err := c.BodyParser(&in); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
+	logger.Debug(fmt.Sprintf("[FIELD] %v", in))
 	out, err := h.svc.Create(c.UserContext(), in)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -60,6 +81,9 @@ func (h *FieldHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *FieldHandler) Update(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
@@ -76,6 +100,9 @@ func (h *FieldHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *FieldHandler) Delete(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")

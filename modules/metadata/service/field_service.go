@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/khiemnd777/andy_api/modules/metadata/model"
 	"github.com/khiemnd777/andy_api/modules/metadata/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 )
@@ -57,10 +58,10 @@ func keyCollectionBySlug(slug string, withFields bool) string {
 	return fmt.Sprintf("collections:slug:%s:f=%t", normalizeSlug(slug), withFields)
 }
 
-func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) ([]repository.Field, error) {
+func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) ([]model.Field, error) {
 	key := keyFieldsByCollection(collectionID)
 
-	type fieldList = []repository.Field
+	type fieldList = []model.Field
 	list, err := cache.Get(key, ttlFieldList, func() (*fieldList, error) {
 		items, err := s.fields.ListByCollectionID(ctx, collectionID)
 		if err != nil {
@@ -75,14 +76,14 @@ func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) (
 	return *list, nil
 }
 
-func (s *FieldService) Get(ctx context.Context, id int) (*repository.Field, error) {
+func (s *FieldService) Get(ctx context.Context, id int) (*model.Field, error) {
 	key := keyFieldByID(id)
-	return cache.Get(key, ttlFieldItem, func() (*repository.Field, error) {
+	return cache.Get(key, ttlFieldItem, func() (*model.Field, error) {
 		return s.fields.Get(ctx, id)
 	})
 }
 
-func (s *FieldService) Create(ctx context.Context, in FieldInput) (*repository.Field, error) {
+func (s *FieldService) Create(ctx context.Context, in FieldInput) (*model.Field, error) {
 	if _, err := s.cols.GetByID(ctx, in.CollectionID, false); err != nil {
 		return nil, fmt.Errorf("collection not found")
 	}
@@ -92,7 +93,7 @@ func (s *FieldService) Create(ctx context.Context, in FieldInput) (*repository.F
 		return nil, fmt.Errorf("name/label required")
 	}
 
-	f := &repository.Field{
+	f := &model.Field{
 		CollectionID: in.CollectionID,
 		Name:         in.Name,
 		Label:        in.Label,
@@ -111,18 +112,16 @@ func (s *FieldService) Create(ctx context.Context, in FieldInput) (*repository.F
 		return nil, err
 	}
 
-	// Invalidate: list fields của collection + collection detail (withFields=true)
 	cache.InvalidateKeys(
 		keyFieldsByCollection(in.CollectionID),
 		keyCollectionByID(in.CollectionID, true),
 	)
-	// Nếu bạn có cache theo slug, không biết slug ở đây -> có thể dùng prefix an toàn (tùy implement):
-	cache.InvalidateKeys("collections:slug:*") // optional, nếu prefix-support sẵn có
+	cache.InvalidateKeys("collections:slug:*")
 
 	return created, nil
 }
 
-func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*repository.Field, error) {
+func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*model.Field, error) {
 	cur, err := s.fields.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -168,7 +167,6 @@ func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*repo
 		return nil, err
 	}
 
-	// Invalidate: item + list (old/new collection) + collection detail (withFields=true)
 	keys := []string{
 		keyFieldByID(id),
 		keyFieldsByCollection(oldColID),
@@ -181,13 +179,12 @@ func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*repo
 		)
 	}
 	cache.InvalidateKeys(keys...)
-	cache.InvalidateKeys("collections:slug:*") // optional
+	cache.InvalidateKeys("collections:slug:*")
 
 	return updated, nil
 }
 
 func (s *FieldService) Delete(ctx context.Context, id int) error {
-	// Cần collectionID để invalidate list + collection detail
 	cur, err := s.fields.Get(ctx, id)
 	if err != nil {
 		return err
@@ -201,7 +198,7 @@ func (s *FieldService) Delete(ctx context.Context, id int) error {
 		keyFieldsByCollection(cur.CollectionID),
 		keyCollectionByID(cur.CollectionID, true),
 	)
-	cache.InvalidateKeys("collections:slug:*") // optional
+	cache.InvalidateKeys("collections:slug:*")
 
 	return nil
 }

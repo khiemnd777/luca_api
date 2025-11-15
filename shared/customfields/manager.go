@@ -21,7 +21,6 @@ type Store interface {
 	LoadSchema(ctx context.Context, collectionSlug string) (*Schema, error)
 }
 
-// Postgres store (database/sql) — bạn có thể đổi sang Ent nếu thích
 type PGStore struct{ DB *sql.DB }
 
 func (s *PGStore) LoadSchema(ctx context.Context, slug string) (*Schema, error) {
@@ -58,7 +57,6 @@ func (s *PGStore) LoadSchema(ctx context.Context, slug string) (*Schema, error) 
 	return &Schema{Collection: slug, Fields: defs}, nil
 }
 
-// TTL cache đơn giản in-memory
 type cacheEntry struct {
 	s   *Schema
 	exp time.Time

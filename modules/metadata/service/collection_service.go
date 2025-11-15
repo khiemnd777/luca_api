@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/khiemnd777/andy_api/modules/metadata/model"
 	"github.com/khiemnd777/andy_api/modules/metadata/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 )
@@ -100,7 +101,7 @@ func (s *CollectionService) GetByID(ctx context.Context, id int, withFields bool
 	})
 }
 
-func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput) (*repository.Collection, error) {
+func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput) (*model.Collection, error) {
 	in.Slug = normalizeSlug(in.Slug)
 	if !slugRegex.MatchString(in.Slug) {
 		return nil, ErrBadSlug
@@ -120,13 +121,12 @@ func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput
 	if err != nil {
 		return nil, err
 	}
-	// invalidate list cache
 	cache.InvalidateKeys("collections:list:*")
 	return c, nil
 
 }
 
-func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollectionInput) (*repository.Collection, error) {
+func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollectionInput) (*model.Collection, error) {
 	var ex *int = &id
 	if in.Slug != nil {
 		slug := normalizeSlug(*in.Slug)

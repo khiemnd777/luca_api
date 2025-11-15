@@ -4,7 +4,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
-// Trả về một hàm selector để dùng trong Where() của bất kỳ ent query nào.
 // Ví dụ: q.Where(customfields.JSONEq("color", "red"))
 func JSONEq(key string, val any) func(*sql.Selector) {
 	return func(s *sql.Selector) {
