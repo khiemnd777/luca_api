@@ -2,6 +2,7 @@ package dbutils
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"entgo.io/ent/dialect/sql"
@@ -42,7 +43,9 @@ func ParseSearchQuery(c *fiber.Ctx, defLimit int) SearchQuery {
 	orderBy := utils.GetQueryAsString(c, "order_by")
 
 	if orderBy != "" {
-		orderBy = strcase.ToSnake(orderBy)
+		if !strings.HasPrefix(orderBy, "custom_fields.") {
+			orderBy = strcase.ToSnake(orderBy)
+		}
 	}
 
 	direction := utils.GetQueryAsString(c, "direction")
@@ -72,6 +75,49 @@ func resolveOrderField(orderBy *string, defaultField string) (field string) {
 
 // O ~ func(*sql.Selector) để khớp với <entity>.OrderOption
 func buildSQLOptions[O ~func(*sql.Selector)](table, field string, desc bool, pkField string) []O {
+	// custom_fields.<key>
+	if strings.HasPrefix(field, "custom_fields.") {
+		key := strings.TrimPrefix(field, "custom_fields.")
+
+		// ORDER BY (custom_fields->>'key') ASC|DESC
+		makeJSON := func(d bool) O {
+			return O(func(s *sql.Selector) {
+				expr := fmt.Sprintf("(custom_fields->>'%s')", key)
+				if d {
+					// OrderBy nhận string, nên truyền raw SQL
+					s.OrderBy(expr + " DESC")
+				} else {
+					s.OrderBy(expr + " ASC")
+				}
+			})
+		}
+
+		// tie-breaker for ORDER BY ... , pk
+		makePK := func(d bool) O {
+			return O(func(s *sql.Selector) {
+				if pkField == "" {
+					return
+				}
+				col := s.C(pkField)
+				if table != "" {
+					col = sql.Table(table).C(pkField)
+				}
+				if d {
+					s.OrderBy(sql.Desc(col))
+				} else {
+					s.OrderBy(sql.Asc(col))
+				}
+			})
+		}
+
+		opts := []O{makeJSON(desc)}
+		if pkField != "" {
+			opts = append(opts, makePK(desc))
+		}
+		return opts
+	}
+
+	// sort
 	makeOne := func(f string, d bool) O {
 		return O(func(s *sql.Selector) {
 			col := s.C(f)
@@ -85,9 +131,10 @@ func buildSQLOptions[O ~func(*sql.Selector)](table, field string, desc bool, pkF
 			}
 		})
 	}
+
 	opts := []O{makeOne(field, desc)}
 	if pkField != "" && pkField != field {
-		opts = append(opts, makeOne(pkField, desc)) // tie-breaker ổn định
+		opts = append(opts, makeOne(pkField, desc))
 	}
 	return opts
 }

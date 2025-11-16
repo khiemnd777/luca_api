@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"time"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/gofiber/fiber/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/registry"
 	"github.com/khiemnd777/andy_api/shared/db/ent"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/middleware"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -41,7 +43,9 @@ func main() {
 			h.RegisterRoutes(router)
 
 			// Features
-			registry.Init(router, deps, registry.InitOptions{
+			cfStore := &customfields.PGStore{DB: deps.DB}
+			cfMgr := customfields.NewManager(cfStore, time.Minute*5)
+			registry.Init(router, deps, cfMgr, registry.InitOptions{
 				EnabledIDs: deps.Config.Features.Enabled,
 			})
 		},

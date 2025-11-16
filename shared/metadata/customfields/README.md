@@ -9,6 +9,13 @@ ALTER TABLE products
 ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'::jsonb;
 ```
 
+```go
+// JSONB cho `custom_fields` trong ent
+field.JSON("custom_fields", map[string]any{}).
+    Optional().
+    Default(map[string]any{}),
+```
+
 Index GIN cho tìm kiếm động
 
 ```postgres

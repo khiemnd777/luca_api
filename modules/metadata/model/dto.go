@@ -12,20 +12,21 @@ type Collection struct {
 }
 
 type Field struct {
-	ID           int             `json:"id"`
-	CollectionID int             `json:"collection_id"`
-	Name         string          `json:"name"`
-	Label        string          `json:"label"`
-	Type         string          `json:"type"`
-	Required     bool            `json:"required"`
-	Unique       bool            `json:"unique"`
-	Table        bool            `json:"table"`
-	Form         bool            `json:"form"`
-	DefaultValue *sql.NullString `json:"default_value"`
-	Options      *sql.NullString `json:"options"`
-	OrderIndex   int             `json:"order_index"`
-	Visibility   string          `json:"visibility"`
-	Relation     *sql.NullString `json:"relation"`
+	ID             int             `json:"id"`
+	CollectionID   int             `json:"collection_id"`
+	CollectionSlug string          `json:"collection_slug"`
+	Name           string          `json:"name"`
+	Label          string          `json:"label"`
+	Type           string          `json:"type"`
+	Required       bool            `json:"required"`
+	Unique         bool            `json:"unique"`
+	Table          bool            `json:"table"`
+	Form           bool            `json:"form"`
+	DefaultValue   *sql.NullString `json:"default_value"`
+	Options        *sql.NullString `json:"options"`
+	OrderIndex     int             `json:"order_index"`
+	Visibility     string          `json:"visibility"`
+	Relation       *sql.NullString `json:"relation"`
 }
 
 type FieldInput struct {

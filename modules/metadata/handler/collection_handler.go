@@ -25,9 +25,10 @@ func NewCollectionHandler(s *service.CollectionService, deps *module.ModuleDeps[
 
 // Mount dưới /metadata
 func (h *CollectionHandler) RegisterRoutes(router fiber.Router) {
-	app.RouterGet(router, "/collections", h.List) // collections?query=&limit=&offset=&with_fields=true
+	app.RouterGet(router, "/collections", h.List) // collections?query=&limit=&offset=&with_fields=true&table=false&form=false
 	app.RouterPost(router, "/collections", h.Create)
 	app.RouterGet(router, "/collections/:idOrSlug", h.GetOne)
+	app.RouterGet(router, "/collections/available/:idOrSlug", h.GetAvailableOne)
 	app.RouterPut(router, "/collections/:id", h.Update)
 	app.RouterDelete(router, "/collections/:id", h.Delete)
 }
@@ -41,6 +42,8 @@ func (h *CollectionHandler) List(c *fiber.Ctx) error {
 		Limit:      c.QueryInt("limit", 20),
 		Offset:     c.QueryInt("offset", 0),
 		WithFields: c.QueryBool("with_fields", false),
+		Table:      c.QueryBool("table", false),
+		Form:       c.QueryBool("form", false),
 	}
 	items, total, err := h.svc.List(c.UserContext(), in)
 	if err != nil {
@@ -70,17 +73,40 @@ func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	withFields := c.QueryBool("withFields", false)
+	table := c.QueryBool("table", false)
+	form := c.QueryBool("form", false)
 	idOrSlug := c.Params("idOrSlug")
-	// nếu là số → ID
+	// ID
 	if id, err := strconv.Atoi(idOrSlug); err == nil {
-		out, err := h.svc.GetByID(c.UserContext(), id, withFields)
+		out, err := h.svc.GetByID(c.UserContext(), id, withFields, table, form)
 		if err != nil {
 			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 		}
 		return c.JSON(out)
 	}
 	// slug
-	out, err := h.svc.GetBySlug(c.UserContext(), idOrSlug, withFields)
+	out, err := h.svc.GetBySlug(c.UserContext(), idOrSlug, withFields, table, form)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(out)
+}
+
+func (h *CollectionHandler) GetAvailableOne(c *fiber.Ctx) error {
+	withFields := c.QueryBool("withFields", false)
+	table := c.QueryBool("table", false)
+	form := c.QueryBool("form", false)
+	idOrSlug := c.Params("idOrSlug")
+	// ID
+	if id, err := strconv.Atoi(idOrSlug); err == nil {
+		out, err := h.svc.GetAvailableByID(c.UserContext(), id, withFields, table, form)
+		if err != nil {
+			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+		}
+		return c.JSON(out)
+	}
+	// slug
+	out, err := h.svc.GetByAvailableSlug(c.UserContext(), idOrSlug, withFields, table, form)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

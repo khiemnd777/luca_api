@@ -23,7 +23,7 @@ func NewCollectionRepository(db *sql.DB) *CollectionRepository {
 	return &CollectionRepository{DB: db}
 }
 
-func (r *CollectionRepository) List(ctx context.Context, query string, limit, offset int, withFields bool) ([]CollectionWithFields, int, error) {
+func (r *CollectionRepository) List(ctx context.Context, query string, limit, offset int, withFields, table, form bool) ([]CollectionWithFields, int, error) {
 	list := []CollectionWithFields{}
 	var args []any
 	where := ""
@@ -65,7 +65,7 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 		ids[i] = list[i].ID
 	}
 
-	counts, err := r.GetFieldCountsBatch(ctx, ids)
+	counts, err := r.GetFieldCountsBatch(ctx, ids, table, form)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -74,7 +74,7 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 		list[i].FieldsCount = counts[list[i].ID]
 
 		if withFields {
-			fields, err := r.GetFieldsByCollectionID(ctx, list[i].ID)
+			fields, err := r.GetFieldsByCollectionID(ctx, list[i].ID, table, form, true)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -85,7 +85,7 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 	return list, total, nil
 }
 
-func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields bool) (*CollectionWithFields, error) {
+func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields, table, form, showHidden bool) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
 		SELECT id, slug, name FROM collections WHERE slug = $1
 	`, slug)
@@ -96,13 +96,13 @@ func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withF
 
 	result := &CollectionWithFields{Collection: c}
 	if withFields {
-		fields, _ := r.GetFieldsByCollectionID(ctx, c.ID)
+		fields, _ := r.GetFieldsByCollectionID(ctx, c.ID, table, form, showHidden)
 		result.Fields = fields
 	}
 	return result, nil
 }
 
-func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields bool) (*CollectionWithFields, error) {
+func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields, table, form, showHidden bool) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
 		SELECT id, slug, name FROM collections WHERE id = $1
 	`, id)
@@ -112,7 +112,7 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields b
 	}
 	result := &CollectionWithFields{Collection: c}
 	if withFields {
-		fields, _ := r.GetFieldsByCollectionID(ctx, id)
+		fields, _ := r.GetFieldsByCollectionID(ctx, id, table, form, showHidden)
 		result.Fields = fields
 	}
 	return result, nil
@@ -173,7 +173,7 @@ func (r *CollectionRepository) SlugExists(ctx context.Context, slug string, excl
 	return cnt > 0, nil
 }
 
-func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int) ([]model.Field, error) {
+func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int, table, form, showHidden bool) ([]model.Field, error) {
 	rows, err := r.DB.QueryContext(ctx, `
 		SELECT 
 			id, 
@@ -191,9 +191,12 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 			visibility, 
 			relation
 		FROM fields
-		WHERE collection_id = $1
+		WHERE collection_id = $1 
+			AND ($2::bool IS FALSE OR "table" = TRUE)
+			AND ($3::bool IS FALSE OR form = TRUE)
+			AND ($4::bool IS TRUE OR visibility IS DISTINCT FROM 'hidden')
 		ORDER BY order_index ASC
-	`, collectionID)
+	`, collectionID, table, form, showHidden)
 	if err != nil {
 		return nil, err
 	}
@@ -225,26 +228,15 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 	return list, nil
 }
 
-func (r *CollectionRepository) CountFieldsByCollectionID(ctx context.Context, collectionID int) (int, error) {
-	var count int
-	err := r.DB.QueryRowContext(ctx, `
-		SELECT COUNT(*)
-		FROM fields
-		WHERE collection_id = $1
-	`, collectionID).Scan(&count)
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
-func (r *CollectionRepository) GetFieldCountsBatch(ctx context.Context, collectionIDs []int) (map[int]int, error) {
+func (r *CollectionRepository) GetFieldCountsBatch(ctx context.Context, collectionIDs []int, table, form bool) (map[int]int, error) {
 	rows, err := r.DB.QueryContext(ctx, `
-		SELECT collection_id, COUNT(*)
-		FROM fields
-		WHERE collection_id = ANY($1)
-		GROUP BY collection_id
-	`, pq.Array(collectionIDs))
+        SELECT collection_id, COUNT(*)
+        FROM fields
+        WHERE collection_id = ANY($1)
+          AND ($2::bool IS FALSE OR "table" = TRUE)
+          AND ($3::bool IS FALSE OR form = TRUE)
+        GROUP BY collection_id
+    `, pq.Array(collectionIDs), table, form)
 	if err != nil {
 		return nil, err
 	}

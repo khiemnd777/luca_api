@@ -25,16 +25,32 @@ const (
 	ttlCollectionItem = 5 * time.Minute
 )
 
-func cacheKeyList(query string, limit, offset int, withFields bool) string {
-	return fmt.Sprintf("collections:list:q=%s:l=%d:o=%d:f=%t", query, limit, offset, withFields)
+func cacheKeyList(query string, limit, offset int, withFields, table, form bool) string {
+	return fmt.Sprintf("collections:list:q=%s:l=%d:o=%d:f=%t:tb:%t:fm:%t", query, limit, offset, withFields, table, form)
 }
 
-func cacheKeySlug(slug string, withFields bool) string {
-	return fmt.Sprintf("collections:slug:%s:f=%t", slug, withFields)
+func cacheKeySlug(slug string, withFields, table, form bool) string {
+	return fmt.Sprintf("collections:slug:%s:f=%t:tb:%t:fm:%t", slug, withFields, table, form)
 }
 
-func cacheKeyID(id int, withFields bool) string {
-	return fmt.Sprintf("collections:id:%d:f=%t", id, withFields)
+func cacheKeyAvailableSlug(slug string, withFields, table, form bool) string {
+	return fmt.Sprintf("collections:slug:%s:abl:f=%t:tb:%t:fm:%t", slug, withFields, table, form)
+}
+
+func cacheKeySlugAll(slug string) string {
+	return fmt.Sprintf("collections:slug:%s:*", slug)
+}
+
+func cacheKeyID(id int, withFields, table, form bool) string {
+	return fmt.Sprintf("collections:id:%d:f=%t:tb:%t:fm:%t", id, withFields, table, form)
+}
+
+func cacheKeyAvaialbleID(id int, withFields, table, form bool) string {
+	return fmt.Sprintf("collections:id:%d:abl:f=%t:tb:%t:fm:%t", id, withFields, table, form)
+}
+
+func cacheKeyIDAll(id int) string {
+	return fmt.Sprintf("collections:id:%d:*", id)
 }
 
 type ListCollectionsInput struct {
@@ -42,6 +58,8 @@ type ListCollectionsInput struct {
 	Limit      int
 	Offset     int
 	WithFields bool
+	Table      bool
+	Form       bool
 }
 
 type CreateCollectionInput struct {
@@ -64,7 +82,7 @@ func normalizeSlug(s string) string {
 }
 
 func (s *CollectionService) List(ctx context.Context, in ListCollectionsInput) ([]repository.CollectionWithFields, int, error) {
-	key := cacheKeyList(in.Query, in.Limit, in.Offset, in.WithFields)
+	key := cacheKeyList(in.Query, in.Limit, in.Offset, in.WithFields, in.Table, in.Form)
 
 	type result struct {
 		Items []repository.CollectionWithFields
@@ -72,7 +90,7 @@ func (s *CollectionService) List(ctx context.Context, in ListCollectionsInput) (
 	}
 
 	r, err := cache.Get(key, ttlCollectionList, func() (*result, error) {
-		items, total, err := s.repo.List(ctx, in.Query, in.Limit, in.Offset, in.WithFields)
+		items, total, err := s.repo.List(ctx, in.Query, in.Limit, in.Offset, in.WithFields, in.Table, in.Form)
 		if err != nil {
 			return nil, err
 		}
@@ -84,20 +102,37 @@ func (s *CollectionService) List(ctx context.Context, in ListCollectionsInput) (
 	return r.Items, r.Total, nil
 }
 
-func (s *CollectionService) GetBySlug(ctx context.Context, slug string, withFields bool) (*repository.CollectionWithFields, error) {
+func (s *CollectionService) GetBySlug(ctx context.Context, slug string, withFields, table, form bool) (*repository.CollectionWithFields, error) {
 	slug = normalizeSlug(slug)
-	key := cacheKeySlug(slug, withFields)
+	key := cacheKeySlug(slug, withFields, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetBySlug(ctx, slug, withFields)
+		return s.repo.GetBySlug(ctx, slug, withFields, table, form, true)
 	})
 }
 
-func (s *CollectionService) GetByID(ctx context.Context, id int, withFields bool) (*repository.CollectionWithFields, error) {
-	key := cacheKeyID(id, withFields)
+func (s *CollectionService) GetByAvailableSlug(ctx context.Context, slug string, withFields, table, form bool) (*repository.CollectionWithFields, error) {
+	slug = normalizeSlug(slug)
+	key := cacheKeyAvailableSlug(slug, withFields, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetByID(ctx, id, withFields)
+		return s.repo.GetBySlug(ctx, slug, withFields, table, form, false)
+	})
+}
+
+func (s *CollectionService) GetByID(ctx context.Context, id int, withFields, table, form bool) (*repository.CollectionWithFields, error) {
+	key := cacheKeyID(id, withFields, table, form)
+
+	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
+		return s.repo.GetByID(ctx, id, withFields, table, form, true)
+	})
+}
+
+func (s *CollectionService) GetAvailableByID(ctx context.Context, id int, withFields, table, form bool) (*repository.CollectionWithFields, error) {
+	key := cacheKeyAvaialbleID(id, withFields, table, form)
+
+	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
+		return s.repo.GetByID(ctx, id, withFields, table, form, false)
 	})
 }
 
@@ -155,15 +190,9 @@ func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollect
 		return nil, err
 	}
 
-	cache.InvalidateKeys(
-		cacheKeyID(id, true),
-		cacheKeyID(id, false),
-	)
+	cache.InvalidateKeys(cacheKeyIDAll(id))
 	if in.Slug != nil {
-		cache.InvalidateKeys(
-			cacheKeySlug(*in.Slug, true),
-			cacheKeySlug(*in.Slug, false),
-		)
+		cache.InvalidateKeys(cacheKeySlugAll(*in.Slug))
 	}
 	cache.InvalidateKeys("collections:list:*")
 
@@ -174,10 +203,7 @@ func (s *CollectionService) Delete(ctx context.Context, id int) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
-	cache.InvalidateKeys(
-		cacheKeyID(id, true),
-		cacheKeyID(id, false),
-	)
+	cache.InvalidateKeys(cacheKeyIDAll(id))
 	cache.InvalidateKeys("collections:list:*")
 	return nil
 }

@@ -7,13 +7,14 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/modules/main/config"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 )
 
 type Registrar interface {
 	ID() string
 	Priority() int // smaller = earlier
-	Register(r fiber.Router, deps *module.ModuleDeps[config.ModuleConfig]) error
+	Register(r fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) error
 }
 
 var (
@@ -34,7 +35,7 @@ type InitOptions struct {
 	EnabledIDs []string // if empty => enable all
 }
 
-func Init(r fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], opts InitOptions) {
+func Init(r fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager, opts InitOptions) {
 	mu.RLock()
 	defer mu.RUnlock()
 
@@ -67,7 +68,7 @@ func Init(r fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], opts Ini
 	})
 
 	for _, rg := range list {
-		if err := rg.Register(r, deps); err != nil {
+		if err := rg.Register(r, deps, cfMgr); err != nil {
 			slog.Error("Feature registration failed", "id", rg.ID(), "err", err)
 		} else {
 			slog.Info("Feature registered", "id", rg.ID())
