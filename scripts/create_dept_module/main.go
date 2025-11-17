@@ -702,6 +702,49 @@ CREATE INDEX IF NOT EXISTS idx_%s_custom_fields_gin ON %s USING GIN (custom_fiel
 `, table, table, table)
 }
 
+// NEW: RBAC matrix migration
+func flywayRBACMatrixTemplate(moduleSnake, structName string) string {
+	return fmt.Sprintf(`-- ============================================
+-- RBAC PERMISSIONS + ADMIN ROLE UPSERT SCRIPT
+-- ============================================
+
+-- 1. Ensure role "admin" exists
+INSERT INTO roles (role_name)
+VALUES ('admin')
+ON CONFLICT (role_name)
+DO UPDATE SET role_name = EXCLUDED.role_name;
+
+-- ============================================
+-- PERMISSIONS UPSERT
+-- ============================================
+INSERT INTO permissions (permission_name, permission_value)
+VALUES
+  ('%[2]s - Xem', '%[1]s.view'),
+  ('%[2]s - Tạo', '%[1]s.create'),
+  ('%[2]s - Sửa', '%[1]s.update'),
+  ('%[2]s - Xoá', '%[1]s.delete'),
+  ('%[2]s - Tìm kiếm', '%[1]s.search')
+ON CONFLICT (permission_value)
+DO UPDATE SET permission_name = EXCLUDED.permission_name;
+
+-- ============================================
+-- LINK ALL PERMISSIONS TO ADMIN ROLE
+-- ============================================
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+JOIN permissions p ON p.permission_value IN (
+  '%[1]s.view',
+  '%[1]s.create',
+  '%[1]s.update',
+  '%[1]s.delete',
+  '%[1]s.search'
+)
+WHERE r.role_name = 'admin'
+ON CONFLICT DO NOTHING;
+`, moduleSnake, structName)
+}
+
 func getLastFlywayVersion(dir string) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -814,6 +857,11 @@ func main() {
 	cfVer := normVer + 1
 	cfPath := filepath.Join(flywayDir, fmt.Sprintf("V%d__dept_%s_custom_fields.sql", cfVer, moduleSnake))
 	write(cfPath, flywayCustomFieldsTemplate(moduleSnake))
+
+	// 4) RBAC matrix
+	rbacVer := cfVer + 1
+	rbacPath := filepath.Join(flywayDir, fmt.Sprintf("V%d__dept_%s_rbac_matrix.sql", rbacVer, moduleSnake))
+	write(rbacPath, flywayRBACMatrixTemplate(moduleSnake, structName))
 
 	fmt.Println("✔ Done at", time.Now())
 }
