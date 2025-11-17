@@ -12,6 +12,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/dentist"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -28,12 +29,14 @@ type ClinicRepository interface {
 }
 
 type clinicRepo struct {
-	db   *generated.Client
-	deps *module.ModuleDeps[config.ModuleConfig]
+	db    *generated.Client
+	deps  *module.ModuleDeps[config.ModuleConfig]
+	cfMgr *customfields.Manager
 }
 
-func NewClinicRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig]) ClinicRepository {
-	return &clinicRepo{db: db, deps: deps}
+func NewClinicRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) ClinicRepository {
+
+	return &clinicRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
 func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error) {
@@ -49,14 +52,21 @@ func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.
 		}
 	}()
 
-	entity, err := tx.Clinic.Create().
+	q := tx.Clinic.Create().
 		SetName(input.Name).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
 		SetNillableBrief(input.Brief).
-		SetNillableLogo(input.Logo).
-		Save(ctx)
+		SetNillableLogo(input.Logo)
 
+	// customfields
+	err = customfields.SetCustomFields(ctx, r.cfMgr, "clinics", input.CustomFields, q, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// save entity
+	entity, err := q.Save(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +111,12 @@ func (r *clinicRepo) Update(ctx context.Context, input model.ClinicDTO) (*model.
 		SetNillablePhoneNumber(input.PhoneNumber).
 		SetNillableBrief(input.Brief).
 		SetNillableLogo(input.Logo)
+
+	// customfields
+	err = customfields.SetCustomFields(ctx, r.cfMgr, "clinics", input.CustomFields, q, false)
+	if err != nil {
+		return nil, err
+	}
 
 	// Edge
 	if input.DentistIDs != nil {

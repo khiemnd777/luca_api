@@ -9,8 +9,8 @@ import (
 )
 
 type ValidateResult struct {
-	Clean map[string]any    // dữ liệu sạch để lưu vào JSONB
-	Errs  map[string]string // field -> error message
+	Clean map[string]any
+	Errs  map[string]string
 }
 
 func (m *Manager) Validate(ctx context.Context, slug string, incoming map[string]any, isPatch bool) (*ValidateResult, error) {
@@ -24,9 +24,11 @@ func (m *Manager) Validate(ctx context.Context, slug string, incoming map[string
 		defs[f.Name] = f
 	}
 
-	res := &ValidateResult{Clean: map[string]any{}, Errs: map[string]string{}}
+	res := &ValidateResult{
+		Clean: map[string]any{},
+		Errs:  map[string]string{},
+	}
 
-	// 1) Apply defaults (chỉ khi create hoặc PATCH mà field chưa gửi)
 	if !isPatch {
 		for name, f := range defs {
 			if f.DefaultValue != nil {
@@ -35,28 +37,26 @@ func (m *Manager) Validate(ctx context.Context, slug string, incoming map[string
 		}
 	}
 
-	// 2) Duyệt incoming → coerce & validate
 	for name, raw := range incoming {
 		f, ok := defs[name]
 		if !ok {
-			// cho phép field lạ? thường là KHÔNG
-			res.Errs[name] = ErrUnknownField.Error()
 			continue
 		}
+
 		val, verr := coerceValue(f, raw)
 		if verr != nil {
 			res.Errs[name] = verr.Error()
 			continue
 		}
-		// kiểm tra lựa chọn (select/multiselect)
+
 		if e := validateOptions(f, val); e != nil {
 			res.Errs[name] = e.Error()
 			continue
 		}
+
 		res.Clean[name] = val
 	}
 
-	// 3) Kiểm tra required (create) hoặc required khi PATCH có key đó
 	for name, f := range defs {
 		if f.Required {
 			if isPatch {
@@ -73,15 +73,12 @@ func (m *Manager) Validate(ctx context.Context, slug string, incoming map[string
 		}
 	}
 
-	if len(res.Errs) > 0 {
-		return res, nil
-	}
 	return res, nil
 }
 
 func coerceValue(f FieldDef, raw any) (any, error) {
 	switch f.Type {
-	case TypeText, TypeRichText, TypeRelation:
+	case TypeText, TypeRichText, TypeRelation, TypeImage:
 		return fmt.Sprintf("%v", raw), nil
 	case TypeNumber:
 		switch v := raw.(type) {

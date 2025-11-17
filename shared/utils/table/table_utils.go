@@ -2,11 +2,11 @@ package table
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/gofiber/fiber/v2"
-	"github.com/iancoleman/strcase"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -37,10 +37,6 @@ func ParseTableQuery(c *fiber.Ctx, defLimit int) TableQuery {
 	offset := (page - 1) * limit
 
 	orderBy := utils.GetQueryAsString(c, "order_by")
-
-	if orderBy != "" {
-		orderBy = strcase.ToSnake(orderBy)
-	}
 
 	direction := utils.GetQueryAsString(c, "direction")
 	if direction == "" {
@@ -88,6 +84,45 @@ func isDesc(dir string) bool { return strings.EqualFold(dir, "desc") }
 // Build các OrderOption dựa trên table/field, dùng được cho mọi entity
 // O ~ func(*sql.Selector) để khớp với <entity>.OrderOption
 func buildSQLOptions[O ~func(*sql.Selector)](table, field string, desc bool, pkField string) []O {
+	// custom_fields.<key>
+	if strings.HasPrefix(field, "custom_fields.") {
+		key := strings.TrimPrefix(field, "custom_fields.")
+
+		// order JSONB: (custom_fields->>'key') [ASC|DESC]
+		makeJSON := func(d bool) O {
+			return O(func(s *sql.Selector) {
+				expr := fmt.Sprintf("(custom_fields->>'%s')", key)
+				if d {
+					s.OrderBy(expr + " DESC")
+				} else {
+					s.OrderBy(expr + " ASC")
+				}
+			})
+		}
+
+		// tie-breaker
+		makePK := func(d bool) O {
+			return O(func(s *sql.Selector) {
+				col := s.C(pkField)
+				if table != "" {
+					col = sql.Table(table).C(pkField)
+				}
+				if d {
+					s.OrderBy(sql.Desc(col))
+				} else {
+					s.OrderBy(sql.Asc(col))
+				}
+			})
+		}
+
+		opts := []O{makeJSON(desc)}
+		if pkField != "" {
+			opts = append(opts, makePK(desc))
+		}
+		return opts
+	}
+
+	// Mặc định: order theo cột thật
 	makeOne := func(f string, d bool) O {
 		return O(func(s *sql.Selector) {
 			col := s.C(f)

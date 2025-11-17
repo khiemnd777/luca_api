@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/khiemnd777/andy_api/modules/metadata/model"
 	"github.com/khiemnd777/andy_api/modules/metadata/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 )
@@ -19,20 +20,6 @@ type FieldService struct {
 
 func NewFieldService(f *repository.FieldRepository, c *repository.CollectionRepository) *FieldService {
 	return &FieldService{fields: f, cols: c}
-}
-
-type FieldInput struct {
-	CollectionID int             `json:"collection_id"`
-	Name         string          `json:"name"`
-	Label        string          `json:"label"`
-	Type         string          `json:"type"`
-	Required     bool            `json:"required"`
-	Unique       bool            `json:"unique"`
-	DefaultValue json.RawMessage `json:"default_value"`
-	Options      json.RawMessage `json:"options"`
-	OrderIndex   int             `json:"order_index"`
-	Visibility   string          `json:"visibility"`
-	Relation     json.RawMessage `json:"relation"`
 }
 
 // TTL
@@ -57,10 +44,10 @@ func keyCollectionBySlug(slug string, withFields bool) string {
 	return fmt.Sprintf("collections:slug:%s:f=%t", normalizeSlug(slug), withFields)
 }
 
-func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) ([]repository.Field, error) {
+func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) ([]model.Field, error) {
 	key := keyFieldsByCollection(collectionID)
 
-	type fieldList = []repository.Field
+	type fieldList = []model.Field
 	list, err := cache.Get(key, ttlFieldList, func() (*fieldList, error) {
 		items, err := s.fields.ListByCollectionID(ctx, collectionID)
 		if err != nil {
@@ -75,15 +62,15 @@ func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) (
 	return *list, nil
 }
 
-func (s *FieldService) Get(ctx context.Context, id int) (*repository.Field, error) {
+func (s *FieldService) Get(ctx context.Context, id int) (*model.Field, error) {
 	key := keyFieldByID(id)
-	return cache.Get(key, ttlFieldItem, func() (*repository.Field, error) {
+	return cache.Get(key, ttlFieldItem, func() (*model.Field, error) {
 		return s.fields.Get(ctx, id)
 	})
 }
 
-func (s *FieldService) Create(ctx context.Context, in FieldInput) (*repository.Field, error) {
-	if _, err := s.cols.GetByID(ctx, in.CollectionID, false); err != nil {
+func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.Field, error) {
+	if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true); err != nil {
 		return nil, fmt.Errorf("collection not found")
 	}
 	in.Name = strings.TrimSpace(in.Name)
@@ -92,18 +79,39 @@ func (s *FieldService) Create(ctx context.Context, in FieldInput) (*repository.F
 		return nil, fmt.Errorf("name/label required")
 	}
 
-	f := &repository.Field{
+	var df *sql.NullString = nil
+	if in.DefaultValue != nil && len(*in.DefaultValue) > 0 {
+		ns := toNullString(*in.DefaultValue)
+		df = &ns
+	}
+
+	var opt *sql.NullString = nil
+	if in.Options != nil && len(*in.Options) > 0 {
+		ns := toNullString(*in.Options)
+		opt = &ns
+	}
+
+	var rel *sql.NullString = nil
+	if in.Relation != nil && len(*in.Relation) > 0 {
+		ns := toNullString(*in.Relation)
+		rel = &ns
+	}
+
+	f := &model.Field{
 		CollectionID: in.CollectionID,
 		Name:         in.Name,
 		Label:        in.Label,
 		Type:         in.Type,
 		Required:     in.Required,
 		Unique:       in.Unique,
-		DefaultValue: toNullString(in.DefaultValue),
-		Options:      toNullString(in.Options),
+		Table:        in.Table,
+		Form:         in.Form,
+		Search:       in.Search,
+		DefaultValue: df,
+		Options:      opt,
 		OrderIndex:   in.OrderIndex,
 		Visibility:   firstOrDefault(strings.TrimSpace(in.Visibility), "public"),
-		Relation:     toNullString(in.Relation),
+		Relation:     rel,
 	}
 
 	created, err := s.fields.Create(ctx, f)
@@ -111,18 +119,25 @@ func (s *FieldService) Create(ctx context.Context, in FieldInput) (*repository.F
 		return nil, err
 	}
 
-	// Invalidate: list fields của collection + collection detail (withFields=true)
+	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	created.CollectionSlug = col.Slug
+
 	cache.InvalidateKeys(
 		keyFieldsByCollection(in.CollectionID),
+		fmt.Sprintf("metadata:schema:i%d", in.CollectionID),
 		keyCollectionByID(in.CollectionID, true),
 	)
-	// Nếu bạn có cache theo slug, không biết slug ở đây -> có thể dùng prefix an toàn (tùy implement):
-	cache.InvalidateKeys("collections:slug:*") // optional, nếu prefix-support sẵn có
+	cache.InvalidateKeys("collections:slug:*")
 
 	return created, nil
 }
 
-func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*repository.Field, error) {
+func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) (*model.Field, error) {
 	cur, err := s.fields.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -131,7 +146,7 @@ func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*repo
 	oldColID := cur.CollectionID
 
 	if in.CollectionID != 0 && in.CollectionID != cur.CollectionID {
-		if _, err := s.cols.GetByID(ctx, in.CollectionID, false); err != nil {
+		if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true); err != nil {
 			return nil, fmt.Errorf("collection not found")
 		}
 		cur.CollectionID = in.CollectionID
@@ -145,22 +160,38 @@ func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*repo
 	if strings.TrimSpace(in.Type) != "" {
 		cur.Type = strings.TrimSpace(in.Type)
 	}
+
 	cur.Required = in.Required
 	cur.Unique = in.Unique
-	if len(in.DefaultValue) > 0 {
-		cur.DefaultValue = toNullString(in.DefaultValue)
+	cur.Table = in.Table
+	cur.Form = in.Form
+	cur.Search = in.Search
+
+	if in.DefaultValue != nil && len(*in.DefaultValue) > 0 {
+		ns := toNullString(*in.DefaultValue)
+		cur.DefaultValue = &ns
+	} else {
+		cur.DefaultValue = nil
 	}
-	if len(in.Options) > 0 {
-		cur.Options = toNullString(in.Options)
+
+	if in.Options != nil && len(*in.Options) > 0 {
+		ns := toNullString(*in.Options)
+		cur.Options = &ns
+	} else {
+		cur.DefaultValue = nil
 	}
+
 	if in.OrderIndex != 0 {
 		cur.OrderIndex = in.OrderIndex
 	}
 	if strings.TrimSpace(in.Visibility) != "" {
 		cur.Visibility = strings.TrimSpace(in.Visibility)
 	}
-	if len(in.Relation) > 0 {
-		cur.Relation = toNullString(in.Relation)
+	if in.Relation != nil && len(*in.Relation) > 0 {
+		ns := toNullString(*in.Relation)
+		cur.Relation = &ns
+	} else {
+		cur.Relation = nil
 	}
 
 	updated, err := s.fields.Update(ctx, cur)
@@ -168,26 +199,34 @@ func (s *FieldService) Update(ctx context.Context, id int, in FieldInput) (*repo
 		return nil, err
 	}
 
-	// Invalidate: item + list (old/new collection) + collection detail (withFields=true)
+	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	updated.CollectionSlug = col.Slug
+
 	keys := []string{
 		keyFieldByID(id),
 		keyFieldsByCollection(oldColID),
 		keyCollectionByID(oldColID, true),
+		fmt.Sprintf("metadata:schema:i%d", oldColID),
 	}
 	if cur.CollectionID != oldColID {
 		keys = append(keys,
 			keyFieldsByCollection(cur.CollectionID),
 			keyCollectionByID(cur.CollectionID, true),
+			fmt.Sprintf("metadata:schema:i%d", cur.CollectionID),
 		)
 	}
 	cache.InvalidateKeys(keys...)
-	cache.InvalidateKeys("collections:slug:*") // optional
+	cache.InvalidateKeys("collections:slug:*")
 
 	return updated, nil
 }
 
 func (s *FieldService) Delete(ctx context.Context, id int) error {
-	// Cần collectionID để invalidate list + collection detail
 	cur, err := s.fields.Get(ctx, id)
 	if err != nil {
 		return err
@@ -200,17 +239,19 @@ func (s *FieldService) Delete(ctx context.Context, id int) error {
 		keyFieldByID(id),
 		keyFieldsByCollection(cur.CollectionID),
 		keyCollectionByID(cur.CollectionID, true),
+		fmt.Sprintf("metadata:schema:i%d", cur.CollectionID),
 	)
-	cache.InvalidateKeys("collections:slug:*") // optional
+	cache.InvalidateKeys("collections:slug:*")
 
 	return nil
 }
 
 func toNullString(b json.RawMessage) sql.NullString {
-	if len(b) == 0 {
+	s := strings.TrimSpace(string(b))
+	if s == "" || s == "null" || s == "\"\"" {
 		return sql.NullString{}
 	}
-	return sql.NullString{String: string(b), Valid: true}
+	return sql.NullString{String: s, Valid: true}
 }
 
 func firstOrDefault(v, def string) string {

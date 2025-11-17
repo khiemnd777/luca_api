@@ -34,13 +34,13 @@ func main() {
 			// Collection
 			cltRepo := repository.NewCollectionRepository(db)
 			cltSvc := service.NewCollectionService(cltRepo)
-			cltH := handler.NewCollectionHandler(cltSvc)
+			cltH := handler.NewCollectionHandler(cltSvc, deps)
 			cltH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
 
 			// Field
 			fRepo := repository.NewFieldRepository(db)
 			fSvc := service.NewFieldService(fRepo, cltRepo)
-			fH := handler.NewFieldHandler(fSvc)
+			fH := handler.NewFieldHandler(fSvc, deps)
 			fH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
 		},
 	})
