@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/clinic/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
 	"github.com/khiemnd777/andy_api/shared/pubsub"
@@ -27,12 +29,13 @@ type ClinicService interface {
 }
 
 type clinicService struct {
-	repo repository.ClinicRepository
-	deps *module.ModuleDeps[config.ModuleConfig]
+	repo  repository.ClinicRepository
+	deps  *module.ModuleDeps[config.ModuleConfig]
+	cfMgr *customfields.Manager
 }
 
-func NewClinicService(repo repository.ClinicRepository, deps *module.ModuleDeps[config.ModuleConfig]) ClinicService {
-	return &clinicService{repo: repo, deps: deps}
+func NewClinicService(repo repository.ClinicRepository, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) ClinicService {
+	return &clinicService{repo: repo, deps: deps, cfMgr: cfMgr}
 }
 
 func kClinicByID(id int) string {
@@ -98,7 +101,7 @@ func (s *clinicService) Create(ctx context.Context, deptID int, input model.Clin
 	}
 	cache.InvalidateKeys(kClinicAll()...)
 
-	upsertSearch(deptID, dto)
+	s.upsertSearch(ctx, deptID, dto)
 
 	return dto, nil
 }
@@ -114,18 +117,29 @@ func (s *clinicService) Update(ctx context.Context, deptID int, input model.Clin
 	}
 	cache.InvalidateKeys(kClinicAll()...)
 
-	upsertSearch(deptID, dto)
+	s.upsertSearch(ctx, deptID, dto)
 
 	return dto, nil
 }
 
-func upsertSearch(deptID int, dto *model.ClinicDTO) {
+func (s *clinicService) upsertSearch(ctx context.Context, deptID int, dto *model.ClinicDTO) {
+	var kwParts []string
+	kwParts = append(kwParts, *dto.PhoneNumber)
+
+	if dto.CustomFields != nil {
+		if cfParts, err := s.cfMgr.GetSearchFieldValues(ctx, "clinics", dto.CustomFields); err == nil {
+			kwParts = append(kwParts, cfParts...)
+		}
+	}
+
+	keywordsPtr := strings.Join(kwParts, "|")
+
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "clinic",
 		EntityID:   int64(dto.ID),
 		Title:      dto.Name,
 		Subtitle:   nil,
-		Keywords:   utils.Ptr(*dto.PhoneNumber),
+		Keywords:   &keywordsPtr,
 		Content:    utils.Ptr(*dto.Brief),
 		Attributes: map[string]any{
 			"logo": dto.Logo,

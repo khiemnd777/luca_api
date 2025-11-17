@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS fields (
   "unique"      BOOL    DEFAULT FALSE,
   "table"       BOOL    DEFAULT FALSE,
   form          BOOL    DEFAULT FALSE,
+  search        BOOL    DEFAULT FALSE,
   default_value JSONB,
   options       JSONB,                 -- { "choices":[...], "min":0, "max":999, ... }
   order_index   INT     DEFAULT 0,

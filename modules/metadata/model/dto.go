@@ -22,6 +22,7 @@ type Field struct {
 	Unique         bool            `json:"unique"`
 	Table          bool            `json:"table"`
 	Form           bool            `json:"form"`
+	Search         bool            `json:"search"`
 	DefaultValue   *sql.NullString `json:"default_value"`
 	Options        *sql.NullString `json:"options"`
 	OrderIndex     int             `json:"order_index"`
@@ -38,6 +39,7 @@ type FieldInput struct {
 	Unique       bool             `json:"unique"`
 	Table        bool             `json:"table"`
 	Form         bool             `json:"form"`
+	Search       bool             `json:"search"`
 	DefaultValue *json.RawMessage `json:"default_value"`
 	Options      *json.RawMessage `json:"options"`
 	OrderIndex   int              `json:"order_index"`

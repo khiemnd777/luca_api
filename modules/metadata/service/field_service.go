@@ -106,6 +106,7 @@ func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.
 		Unique:       in.Unique,
 		Table:        in.Table,
 		Form:         in.Form,
+		Search:       in.Search,
 		DefaultValue: df,
 		Options:      opt,
 		OrderIndex:   in.OrderIndex,
@@ -164,6 +165,7 @@ func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) 
 	cur.Unique = in.Unique
 	cur.Table = in.Table
 	cur.Form = in.Form
+	cur.Search = in.Search
 
 	if in.DefaultValue != nil && len(*in.DefaultValue) > 0 {
 		ns := toNullString(*in.DefaultValue)

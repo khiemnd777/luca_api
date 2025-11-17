@@ -11,6 +11,7 @@ const (
 	TypeMultiSelect FieldType = "multiselect"
 	TypeJSON        FieldType = "json"
 	TypeRichText    FieldType = "richtext"
+	TypeImage       FieldType = "image"
 	TypeRelation    FieldType = "relation" // giữ id / ids trong custom_fields
 )
 
@@ -20,6 +21,9 @@ type FieldDef struct {
 	Type         FieldType      `json:"type"`
 	Required     bool           `json:"required"`
 	Unique       bool           `json:"unique"`
+	Table        bool           `json:"table"`
+	Form         bool           `json:"form"`
+	Search       bool           `json:"search"`
 	DefaultValue any            `json:"default_value"`
 	Options      map[string]any `json:"options"`    // choices/min/max/pattern/...
 	Visibility   string         `json:"visibility"` // public/admin/internal

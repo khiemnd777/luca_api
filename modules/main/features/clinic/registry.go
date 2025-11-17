@@ -19,7 +19,7 @@ func (feature) Priority() int { return 60 }
 
 func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) error {
 	repo := repository.NewClinicRepository(deps.Ent.(*generated.Client), deps, cfMgr)
-	svc := service.NewClinicService(repo, deps)
+	svc := service.NewClinicService(repo, deps, cfMgr)
 	h := handler.NewClinicHandler(svc, deps)
 	h.RegisterRoutes(router)
 	return nil

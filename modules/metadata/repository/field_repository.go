@@ -23,6 +23,7 @@ func (r *FieldRepository) ListByCollectionID(ctx context.Context, collectionID i
 			"unique",
 			"table",
 			form,
+			search,
 			default_value, 
 			options,
 			order_index, 
@@ -50,6 +51,7 @@ func (r *FieldRepository) ListByCollectionID(ctx context.Context, collectionID i
 			&f.Unique,
 			&f.Table,
 			&f.Form,
+			&f.Search,
 			&f.DefaultValue,
 			&f.Options,
 			&f.OrderIndex,
@@ -75,6 +77,7 @@ func (r *FieldRepository) Get(ctx context.Context, id int) (*model.Field, error)
 			"unique",
 			"table",
 			form,
+			search,
 			default_value, 
 			options, 
 			order_index, 
@@ -93,6 +96,7 @@ func (r *FieldRepository) Get(ctx context.Context, id int) (*model.Field, error)
 		&f.Unique,
 		&f.Table,
 		&f.Form,
+		&f.Search,
 		&f.DefaultValue,
 		&f.Options,
 		&f.OrderIndex,
@@ -115,13 +119,14 @@ func (r *FieldRepository) Create(ctx context.Context, f *model.Field) (*model.Fi
 			"unique",
 			"table",
 			form,
+			search,
 			default_value,
 			options,
 			order_index,
 			visibility,
 			relation
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		RETURNING id
 	`,
 		f.CollectionID,
@@ -132,6 +137,7 @@ func (r *FieldRepository) Create(ctx context.Context, f *model.Field) (*model.Fi
 		f.Unique,
 		f.Table,
 		f.Form,
+		f.Search,
 		f.DefaultValue,
 		f.Options,
 		f.OrderIndex,
@@ -154,12 +160,13 @@ func (r *FieldRepository) Update(ctx context.Context, f *model.Field) (*model.Fi
 				"unique"=$5,
 				"table"=$6,
 				form=$7,
-		    default_value=$8, 
-				options=$9, 
-				order_index=$10, 
-				visibility=$11, 
-				relation=$12
-		WHERE id=$13
+				search=$8,
+		    default_value=$9,
+				options=$10,
+				order_index=$11,
+				visibility=$12, 
+				relation=$13
+		WHERE id=$14
 	`,
 		f.Name,
 		f.Label,
@@ -168,6 +175,7 @@ func (r *FieldRepository) Update(ctx context.Context, f *model.Field) (*model.Fi
 		f.Unique,
 		f.Table,
 		f.Form,
+		f.Search,
 		f.DefaultValue,
 		f.Options,
 		f.OrderIndex,
