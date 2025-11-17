@@ -15,7 +15,9 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staffsection"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -36,12 +38,13 @@ type StaffRepository interface {
 }
 
 type staffRepo struct {
-	db   *generated.Client
-	deps *module.ModuleDeps[config.ModuleConfig]
+	db    *generated.Client
+	deps  *module.ModuleDeps[config.ModuleConfig]
+	cfMgr *customfields.Manager
 }
 
-func NewStaffRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig]) StaffRepository {
-	return &staffRepo{db: db, deps: deps}
+func NewStaffRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) StaffRepository {
+	return &staffRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
 func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error) {
@@ -76,9 +79,16 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 		return nil, err
 	}
 
-	staffEnt, err := tx.Staff.Create().
-		SetUserID(userEnt.ID).
-		Save(ctx)
+	staffQ := tx.Staff.Create().
+		SetUserID(userEnt.ID)
+
+	// customfields
+	err = customfields.SetCustomFields(ctx, r.cfMgr, "staff", input.CustomFields, staffQ, false)
+	if err != nil {
+		return nil, err
+	}
+
+	staffEnt, err := staffQ.Save(ctx)
 
 	if err != nil {
 		return nil, err
@@ -158,6 +168,7 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 	dto.SectionIDs = input.SectionIDs
 	dto.SectionNames = sectionNames
 	dto.RoleIDs = input.RoleIDs
+	dto.CustomFields = input.CustomFields
 
 	return dto, nil
 }
@@ -259,9 +270,17 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 		}
 	}
 
-	_, err = tx.Staff.UpdateOneID(staffEnt.ID).
-		SetNillableSectionNames(&sectionNamesStr).
-		Save(ctx)
+	staffQ := tx.Staff.UpdateOneID(staffEnt.ID).
+		SetNillableSectionNames(&sectionNamesStr)
+
+	// customfields
+	logger.Debug(fmt.Sprintf("[STAFF] %v", input.CustomFields))
+	err = customfields.SetCustomFields(ctx, r.cfMgr, "staff", input.CustomFields, staffQ, false)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = staffQ.Save(ctx)
 
 	if err != nil {
 		return nil, err
@@ -284,6 +303,7 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 	dto.SectionIDs = input.SectionIDs
 	dto.SectionNames = sectionNames
 	dto.RoleIDs = input.RoleIDs
+	dto.CustomFields = input.CustomFields
 
 	return dto, nil
 }
@@ -357,6 +377,10 @@ func (r *staffRepo) GetByID(ctx context.Context, id int) (*model.StaffDTO, error
 		dto.SectionNames = sectionNames
 	}
 
+	if staffEnt.CustomFields != nil {
+		dto.CustomFields = staffEnt.CustomFields
+	}
+
 	return dto, nil
 }
 
@@ -390,6 +414,9 @@ func (r *staffRepo) List(ctx context.Context, query table.TableQuery) (table.Tab
 							dto.SectionNames = append(dto.SectionNames, ss.Edges.Section.Name)
 						}
 					}
+
+					// customfields
+					dto.CustomFields = st.CustomFields
 				}
 				out = append(out, dto)
 			}
@@ -440,6 +467,9 @@ func (r *staffRepo) ListBySectionID(ctx context.Context, sectionID int, query ta
 							dto.SectionNames = append(dto.SectionNames, ss.Edges.Section.Name)
 						}
 					}
+
+					// customfields
+					dto.CustomFields = st.CustomFields
 				}
 				out = append(out, dto)
 			}

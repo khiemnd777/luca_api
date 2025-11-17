@@ -18,6 +18,11 @@ func (Staff) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		// JSONB cho custom fields
+		field.JSON("custom_fields", map[string]any{}).
+			Optional().
+			Default(map[string]any{}),
+
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),

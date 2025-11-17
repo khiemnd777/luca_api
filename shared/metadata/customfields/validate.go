@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -124,6 +125,41 @@ func coerceValue(f FieldDef, raw any) (any, error) {
 		if ok, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, s); ok {
 			return s, nil
 		}
+		return nil, ErrInvalidType
+	case TypeDateTime:
+		s := fmt.Sprintf("%v", raw)
+		s = strings.TrimSpace(s)
+
+		if s == "" {
+			return nil, ErrInvalidType
+		}
+
+		// 1. Try RFC3339
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t.Format(time.RFC3339), nil
+		}
+
+		// 2. Try "YYYY-MM-DD HH:MM:SS"
+		if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+			// convert → RFC3339
+			return t.Format(time.RFC3339), nil
+		}
+
+		// 3. Try ISO no-TZ "YYYY-MM-DDTHH:MM:SS"
+		if t, err := time.Parse("2006-01-02T15:04:05", s); err == nil {
+			return t.Format(time.RFC3339), nil
+		}
+
+		// 4. Try "YYYY-MM-DD HH:MM" (không giây)
+		if t, err := time.Parse("2006-01-02 15:04", s); err == nil {
+			return t.Format(time.RFC3339), nil
+		}
+
+		// 5. Try "YYYY-MM-DDTHH:MM"
+		if t, err := time.Parse("2006-01-02T15:04", s); err == nil {
+			return t.Format(time.RFC3339), nil
+		}
+
 		return nil, ErrInvalidType
 	case TypeSelect:
 		return fmt.Sprintf("%v", raw), nil

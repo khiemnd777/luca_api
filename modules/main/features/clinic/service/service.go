@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
@@ -14,6 +13,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/module"
 	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
 	"github.com/khiemnd777/andy_api/shared/pubsub"
+	searchutils "github.com/khiemnd777/andy_api/shared/search"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -123,23 +123,14 @@ func (s *clinicService) Update(ctx context.Context, deptID int, input model.Clin
 }
 
 func (s *clinicService) upsertSearch(ctx context.Context, deptID int, dto *model.ClinicDTO) {
-	var kwParts []string
-	kwParts = append(kwParts, *dto.PhoneNumber)
-
-	if dto.CustomFields != nil {
-		if cfParts, err := s.cfMgr.GetSearchFieldValues(ctx, "clinics", dto.CustomFields); err == nil {
-			kwParts = append(kwParts, cfParts...)
-		}
-	}
-
-	keywordsPtr := strings.Join(kwParts, "|")
+	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "clinic", []any{dto.PhoneNumber}, dto.CustomFields)
 
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "clinic",
 		EntityID:   int64(dto.ID),
 		Title:      dto.Name,
 		Subtitle:   nil,
-		Keywords:   &keywordsPtr,
+		Keywords:   &kwPtr,
 		Content:    utils.Ptr(*dto.Brief),
 		Attributes: map[string]any{
 			"logo": dto.Logo,

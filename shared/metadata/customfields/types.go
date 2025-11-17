@@ -7,6 +7,7 @@ const (
 	TypeNumber      FieldType = "number"
 	TypeBool        FieldType = "bool"
 	TypeDate        FieldType = "date" // ISO-8601 (YYYY-MM-DD) hoặc RFC3339 date-time tùy options
+	TypeDateTime    FieldType = "datetime"
 	TypeSelect      FieldType = "select"
 	TypeMultiSelect FieldType = "multiselect"
 	TypeJSON        FieldType = "json"

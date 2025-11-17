@@ -3,16 +3,17 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/staff/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
 	"github.com/khiemnd777/andy_api/shared/pubsub"
+	searchutils "github.com/khiemnd777/andy_api/shared/search"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -31,12 +32,13 @@ type StaffService interface {
 }
 
 type staffService struct {
-	repo repository.StaffRepository
-	deps *module.ModuleDeps[config.ModuleConfig]
+	repo  repository.StaffRepository
+	deps  *module.ModuleDeps[config.ModuleConfig]
+	cfMgr *customfields.Manager
 }
 
-func NewStaffService(repo repository.StaffRepository, deps *module.ModuleDeps[config.ModuleConfig]) StaffService {
-	return &staffService{repo: repo, deps: deps}
+func NewStaffService(repo repository.StaffRepository, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) StaffService {
+	return &staffService{repo: repo, deps: deps, cfMgr: cfMgr}
 }
 
 func kStaffByID(id int) string {
@@ -111,7 +113,7 @@ func (s *staffService) Create(ctx context.Context, deptID int, input model.Staff
 	}
 
 	// search index
-	upsertSearch(deptID, dto)
+	s.upsertSearch(ctx, deptID, dto)
 
 	return dto, nil
 }
@@ -128,19 +130,20 @@ func (s *staffService) Update(ctx context.Context, deptID int, input model.Staff
 	cache.InvalidateKeys(kStaffAll()...)
 
 	// search index
-	upsertSearch(deptID, dto)
+	s.upsertSearch(ctx, deptID, dto)
 
 	return dto, nil
 }
 
-func upsertSearch(deptID int, dto *model.StaffDTO) {
-	sectionNamesStr := strings.Join(dto.SectionNames, "|")
+func (s *staffService) upsertSearch(ctx context.Context, deptID int, dto *model.StaffDTO) {
+	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "clinic", []any{dto.SectionNames, dto.Phone}, dto.CustomFields)
+
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "staff",
 		EntityID:   int64(dto.ID),
 		Title:      dto.Name,
 		Subtitle:   utils.Ptr(dto.Email),
-		Keywords:   utils.Ptr(sectionNamesStr + "|" + dto.Phone),
+		Keywords:   &kwPtr,
 		Content:    nil,
 		Attributes: map[string]any{
 			"avatar": dto.Avatar,

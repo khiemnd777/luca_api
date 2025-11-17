@@ -3,6 +3,8 @@ package customfields
 import (
 	"context"
 	"fmt"
+
+	"github.com/khiemnd777/andy_api/shared/logger"
 )
 
 type CustomFieldsSetter[T any] interface {
@@ -24,6 +26,7 @@ func SetCustomFields[T CustomFieldsSetter[T]](
 	if len(vr.Errs) > 0 {
 		return fmt.Errorf("validation errors: %v", vr.Errs)
 	}
+	logger.Debug(fmt.Sprintf("[STAFF] VR %v", vr.Clean))
 	builder.SetCustomFields(vr.Clean)
 	return nil
 }
