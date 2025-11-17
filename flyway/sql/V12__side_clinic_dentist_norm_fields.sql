@@ -10,10 +10,10 @@ AS $$ SELECT unaccent('unaccent'::regdictionary, $1) $$;
 ALTER TABLE clinics
   ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(name)))  STORED;
 
-CREATE INDEX IF NOT EXISTS idx_clinic_name_trgm_norm  ON sections USING gin (name_norm gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_clinic_name_trgm_norm  ON clinics USING gin (name_norm gin_trgm_ops);
 
 -- Dentist
 ALTER TABLE dentists
   ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(name)))  STORED;
 
-CREATE INDEX IF NOT EXISTS idx_dentist_name_trgm_norm  ON sections USING gin (name_norm gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_dentist_name_trgm_norm  ON dentists USING gin (name_norm gin_trgm_ops);
