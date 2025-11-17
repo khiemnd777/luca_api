@@ -190,9 +190,11 @@ func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollect
 		return nil, err
 	}
 
-	cache.InvalidateKeys(cacheKeyIDAll(id))
+	cache.InvalidateKeys(cacheKeyIDAll(id), fmt.Sprintf("metadata:schema:i%d", id))
 	if in.Slug != nil {
-		cache.InvalidateKeys(cacheKeySlugAll(*in.Slug))
+		cache.InvalidateKeys(
+			cacheKeySlugAll(*in.Slug),
+		)
 	}
 	cache.InvalidateKeys("collections:list:*")
 
@@ -203,7 +205,10 @@ func (s *CollectionService) Delete(ctx context.Context, id int) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
-	cache.InvalidateKeys(cacheKeyIDAll(id))
+	cache.InvalidateKeys(
+		cacheKeyIDAll(id),
+		fmt.Sprintf("metadata:schema:i%d", id),
+	)
 	cache.InvalidateKeys("collections:list:*")
 	return nil
 }

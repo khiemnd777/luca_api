@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"time"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/gofiber/fiber/v2"
@@ -44,7 +43,7 @@ func main() {
 
 			// Features
 			cfStore := &customfields.PGStore{DB: deps.DB}
-			cfMgr := customfields.NewManager(cfStore, time.Minute*5)
+			cfMgr := customfields.NewManager(cfStore)
 			registry.Init(router, deps, cfMgr, registry.InitOptions{
 				EnabledIDs: deps.Config.Features.Enabled,
 			})

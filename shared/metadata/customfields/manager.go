@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
+
+	"github.com/khiemnd777/andy_api/shared/cache"
 )
 
 var (
@@ -18,10 +19,19 @@ var (
 )
 
 type Store interface {
+	GetIDBySlug(ctx context.Context, slug string) (*int, error)
 	LoadSchema(ctx context.Context, collectionSlug string) (*Schema, error)
 }
 
 type PGStore struct{ DB *sql.DB }
+
+func (s *PGStore) GetIDBySlug(ctx context.Context, slug string) (*int, error) {
+	var collID int
+	if err := s.DB.QueryRowContext(ctx, `SELECT id FROM collections WHERE slug=$1`, slug).Scan(&collID); err != nil {
+		return nil, fmt.Errorf("load collection: %w", err)
+	}
+	return &collID, nil
+}
 
 func (s *PGStore) LoadSchema(ctx context.Context, slug string) (*Schema, error) {
 	var collID int
@@ -57,49 +67,20 @@ func (s *PGStore) LoadSchema(ctx context.Context, slug string) (*Schema, error) 
 	return &Schema{Collection: slug, Fields: defs}, nil
 }
 
-type cacheEntry struct {
-	s   *Schema
-	exp time.Time
-}
-type Cache struct {
-	mu  sync.RWMutex
-	ttl time.Duration
-	m   map[string]cacheEntry
-}
-
-func NewCache(ttl time.Duration) *Cache { return &Cache{ttl: ttl, m: map[string]cacheEntry{}} }
-func (c *Cache) Get(key string) (*Schema, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	it, ok := c.m[key]
-	if !ok || time.Now().After(it.exp) {
-		return nil, false
-	}
-	return it.s, true
-}
-func (c *Cache) Set(key string, s *Schema) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.m[key] = cacheEntry{s: s, exp: time.Now().Add(c.ttl)}
-}
-
 type Manager struct {
 	store Store
-	cache *Cache
 }
 
-func NewManager(store Store, cacheTTL time.Duration) *Manager {
-	return &Manager{store: store, cache: NewCache(cacheTTL)}
+func NewManager(store Store) *Manager {
+	return &Manager{store: store}
 }
 
 func (m *Manager) GetSchema(ctx context.Context, slug string) (*Schema, error) {
-	if s, ok := m.cache.Get(slug); ok {
-		return s, nil
-	}
-	s, err := m.store.LoadSchema(ctx, slug)
+	collID, err := m.store.GetIDBySlug(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
-	m.cache.Set(slug, s)
-	return s, nil
+	return cache.Get(fmt.Sprintf("metadata:schema:i%d", collID), time.Hour*168, func() (*Schema, error) {
+		return m.store.LoadSchema(ctx, slug)
+	})
 }

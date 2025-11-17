@@ -24,6 +24,6 @@ func SetCustomFields[T CustomFieldsSetter[T]](
 	if len(vr.Errs) > 0 {
 		return fmt.Errorf("validation errors: %v", vr.Errs)
 	}
-	builder.SetCustomFields(customFields)
+	builder.SetCustomFields(vr.Clean)
 	return nil
 }

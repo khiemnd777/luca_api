@@ -128,6 +128,7 @@ func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.
 
 	cache.InvalidateKeys(
 		keyFieldsByCollection(in.CollectionID),
+		fmt.Sprintf("metadata:schema:i%d", in.CollectionID),
 		keyCollectionByID(in.CollectionID, true),
 	)
 	cache.InvalidateKeys("collections:slug:*")
@@ -208,11 +209,13 @@ func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) 
 		keyFieldByID(id),
 		keyFieldsByCollection(oldColID),
 		keyCollectionByID(oldColID, true),
+		fmt.Sprintf("metadata:schema:i%d", oldColID),
 	}
 	if cur.CollectionID != oldColID {
 		keys = append(keys,
 			keyFieldsByCollection(cur.CollectionID),
 			keyCollectionByID(cur.CollectionID, true),
+			fmt.Sprintf("metadata:schema:i%d", cur.CollectionID),
 		)
 	}
 	cache.InvalidateKeys(keys...)
@@ -234,6 +237,7 @@ func (s *FieldService) Delete(ctx context.Context, id int) error {
 		keyFieldByID(id),
 		keyFieldsByCollection(cur.CollectionID),
 		keyCollectionByID(cur.CollectionID, true),
+		fmt.Sprintf("metadata:schema:i%d", cur.CollectionID),
 	)
 	cache.InvalidateKeys("collections:slug:*")
 
