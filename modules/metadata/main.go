@@ -42,6 +42,18 @@ func main() {
 			fSvc := service.NewFieldService(fRepo, cltRepo)
 			fH := handler.NewFieldHandler(fSvc, deps)
 			fH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
+
+			// Import Field Profiles
+			ipRepo := repository.NewImportFieldProfileRepository(db)
+			ipSvc := service.NewImportFieldProfileService(ipRepo)
+			ipH := handler.NewImportFieldProfileHandler(ipSvc, deps)
+			ipH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
+
+			// Import Field Mappings
+			imRepo := repository.NewImportFieldMappingRepository(db)
+			imSvc := service.NewImportFieldMappingService(imRepo, ipRepo)
+			imH := handler.NewImportFieldMappingHandler(imSvc, deps)
+			imH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
 		},
 	})
 }
