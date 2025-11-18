@@ -51,3 +51,21 @@ func NormalizeSearchKeyword(s string) string {
 	s = strings.ToLower(s)
 	return RemoveVietnameseDiacritics(s)
 }
+
+func NormalizeSplit(s *string, sep string) []string {
+	raw := ""
+	if s != nil {
+		raw = *s
+	}
+
+	result := make([]string, 0)
+
+	for _, p := range strings.Split(raw, sep) {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+
+	return result
+}
