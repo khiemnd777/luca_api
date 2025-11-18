@@ -10,9 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/metadata/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
-	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/logger"
-	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 )
 
@@ -31,10 +29,6 @@ func (h *ImportHandler) RegisterRoutes(r fiber.Router) {
 }
 
 func (h *ImportHandler) Import(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
-		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
-	}
-
 	scope := c.Query("scope")
 	code := c.Query("code")
 	if scope == "" {
