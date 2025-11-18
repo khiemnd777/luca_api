@@ -54,6 +54,8 @@ func (s *ImportFieldProfileService) Create(ctx context.Context, in model.ImportF
 		Name:        name,
 		Description: nil,
 		IsDefault:   in.IsDefault,
+		PivotField:  in.PivotField,
+		Permission:  in.Permission,
 	}
 	if in.Description != nil && strings.TrimSpace(*in.Description) != "" {
 		s := strings.TrimSpace(*in.Description)
@@ -88,6 +90,18 @@ func (s *ImportFieldProfileService) Update(ctx context.Context, id int, in model
 	}
 	if name := strings.TrimSpace(in.Name); name != "" {
 		cur.Name = name
+	}
+	if in.PivotField != nil && strings.TrimSpace(*in.PivotField) != "" {
+		pf := strings.TrimSpace(*in.PivotField)
+		cur.PivotField = &pf
+	} else {
+		cur.PivotField = nil
+	}
+	if in.Permission != nil && strings.TrimSpace(*in.Permission) != "" {
+		p := strings.TrimSpace(*in.Permission)
+		cur.Permission = &p
+	} else {
+		cur.Permission = nil
 	}
 	if in.Description != nil {
 		if strings.TrimSpace(*in.Description) == "" {

@@ -18,7 +18,7 @@ func (r *ImportFieldProfileRepository) List(ctx context.Context, scope string) (
 	scope = strings.TrimSpace(scope)
 
 	query := `
-		SELECT id, scope, code, name, description, is_default
+		SELECT id, scope, code, name, pivot_field, permission, description, is_default
 		FROM import_field_profiles
 	`
 	args := []any{}
@@ -40,7 +40,7 @@ func (r *ImportFieldProfileRepository) List(ctx context.Context, scope string) (
 			p    model.ImportFieldProfile
 			desc sql.NullString
 		)
-		if err := rows.Scan(&p.ID, &p.Scope, &p.Code, &p.Name, &desc, &p.IsDefault); err != nil {
+		if err := rows.Scan(&p.ID, &p.Scope, &p.Code, &p.Name, &p.PivotField, &p.Permission, &desc, &p.IsDefault); err != nil {
 			return nil, err
 		}
 		if desc.Valid {
@@ -54,7 +54,7 @@ func (r *ImportFieldProfileRepository) List(ctx context.Context, scope string) (
 
 func (r *ImportFieldProfileRepository) Get(ctx context.Context, id int) (*model.ImportFieldProfile, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, scope, code, name, description, is_default
+		SELECT id, scope, code, name, pivot_field, permission, description, is_default
 		FROM import_field_profiles
 		WHERE id = $1
 	`, id)
@@ -63,7 +63,7 @@ func (r *ImportFieldProfileRepository) Get(ctx context.Context, id int) (*model.
 		p    model.ImportFieldProfile
 		desc sql.NullString
 	)
-	if err := row.Scan(&p.ID, &p.Scope, &p.Code, &p.Name, &desc, &p.IsDefault); err != nil {
+	if err := row.Scan(&p.ID, &p.Scope, &p.Code, &p.Name, &p.PivotField, &p.Permission, &desc, &p.IsDefault); err != nil {
 		return nil, err
 	}
 	if desc.Valid {
@@ -73,23 +73,65 @@ func (r *ImportFieldProfileRepository) Get(ctx context.Context, id int) (*model.
 	return &p, nil
 }
 
-func (r *ImportFieldProfileRepository) GetByScopeCode(ctx context.Context, scope, code string) (*model.ImportFieldProfile, error) {
+func (r *ImportFieldProfileRepository) GetByScopeAndCode(ctx context.Context, scope, code string) (*model.ImportFieldProfile, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, scope, code, name, description, is_default
+		SELECT id, scope, code, name, description, is_default, pivot_field, permission
 		FROM import_field_profiles
 		WHERE scope = $1 AND code = $2
 	`, scope, code)
 
 	var (
-		p    model.ImportFieldProfile
-		desc sql.NullString
+		p          model.ImportFieldProfile
+		desc       sql.NullString
+		pivot      sql.NullString
+		permission sql.NullString
 	)
-	if err := row.Scan(&p.ID, &p.Scope, &p.Code, &p.Name, &desc, &p.IsDefault); err != nil {
+	if err := row.Scan(&p.ID, &p.Scope, &p.Code, &p.Name, &desc, &p.IsDefault, &pivot, &permission); err != nil {
 		return nil, err
 	}
 	if desc.Valid {
 		s := desc.String
 		p.Description = &s
+	}
+	if pivot.Valid {
+		s := pivot.String
+		p.PivotField = &s
+	}
+	if permission.Valid {
+		s := permission.String
+		p.Permission = &s
+	}
+	return &p, nil
+}
+
+func (r *ImportFieldProfileRepository) GetDefaultByScope(ctx context.Context, scope string) (*model.ImportFieldProfile, error) {
+	row := r.DB.QueryRowContext(ctx, `
+		SELECT id, scope, code, name, description, is_default, pivot_field, permission
+		FROM import_field_profiles
+		WHERE scope = $1 AND is_default = TRUE
+		LIMIT 1
+	`, scope)
+
+	var (
+		p          model.ImportFieldProfile
+		desc       sql.NullString
+		pivot      sql.NullString
+		permission sql.NullString
+	)
+	if err := row.Scan(&p.ID, &p.Scope, &p.Code, &p.Name, &desc, &p.IsDefault, &pivot, &permission); err != nil {
+		return nil, err
+	}
+	if desc.Valid {
+		s := desc.String
+		p.Description = &s
+	}
+	if pivot.Valid {
+		s := pivot.String
+		p.PivotField = &s
+	}
+	if permission.Valid {
+		s := permission.String
+		p.Permission = &s
 	}
 	return &p, nil
 }
@@ -101,10 +143,10 @@ func (r *ImportFieldProfileRepository) Create(ctx context.Context, p *model.Impo
 	}
 
 	row := r.DB.QueryRowContext(ctx, `
-		INSERT INTO import_field_profiles (scope, code, name, description, is_default)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO import_field_profiles (scope, code, name, pivot_field, permission, description, is_default)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, p.Scope, p.Code, p.Name, desc, p.IsDefault)
+	`, p.Scope, p.Code, p.Name, p.PivotField, p.Permission, desc, p.IsDefault)
 
 	if err := row.Scan(&p.ID); err != nil {
 		return nil, err
@@ -120,9 +162,9 @@ func (r *ImportFieldProfileRepository) Update(ctx context.Context, p *model.Impo
 
 	_, err := r.DB.ExecContext(ctx, `
 		UPDATE import_field_profiles
-		SET scope = $1, code = $2, name = $3, description = $4, is_default = $5
-		WHERE id = $6
-	`, p.Scope, p.Code, p.Name, desc, p.IsDefault, p.ID)
+		SET scope = $1, code = $2, name = $3, pivot_field = $4, permission = $5 , description = $6, is_default = $7
+		WHERE id = $8
+	`, p.Scope, p.Code, p.Name, p.PivotField, p.Permission, desc, p.IsDefault, p.ID)
 	if err != nil {
 		return nil, err
 	}

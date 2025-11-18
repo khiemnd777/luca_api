@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS import_field_profiles (
 
   description TEXT,
   is_default BOOL NOT NULL DEFAULT FALSE,
+  
+  -- identified field
+  pivot_field TEXT, -- ví dụ: 'code', 'tax_code', ...
+  permission TEXT, -- ví dụ: 'staff.import', 'staff.export', ...
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

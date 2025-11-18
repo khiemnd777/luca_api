@@ -54,6 +54,15 @@ func main() {
 			imSvc := service.NewImportFieldMappingService(imRepo, ipRepo)
 			imH := handler.NewImportFieldMappingHandler(imSvc, deps)
 			imH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
+
+			// Import
+			iEn := service.NewImportEngine(db, imSvc)
+			iH := handler.NewImportHandler(iEn, deps)
+			iH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
+
+			//Export
+			eH := handler.NewExportHandler(iEn, deps)
+			eH.RegisterRoutes(app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth()))
 		},
 	})
 }

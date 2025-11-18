@@ -7,6 +7,8 @@ type ImportFieldProfile struct {
 	Name        string  `json:"name"`        // label hiển thị
 	Description *string `json:"description"` // optional
 	IsDefault   bool    `json:"is_default"`
+	PivotField  *string `json:"pivot_field"`
+	Permission  *string `json:"permission"`
 }
 
 type ImportFieldProfileInput struct {
@@ -15,6 +17,8 @@ type ImportFieldProfileInput struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
 	IsDefault   bool    `json:"is_default"`
+	PivotField  *string `json:"pivot_field"`
+	Permission  *string `json:"permission"`
 }
 
 type ImportFieldMapping struct {

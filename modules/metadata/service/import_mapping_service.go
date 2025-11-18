@@ -3,10 +3,14 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/modules/metadata/model"
 	"github.com/khiemnd777/andy_api/modules/metadata/repository"
+	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
+	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
 type ImportFieldMappingService struct {
@@ -192,4 +196,189 @@ func (s *ImportFieldMappingService) Update(ctx context.Context, id int, in model
 
 func (s *ImportFieldMappingService) Delete(ctx context.Context, id int) error {
 	return s.maps.Delete(ctx, id)
+}
+
+func (s *ImportFieldMappingService) ResolveProfileAndMappings(
+	c *fiber.Ctx,
+	ctx context.Context,
+	scope, code string,
+) (*model.ImportFieldProfile, []model.ImportFieldMapping, error) {
+	var prof *model.ImportFieldProfile
+	var err error
+
+	if strings.TrimSpace(code) != "" {
+		prof, err = s.profile.GetByScopeAndCode(ctx, scope, code)
+	} else {
+		prof, err = s.profile.GetDefaultByScope(ctx, scope)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	perms, _ := utils.GetPermSetFromClaims(c)
+	profPerms := utils.NormalizeSplit(prof.Permission, ",")
+	if rbac.HasAnyPerm(perms, profPerms...) {
+		return nil, nil, fmt.Errorf("forbidden: missing permission")
+	}
+
+	mappings, err := s.maps.ListByProfileID(ctx, prof.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(mappings) == 0 {
+		return nil, nil, fmt.Errorf("no mappings for profile_id=%d", prof.ID)
+	}
+	return prof, mappings, nil
+}
+
+func (s *ImportFieldMappingService) parseValue(dataType, raw string) (any, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	switch dataType {
+	case "", "text":
+		return raw, nil
+	case "number":
+		if strings.Contains(raw, ".") {
+			return strconv.ParseFloat(raw, 64)
+		}
+		return strconv.ParseInt(raw, 10, 64)
+	case "boolean", "bool":
+		l := strings.ToLower(raw)
+		return l == "1" || l == "true" || l == "yes", nil
+	case "date", "datetime":
+		return raw, nil
+	default:
+		return raw, nil
+	}
+}
+
+func (s *ImportFieldMappingService) MapExcelRow(
+	ctx context.Context,
+	profileID int,
+	valuesByCol map[int]string,
+) (*model.MappedRow, error) {
+	mappings, err := s.ListByProfileID(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if len(mappings) == 0 {
+		return nil, fmt.Errorf("no mappings found for profile_id=%d", profileID)
+	}
+
+	row := &model.MappedRow{
+		ProfileID:      profileID,
+		CoreFields:     map[string]any{},
+		MetadataFields: map[string]any{},
+		ExternalFields: map[string]any{},
+		Cells:          []model.MappedCell{},
+	}
+
+	for _, m := range mappings {
+		if m.ExcelColumn == nil || *m.ExcelColumn <= 0 {
+			continue
+		}
+
+		colIdx := *m.ExcelColumn
+		raw := strings.TrimSpace(valuesByCol[colIdx])
+
+		cell := model.MappedCell{
+			InternalKind:  m.InternalKind,
+			InternalPath:  m.InternalPath,
+			InternalLabel: m.InternalLabel,
+			DataType:      m.DataType,
+			RawValue:      raw,
+		}
+
+		// parse value theo data_type
+		val, _ := s.parseValue(m.DataType, raw)
+		cell.Value = val
+
+		// 3) đổ vào các map tương ứng
+		switch m.InternalKind {
+		case "core":
+			row.CoreFields[m.InternalPath] = val
+		case "metadata":
+			row.MetadataFields[m.InternalPath] = val
+		case "external":
+			row.ExternalFields[m.InternalPath] = val
+		default:
+			// unknown kind -> bỏ qua, hoặc log nếu cần
+		}
+
+		row.Cells = append(row.Cells, cell)
+	}
+
+	return row, nil
+}
+
+type ExcelRow struct {
+	Columns map[int]any // key: column index 1-based; val: value
+}
+
+func (s *ImportFieldMappingService) BuildHeaderRow(
+	ctx context.Context,
+	profileID int,
+) (*ExcelRow, error) {
+	mappings, err := s.ListByProfileID(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	row := &ExcelRow{Columns: map[int]any{}}
+
+	for _, m := range mappings {
+		if m.ExcelColumn == nil || *m.ExcelColumn <= 0 {
+			continue
+		}
+		col := *m.ExcelColumn
+		header := m.ExcelHeader
+		if header == nil || strings.TrimSpace(*header) == "" {
+			// fallback: internal_label
+			h := m.InternalLabel
+			header = &h
+		}
+		row.Columns[col] = *header
+	}
+	return row, nil
+}
+
+// entityData: gom core + metadata + external thành map (tuỳ bạn)
+type EntityData struct {
+	Core     map[string]any
+	Metadata map[string]any
+	External map[string]any
+}
+
+func (s *ImportFieldMappingService) BuildDataRow(
+	ctx context.Context,
+	profileID int,
+	entity *EntityData,
+) (*ExcelRow, error) {
+	mappings, err := s.ListByProfileID(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	row := &ExcelRow{Columns: map[int]any{}}
+
+	for _, m := range mappings {
+		if m.ExcelColumn == nil || *m.ExcelColumn <= 0 {
+			continue
+		}
+		col := *m.ExcelColumn
+
+		var v any
+		switch m.InternalKind {
+		case "core":
+			v = entity.Core[m.InternalPath]
+		case "metadata":
+			v = entity.Metadata[m.InternalPath]
+		case "external":
+			v = entity.External[m.InternalPath]
+		}
+
+		row.Columns[col] = v
+	}
+	return row, nil
 }
