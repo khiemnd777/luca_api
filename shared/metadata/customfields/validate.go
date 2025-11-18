@@ -101,6 +101,26 @@ func coerceValue(f FieldDef, raw any) (any, error) {
 		default:
 			return nil, ErrInvalidType
 		}
+	case TypeCurrency:
+		switch v := raw.(type) {
+		case float64:
+			return v, nil
+		case int:
+			return float64(v), nil
+		case int64:
+			return float64(v), nil
+		case string:
+			if v == "" {
+				return nil, nil
+			}
+			n, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, ErrInvalidType
+			}
+			return n, nil
+		default:
+			return nil, ErrInvalidType
+		}
 	case TypeBool:
 		switch v := raw.(type) {
 		case bool:

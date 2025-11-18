@@ -5,6 +5,7 @@ type FieldType string
 const (
 	TypeText        FieldType = "text"
 	TypeNumber      FieldType = "number"
+	TypeCurrency    FieldType = "currency"
 	TypeBool        FieldType = "bool"
 	TypeDate        FieldType = "date" // ISO-8601 (YYYY-MM-DD) hoặc RFC3339 date-time tùy options
 	TypeDateTime    FieldType = "datetime"
