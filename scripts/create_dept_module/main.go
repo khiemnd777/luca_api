@@ -745,6 +745,14 @@ ON CONFLICT DO NOTHING;
 `, moduleSnake, structName)
 }
 
+func flywayCollectionsTemplate(moduleSlug, label string) string {
+	return fmt.Sprintf(`INSERT INTO collections (slug, name)
+VALUES ('%s', '%s')
+ON CONFLICT (slug)
+DO UPDATE SET name = EXCLUDED.name;
+`, moduleSlug, label)
+}
+
 func getLastFlywayVersion(dir string) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -779,8 +787,9 @@ func getLastFlywayVersion(dir string) (int, error) {
 // ---------- MAIN ----------
 
 func main() {
-	moduleFlag := flag.String("module", "", "Module name, e.g., clinic, dentist, product")
+	moduleFlag := flag.String("module", "", "Module name, e.g., clinic, dentist,...")
 	ignoreCF := flag.Bool("ignorecf", false, "Ignore CustomFields in DTO")
+	labelFlag := flag.String("label", "", "Label, e.g., Clinic, Dentist,...")
 	flag.Parse()
 
 	if *moduleFlag == "" {
@@ -789,6 +798,12 @@ func main() {
 
 	moduleSnake := strings.ToLower(*moduleFlag)
 	structName := toPascal(moduleSnake)
+
+	// label dùng cho collections.name (nếu không truyền thì fallback = structName)
+	label := strings.TrimSpace(*labelFlag)
+	if label == "" {
+		label = structName
+	}
 
 	// Paths
 	baseDir := filepath.Join("modules", "main", "features", moduleSnake)
@@ -837,7 +852,7 @@ func main() {
 	entPath := filepath.Join(entSchemaDir, "dept_"+moduleSnake+".go")
 	write(entPath, entSchemaTemplate(moduleSnake, structName))
 
-	// Flyway migrations: đọc version cuối cùng và tạo 3 file mới
+	// Flyway migrations: đọc version cuối cùng và tạo 4 + 1 file mới
 	lastVer, err := getLastFlywayVersion(flywayDir)
 	if err != nil {
 		panic(err)
@@ -862,6 +877,11 @@ func main() {
 	rbacVer := cfVer + 1
 	rbacPath := filepath.Join(flywayDir, fmt.Sprintf("V%d__dept_%s_rbac_matrix.sql", rbacVer, moduleSnake))
 	write(rbacPath, flywayRBACMatrixTemplate(moduleSnake, structName))
+
+	// 5) Metadata collections
+	collectionsVer := rbacVer + 1
+	collectionsPath := filepath.Join(flywayDir, fmt.Sprintf("V%d__dept_%s_metadata_collections.sql", collectionsVer, moduleSnake))
+	write(collectionsPath, flywayCollectionsTemplate(moduleSnake, label))
 
 	fmt.Println("✔ Done at", time.Now())
 }
