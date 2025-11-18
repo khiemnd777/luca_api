@@ -122,7 +122,6 @@ func buildSQLOptions[O ~func(*sql.Selector)](table, field string, desc bool, pkF
 		return opts
 	}
 
-	// Mặc định: order theo cột thật
 	makeOne := func(f string, d bool) O {
 		return O(func(s *sql.Selector) {
 			col := s.C(f)
@@ -180,7 +179,6 @@ func TableList[
 	desc := isDesc(opts.Direction)
 	orderOpts := buildSQLOptions[O](table, field, desc, pkField)
 
-	// Query dữ liệu
 	srcItems, err := q.
 		Limit(limit).
 		Offset(offset).
@@ -190,7 +188,6 @@ func TableList[
 		return TableListResult[R]{}, err
 	}
 
-	// Nếu có mapper, thì map sang DTO
 	if mapItems != nil {
 		dstItems := mapItems(srcItems)
 		return TableListResult[R]{Items: dstItems, Total: total}, nil

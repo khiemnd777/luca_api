@@ -41,6 +41,7 @@ import "time"
 type %sDTO struct {
 	ID        int        `+"`json:\"id,omitempty\"`"+`
 	Code      *string    `+"`json:\"code,omitempty\"`"+`
+	Name      *string    `+"`json:\"name,omitempty\"`"+`
 %s	CreatedAt time.Time `+"`json:\"created_at\"`"+`
 	UpdatedAt time.Time `+"`json:\"updated_at\"`"+`
 }
@@ -101,7 +102,8 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input model.{{Module}}
 	}()
 
 	q := tx.{{Module}}.Create().
-		SetNillableCode(input.Code)
+		SetNillableCode(input.Code).
+		SetNillableName(input.Name)
 
 	err = customfields.SetCustomFields(ctx, r.cfMgr, "{{moduleSnake}}", input.CustomFields, q, false)
 	if err != nil {
@@ -131,7 +133,8 @@ func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input model.{{Module}}
 	}()
 
 	q := tx.{{Module}}.UpdateOneID(input.ID).
-		SetNillableCode(input.Code)
+		SetNillableCode(input.Code).
+		SetNillableName(input.Name)
 
 	err = customfields.SetCustomFields(ctx, r.cfMgr, "{{moduleSnake}}", input.CustomFields, q, false)
 	if err != nil {
@@ -190,6 +193,7 @@ func (r *{{moduleSnake}}Repo) Search(ctx context.Context, query dbutils.SearchQu
 			Where({{moduleSnake}}.DeletedAtIsNil()),
 		[]string{
 			dbutils.GetNormField({{moduleSnake}}.FieldCode),
+			dbutils.GetNormField({{moduleSnake}}.FieldName),
 		},
 		query,
 		{{moduleSnake}}.Table,
@@ -341,15 +345,15 @@ func (s *{{moduleSnake}}Service) Update(ctx context.Context, deptID int, input m
 
 func (s *{{moduleSnake}}Service) upsertSearch(ctx context.Context, deptID int, dto *model.{{Module}}DTO) {
 	// Bạn có thể chỉnh lại cho phù hợp với module thực tế (Title/Content/Keywords...).
-	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "{{moduleSnake}}", nil, dto.CustomFields)
+	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "{{moduleSnake}}", []any{dto.Code}, dto.CustomFields)
 
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "{{moduleSnake}}",
 		EntityID:   int64(dto.ID),
-		Title:      "",        // tuỳ module, sửa sau
-		Subtitle:   nil,       // tuỳ module, sửa sau
+		Title:      *dto.Name,
+		Subtitle:   nil,     
 		Keywords:   &kwPtr,
-		Content:    nil,       // tuỳ module, sửa sau
+		Content:    nil,     
 		Attributes: map[string]any{},
 		OrgID:      utils.Ptr(int64(deptID)),
 		OwnerID:    nil,
@@ -629,6 +633,10 @@ func (%s) Fields() []ent.Field {
 			Nillable().
 			Unique(),
 
+		field.String("name").
+			Optional().
+			Nillable(),
+
 		field.Bool("active").
 			Default(true),
 
@@ -655,6 +663,7 @@ func (%s) Indexes() []ent.Index {
 		index.Fields("id", "deleted_at"),
 		index.Fields("code"),
 		index.Fields("code", "deleted_at"),
+		index.Fields("name", "deleted_at"),
 		index.Fields("deleted_at"),
 	}
 }
@@ -672,6 +681,10 @@ func flywayIndexesTemplate(moduleSnake string) string {
 CREATE INDEX IF NOT EXISTS ix_%[1]s_code_not_deleted
   ON %[2]s(code)
   WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS ix_%[1]s_name_not_deleted
+  ON %[2]s(name)
+  WHERE deleted_at IS NULL;
 `, moduleSnake, table)
 }
 
@@ -686,9 +699,11 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURNS NULL ON NULL INPUT
 AS $$ SELECT unaccent('unaccent'::regdictionary, $1) $$;
 
 ALTER TABLE %[2]s
-  ADD COLUMN IF NOT EXISTS code_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(code)))  STORED;
+  ADD COLUMN IF NOT EXISTS code_norm text GENERATED ALWAYS AS (unaccent_immutable(lower(code))) STORED,
+	ADD COLUMN IF NOT EXISTS name_norm text GENERATED ALWAYS AS (unaccent_immutable(lower(name))) STORED;
 
 CREATE INDEX IF NOT EXISTS idx_%[1]s_code_trgm_norm  ON %[2]s USING gin (code_norm gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_%[1]s_name_trgm_norm  ON %[2]s USING gin (name_norm gin_trgm_ops);
 `, moduleSnake, table)
 }
 
@@ -703,7 +718,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_custom_fields_gin ON %s USING GIN (custom_fiel
 }
 
 // NEW: RBAC matrix migration
-func flywayRBACMatrixTemplate(moduleSnake, structName string) string {
+func flywayRBACMatrixTemplate(moduleSnake, labelFlag string) string {
 	return fmt.Sprintf(`-- ============================================
 -- RBAC PERMISSIONS + ADMIN ROLE UPSERT SCRIPT
 -- ============================================
@@ -723,7 +738,9 @@ VALUES
   ('%[2]s - Tạo', '%[1]s.create'),
   ('%[2]s - Sửa', '%[1]s.update'),
   ('%[2]s - Xoá', '%[1]s.delete'),
-  ('%[2]s - Tìm kiếm', '%[1]s.search')
+  ('%[2]s - Tìm kiếm', '%[1]s.search'),
+	('%[2]s - Import', '%[1]s.import'),
+	('%[2]s - Export', '%[1]s.export')
 ON CONFLICT (permission_value)
 DO UPDATE SET permission_name = EXCLUDED.permission_name;
 
@@ -738,11 +755,13 @@ JOIN permissions p ON p.permission_value IN (
   '%[1]s.create',
   '%[1]s.update',
   '%[1]s.delete',
-  '%[1]s.search'
+  '%[1]s.search',
+	'%[1]s.import',
+	'%[1]s.export'
 )
 WHERE r.role_name = 'admin'
 ON CONFLICT DO NOTHING;
-`, moduleSnake, structName)
+`, moduleSnake, labelFlag)
 }
 
 func flywayCollectionsTemplate(moduleSlug, label string) string {
@@ -876,7 +895,7 @@ func main() {
 	// 4) RBAC matrix
 	rbacVer := cfVer + 1
 	rbacPath := filepath.Join(flywayDir, fmt.Sprintf("V%d__dept_%s_rbac_matrix.sql", rbacVer, moduleSnake))
-	write(rbacPath, flywayRBACMatrixTemplate(moduleSnake, structName))
+	write(rbacPath, flywayRBACMatrixTemplate(moduleSnake, label))
 
 	// 5) Metadata collections
 	collectionsVer := rbacVer + 1
