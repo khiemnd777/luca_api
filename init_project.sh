@@ -11,7 +11,7 @@ fi
 
 # Step 1: Generate Ent for shared
 echo "👉 Generating Ent for shared"
-go run -mod=mod entgo.io/ent/cmd/ent generate ./shared/db/ent/schema --target ./shared/db/ent/generated
+go run -mod=mod entgo.io/ent/cmd/ent generate ./shared/db/ent/schema --target ./shared/db/ent/generated --feature sql/execquery
 
 # Step 1.1: Init database
 echo "👉 Initializing database"

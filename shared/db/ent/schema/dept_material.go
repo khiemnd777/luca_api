@@ -17,8 +17,7 @@ func (Material) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("code").
 			Optional().
-			Nillable().
-			Unique(),
+			Nillable(),
 
 		field.String("name").
 			Optional().
@@ -59,7 +58,7 @@ func (Material) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("id", "deleted_at"),
 		index.Fields("code"),
-		index.Fields("code", "deleted_at"),
+		index.Fields("code", "deleted_at").Unique(),
 		index.Fields("name", "deleted_at"),
 		index.Fields("deleted_at"),
 	}

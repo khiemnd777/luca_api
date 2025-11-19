@@ -68,7 +68,7 @@ func generateEntSchema(schema string) {
 
 	targetDir := filepath.Join(".", "shared", "db", "ent", "schema")
 
-	cmd := exec.Command("ent", "new", schema, "--target", targetDir)
+	cmd := exec.Command("ent", "new", schema, "--target", targetDir, "--feature", "sql/execquery")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

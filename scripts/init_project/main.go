@@ -14,7 +14,7 @@ func main() {
 	deleteFolder("vendor")
 
 	// Step 1: Generate Ent for shared
-	run("Generating Ent for shared", "go", "run", "-mod=mod", "entgo.io/ent/cmd/ent", "generate", "./shared/db/ent/schema", "--target", "./shared/db/ent/generated")
+	run("Generating Ent for shared", "go", "run", "-mod=mod", "entgo.io/ent/cmd/ent", "generate", "./shared/db/ent/schema", "--target", "./shared/db/ent/generated", "--feature", "sql/execquery")
 
 	// Step 1.1: Init database
 	run("Initializing database", "go", "run", "./scripts/init_db")

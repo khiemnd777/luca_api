@@ -116,6 +116,12 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input model.{{Module}}
 	}
 
 	dto := mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
+	
+	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input, dto)
+	if err != nil {
+		return nil, err
+	}
+
 	return dto, nil
 }
 
@@ -147,6 +153,12 @@ func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input model.{{Module}}
 	}
 
 	dto := mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
+	
+	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input, dto)
+	if err != nil {
+		return nil, err
+	}
+
 	return dto, nil
 }
 
@@ -630,8 +642,7 @@ func (%s) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("code").
 			Optional().
-			Nillable().
-			Unique(),
+			Nillable(),
 
 		field.String("name").
 			Optional().
@@ -662,7 +673,7 @@ func (%s) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("id", "deleted_at"),
 		index.Fields("code"),
-		index.Fields("code", "deleted_at"),
+		index.Fields("code", "deleted_at").Unique(),
 		index.Fields("name", "deleted_at"),
 		index.Fields("deleted_at"),
 	}

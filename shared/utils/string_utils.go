@@ -69,3 +69,13 @@ func NormalizeSplit(s *string, sep string) []string {
 
 	return result
 }
+
+func Singular(input string) string {
+	if strings.HasSuffix(input, "es") {
+		return input[:len(input)-2]
+	}
+	if strings.HasSuffix(input, "s") {
+		return input[:len(input)-1]
+	}
+	return input
+}
