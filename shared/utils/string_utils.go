@@ -69,3 +69,54 @@ func NormalizeSplit(s *string, sep string) []string {
 
 	return result
 }
+
+func Singular(input string) string {
+	if strings.HasSuffix(input, "es") {
+		return input[:len(input)-2]
+	}
+	if strings.HasSuffix(input, "s") {
+		return input[:len(input)-1]
+	}
+	return input
+}
+
+var commonInitialisms = map[string]bool{
+	"ID":   true,
+	"UUID": true,
+	"URL":  true,
+	"URI":  true,
+	"JSON": true,
+	"HTML": true,
+}
+
+func ToSnake(s string) string {
+	if s == "" {
+		return s
+	}
+
+	if commonInitialisms[s] {
+		return strings.ToLower(s)
+	}
+
+	var out []rune
+	for i, r := range s {
+		if unicode.IsUpper(r) {
+			if i > 0 && out[len(out)-1] != '_' {
+				out = append(out, '_')
+			}
+			out = append(out, unicode.ToLower(r))
+		} else {
+			out = append(out, r)
+		}
+	}
+	return string(out)
+}
+
+func CleanQuote(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*s)
+	v = strings.Trim(v, `"`)
+	return &v
+}

@@ -11,8 +11,8 @@ import (
 
 type CollectionWithFields struct {
 	model.Collection
-	Fields      []model.Field `json:"fields,omitempty"`
-	FieldsCount int           `json:"fields_count,omitempty"`
+	Fields      []*model.FieldDTO `json:"fields,omitempty"`
+	FieldsCount int               `json:"fields_count,omitempty"`
 }
 
 type CollectionRepository struct {
@@ -173,7 +173,7 @@ func (r *CollectionRepository) SlugExists(ctx context.Context, slug string, excl
 	return cnt > 0, nil
 }
 
-func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int, table, form, showHidden bool) ([]model.Field, error) {
+func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int, table, form, showHidden bool) ([]*model.FieldDTO, error) {
 	rows, err := r.DB.QueryContext(ctx, `
 		SELECT 
 			id, 
@@ -227,7 +227,7 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 		}
 		list = append(list, f)
 	}
-	return list, nil
+	return fieldsToDTOs(list), nil
 }
 
 func (r *CollectionRepository) GetFieldCountsBatch(ctx context.Context, collectionIDs []int, table, form bool) (map[int]int, error) {

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
 type ValidateResult struct {
@@ -101,14 +103,14 @@ func coerceValue(f FieldDef, raw any) (any, error) {
 		default:
 			return nil, ErrInvalidType
 		}
-	case TypeCurrency:
+	case TypeCurrency, TypeCurrencyEquation:
 		switch v := raw.(type) {
 		case float64:
-			return v, nil
+			return utils.RoundMoneyVND(v), nil
 		case int:
-			return float64(v), nil
+			return utils.RoundMoneyVND(float64(v)), nil
 		case int64:
-			return float64(v), nil
+			return utils.RoundMoneyVND(float64(v)), nil
 		case string:
 			if v == "" {
 				return nil, nil
@@ -117,7 +119,7 @@ func coerceValue(f FieldDef, raw any) (any, error) {
 			if err != nil {
 				return nil, ErrInvalidType
 			}
-			return n, nil
+			return utils.RoundMoneyVND(n), nil
 		default:
 			return nil, ErrInvalidType
 		}
