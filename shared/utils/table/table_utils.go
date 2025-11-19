@@ -57,6 +57,35 @@ const (
 	MaxLimit     = 200
 )
 
+func BuildOrderSQL(q TableQuery) string {
+	if q.OrderBy == nil || *q.OrderBy == "" {
+		return "ORDER BY id ASC"
+	}
+
+	col := utils.ToSnake(*q.OrderBy)
+
+	dir := strings.ToUpper(q.Direction)
+	if dir != "ASC" && dir != "DESC" {
+		dir = "ASC"
+	}
+
+	return fmt.Sprintf("ORDER BY %s %s", col, dir)
+}
+
+func BuildLimitSQL(q TableQuery) string {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+
+	offset := q.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	return fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+}
+
 // ====== Helpers ======
 func normalizePaging(limit, offset int) (int, int) {
 	if limit <= 0 {

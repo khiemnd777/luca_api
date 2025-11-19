@@ -79,3 +79,35 @@ func Singular(input string) string {
 	}
 	return input
 }
+
+var commonInitialisms = map[string]bool{
+	"ID":   true,
+	"UUID": true,
+	"URL":  true,
+	"URI":  true,
+	"JSON": true,
+	"HTML": true,
+}
+
+func ToSnake(s string) string {
+	if s == "" {
+		return s
+	}
+
+	if commonInitialisms[s] {
+		return strings.ToLower(s)
+	}
+
+	var out []rune
+	for i, r := range s {
+		if unicode.IsUpper(r) {
+			if i > 0 && out[len(out)-1] != '_' {
+				out = append(out, '_')
+			}
+			out = append(out, unicode.ToLower(r))
+		} else {
+			out = append(out, r)
+		}
+	}
+	return string(out)
+}

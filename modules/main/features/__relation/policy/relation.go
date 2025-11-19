@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -32,7 +33,7 @@ func Register(key string, cfg Config) {
 	registry[key] = cfg
 }
 
-func getConfig(key string) (Config, error) {
+func GetConfig(key string) (Config, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	cfg, ok := registry[key]
@@ -50,7 +51,7 @@ func Upsert(
 	input any,
 	output any,
 ) ([]string, error) {
-	cfg, err := getConfig(key)
+	cfg, err := GetConfig(key)
 	if err != nil {
 		return nil, nil
 	}
@@ -200,9 +201,16 @@ func Upsert(
 	}
 
 	// 5) Set result to output
-	err = cfg.SetResult(output, names)
+	err = cfg.SetResult(output, ids, &namesStr, names)
 	if err != nil {
 		return nil, fmt.Errorf("relation.Upsert(%s): SetResult: %w", key, err)
+	}
+
+	// 6) Invalidate
+	if cfg.GetRefList != nil {
+		if cfg.GetRefList.CachePrefix != "" {
+			cache.InvalidateKeys(fmt.Sprintf(cfg.GetRefList.CachePrefix+":%s:%d:*", key, mainID))
+		}
 	}
 
 	return names, nil

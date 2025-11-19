@@ -1,5 +1,11 @@
 package relation
 
+type RefListConfig struct {
+	Permissions []string
+	RefDTO      any
+	CachePrefix string
+}
+
 type Config struct {
 	// Schema
 	MainTable string // ví dụ: "materials"
@@ -10,5 +16,7 @@ type Config struct {
 	// input:  struct chứa danh sách IDs (vd: SupplierIDs)
 	GetMainID func(entity any) (int, error)
 	GetIDs    func(input any) ([]int, error)
-	SetResult func(output any, res []string) error
+	SetResult func(output any, resIDs []int, resAsStr *string, res []string) error
+
+	GetRefList *RefListConfig
 }

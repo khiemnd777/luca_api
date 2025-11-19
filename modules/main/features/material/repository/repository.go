@@ -62,59 +62,6 @@ func (r *materialRepo) Create(ctx context.Context, input model.MaterialDTO) (*mo
 		return nil, err
 	}
 
-	// Edge
-	// var supplierNames []string
-	// var supplierNamesStr string
-
-	// if input.SupplierIDs != nil {
-	// 	supplierIDs := utils.DedupInt(input.SupplierIDs, -1)
-	// 	if len(supplierIDs) > 0 {
-	// 		bulk := make([]*generated.MaterialSupplierCreate, 0, len(supplierIDs))
-	// 		for _, sid := range supplierIDs {
-	// 			bulk = append(bulk, tx.MaterialSupplier.Create().
-	// 				SetMaterialID(entity.ID).
-	// 				SetSupplierID(sid),
-	// 			)
-	// 		}
-	// 		if err = tx.MaterialSupplier.CreateBulk(bulk...).Exec(ctx); err != nil {
-	// 			return nil, err
-	// 		}
-
-	// 		// get supplier names
-	// 		rows := make([]struct {
-	// 			ID   int    `json:"id"`
-	// 			Name string `json:"name"`
-	// 		}, 0, len(supplierIDs))
-
-	// 		if err := tx.Supplier.
-	// 			Query().
-	// 			Where(supplier.IDIn(supplierIDs...)).
-	// 			Select(supplier.FieldID, section.FieldName).
-	// 			Scan(ctx, &rows); err != nil {
-	// 			return nil, err
-	// 		}
-
-	// 		// map id -> name
-	// 		nameByID := make(map[int]string, len(rows))
-	// 		for _, r := range rows {
-	// 			nameByID[r.ID] = r.Name
-	// 		}
-
-	// 		supplierNames = make([]string, 0, len(supplierIDs))
-	// 		for _, id := range supplierIDs {
-	// 			if n, ok := nameByID[id]; ok {
-	// 				supplierNames = append(supplierNames, n)
-	// 			}
-	// 		}
-
-	// 		supplierNamesStr = strings.Join(supplierNames, "|")
-	// 	}
-	// }
-
-	// _, err = tx.Material.UpdateOneID(entity.ID).
-	// 	SetNillableSupplierNames(&supplierNamesStr).
-	// 	Save(ctx)
-
 	dto := mapper.MapAs[*generated.Material, *model.MaterialDTO](entity)
 
 	_, err = relation.Upsert(ctx, tx, "material", entity, input, dto)
@@ -151,66 +98,6 @@ func (r *materialRepo) Update(ctx context.Context, input model.MaterialDTO) (*mo
 	if err != nil {
 		return nil, err
 	}
-
-	// var supplierNames []string
-	// var supplierNamesStr string
-
-	// if input.SupplierIDs != nil {
-	// 	supplierIDs := utils.DedupInt(input.SupplierIDs, -1)
-
-	// 	if _, err = tx.MaterialSupplier.
-	// 		Delete().
-	// 		Where(materialsupplier.MaterialIDEQ(entity.ID)).
-	// 		Exec(ctx); err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	if len(supplierIDs) > 0 {
-	// 		bulk := make([]*generated.MaterialSupplierCreate, 0, len(supplierIDs))
-	// 		for _, sid := range supplierIDs {
-	// 			bulk = append(bulk, tx.MaterialSupplier.Create().
-	// 				SetMaterialID(entity.ID).
-	// 				SetSupplierID(sid),
-	// 			)
-	// 		}
-	// 		if err = tx.MaterialSupplier.CreateBulk(bulk...).Exec(ctx); err != nil {
-	// 			return nil, err
-	// 		}
-
-	// 		// get supplier names
-	// 		rows := make([]struct {
-	// 			ID   int    `json:"id"`
-	// 			Name string `json:"name"`
-	// 		}, 0, len(supplierIDs))
-
-	// 		if err := tx.Supplier.
-	// 			Query().
-	// 			Where(supplier.IDIn(supplierIDs...)).
-	// 			Select(supplier.FieldID, section.FieldName).
-	// 			Scan(ctx, &rows); err != nil {
-	// 			return nil, err
-	// 		}
-
-	// 		// map id -> name
-	// 		nameByID := make(map[int]string, len(rows))
-	// 		for _, r := range rows {
-	// 			nameByID[r.ID] = r.Name
-	// 		}
-
-	// 		supplierNames = make([]string, 0, len(supplierIDs))
-	// 		for _, id := range supplierIDs {
-	// 			if n, ok := nameByID[id]; ok {
-	// 				supplierNames = append(supplierNames, n)
-	// 			}
-	// 		}
-
-	// 		supplierNamesStr = strings.Join(supplierNames, "|")
-	// 	}
-	// }
-
-	// _, err = tx.Material.UpdateOneID(entity.ID).
-	// 	SetNillableSupplierNames(&supplierNamesStr).
-	// 	Save(ctx)
 
 	dto := mapper.MapAs[*generated.Material, *model.MaterialDTO](entity)
 	_, err = relation.Upsert(ctx, tx, "material", entity, input, dto)
