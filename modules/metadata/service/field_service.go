@@ -36,18 +36,14 @@ func keyFieldByID(id int) string {
 	return fmt.Sprintf("fields:id:%d", id)
 }
 
-// Trùng format với phần CollectionService đã cache trước đó:
 func keyCollectionByID(id int, withFields bool) string {
 	return fmt.Sprintf("collections:id:%d:f=%t", id, withFields)
 }
-func keyCollectionBySlug(slug string, withFields bool) string {
-	return fmt.Sprintf("collections:slug:%s:f=%t", normalizeSlug(slug), withFields)
-}
 
-func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) ([]model.Field, error) {
+func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) ([]*model.FieldDTO, error) {
 	key := keyFieldsByCollection(collectionID)
 
-	type fieldList = []model.Field
+	type fieldList = []*model.FieldDTO
 	list, err := cache.Get(key, ttlFieldList, func() (*fieldList, error) {
 		items, err := s.fields.ListByCollectionID(ctx, collectionID)
 		if err != nil {
@@ -62,14 +58,14 @@ func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) (
 	return *list, nil
 }
 
-func (s *FieldService) Get(ctx context.Context, id int) (*model.Field, error) {
+func (s *FieldService) Get(ctx context.Context, id int) (*model.FieldDTO, error) {
 	key := keyFieldByID(id)
-	return cache.Get(key, ttlFieldItem, func() (*model.Field, error) {
+	return cache.Get(key, ttlFieldItem, func() (*model.FieldDTO, error) {
 		return s.fields.Get(ctx, id)
 	})
 }
 
-func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.Field, error) {
+func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.FieldDTO, error) {
 	if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true); err != nil {
 		return nil, fmt.Errorf("collection not found")
 	}
@@ -137,8 +133,8 @@ func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.
 	return created, nil
 }
 
-func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) (*model.Field, error) {
-	cur, err := s.fields.Get(ctx, id)
+func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) (*model.FieldDTO, error) {
+	cur, err := s.fields.GetRaw(ctx, id)
 	if err != nil {
 		return nil, err
 	}

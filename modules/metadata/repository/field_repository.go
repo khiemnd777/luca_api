@@ -5,13 +5,59 @@ import (
 	"database/sql"
 
 	"github.com/khiemnd777/andy_api/modules/metadata/model"
+	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
 type FieldRepository struct{ DB *sql.DB }
 
 func NewFieldRepository(db *sql.DB) *FieldRepository { return &FieldRepository{DB: db} }
 
-func (r *FieldRepository) ListByCollectionID(ctx context.Context, collectionID int) ([]model.Field, error) {
+func fieldToDTO(f *model.Field) *model.FieldDTO {
+	var dv *string
+	if f.DefaultValue != nil && f.DefaultValue.Valid {
+		dv = utils.CleanQuote(&f.DefaultValue.String)
+	}
+
+	var opt *string
+	if f.Options != nil && f.Options.Valid {
+		utils.CleanQuote(&f.Options.String)
+	}
+
+	var rel *string
+	if f.Relation != nil && f.Relation.Valid {
+		rel = utils.CleanQuote(&f.Relation.String)
+	}
+
+	return &model.FieldDTO{
+		ID:             f.ID,
+		CollectionID:   f.CollectionID,
+		CollectionSlug: f.CollectionSlug,
+		Name:           f.Name,
+		Label:          f.Label,
+		Type:           f.Type,
+		Required:       f.Required,
+		Unique:         f.Unique,
+		Table:          f.Table,
+		Form:           f.Form,
+		Search:         f.Search,
+		DefaultValue:   dv,
+		Options:        opt,
+		OrderIndex:     f.OrderIndex,
+		Visibility:     f.Visibility,
+		Relation:       rel,
+	}
+}
+
+func fieldsToDTOs(list []model.Field) []*model.FieldDTO {
+	out := make([]*model.FieldDTO, 0, len(list))
+	for i := range list {
+		dto := fieldToDTO(&list[i])
+		out = append(out, dto)
+	}
+	return out
+}
+
+func (r *FieldRepository) ListByCollectionID(ctx context.Context, collectionID int) ([]*model.FieldDTO, error) {
 	rows, err := r.DB.QueryContext(ctx, `
 		SELECT 
 			id, 
@@ -62,10 +108,19 @@ func (r *FieldRepository) ListByCollectionID(ctx context.Context, collectionID i
 		}
 		out = append(out, f)
 	}
-	return out, rows.Err()
+
+	return fieldsToDTOs(out), rows.Err()
 }
 
-func (r *FieldRepository) Get(ctx context.Context, id int) (*model.Field, error) {
+func (r *FieldRepository) Get(ctx context.Context, id int) (*model.FieldDTO, error) {
+	f, err := r.GetRaw(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return fieldToDTO(f), nil
+}
+
+func (r *FieldRepository) GetRaw(ctx context.Context, id int) (*model.Field, error) {
 	row := r.DB.QueryRowContext(ctx, `
 		SELECT 
 			id, 
@@ -105,10 +160,11 @@ func (r *FieldRepository) Get(ctx context.Context, id int) (*model.Field, error)
 	); err != nil {
 		return nil, err
 	}
+
 	return &f, nil
 }
 
-func (r *FieldRepository) Create(ctx context.Context, f *model.Field) (*model.Field, error) {
+func (r *FieldRepository) Create(ctx context.Context, f *model.Field) (*model.FieldDTO, error) {
 	row := r.DB.QueryRowContext(ctx, `
 		INSERT INTO fields (
 			collection_id,
@@ -147,10 +203,10 @@ func (r *FieldRepository) Create(ctx context.Context, f *model.Field) (*model.Fi
 	if err := row.Scan(&f.ID); err != nil {
 		return nil, err
 	}
-	return f, nil
+	return fieldToDTO(f), nil
 }
 
-func (r *FieldRepository) Update(ctx context.Context, f *model.Field) (*model.Field, error) {
+func (r *FieldRepository) Update(ctx context.Context, f *model.Field) (*model.FieldDTO, error) {
 	_, err := r.DB.ExecContext(ctx, `
 		UPDATE fields
 		SET name=$1, 
@@ -186,7 +242,7 @@ func (r *FieldRepository) Update(ctx context.Context, f *model.Field) (*model.Fi
 	if err != nil {
 		return nil, err
 	}
-	return f, nil
+	return fieldToDTO(f), nil
 }
 
 func (r *FieldRepository) Delete(ctx context.Context, id int) error {

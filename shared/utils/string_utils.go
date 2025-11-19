@@ -111,3 +111,12 @@ func ToSnake(s string) string {
 	}
 	return string(out)
 }
+
+func CleanQuote(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*s)
+	v = strings.Trim(v, `"`)
+	return &v
+}

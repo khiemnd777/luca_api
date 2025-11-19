@@ -30,6 +30,25 @@ type Field struct {
 	Relation       *sql.NullString `json:"relation"`
 }
 
+type FieldDTO struct {
+	ID             int     `json:"id"`
+	CollectionID   int     `json:"collection_id"`
+	CollectionSlug string  `json:"collection_slug"`
+	Name           string  `json:"name"`
+	Label          string  `json:"label"`
+	Type           string  `json:"type"`
+	Required       bool    `json:"required"`
+	Unique         bool    `json:"unique"`
+	Table          bool    `json:"table"`
+	Form           bool    `json:"form"`
+	Search         bool    `json:"search"`
+	DefaultValue   *string `json:"default_value"`
+	Options        *string `json:"options"`
+	OrderIndex     int     `json:"order_index"`
+	Visibility     string  `json:"visibility"`
+	Relation       *string `json:"relation"`
+}
+
 type FieldInput struct {
 	CollectionID int              `json:"collection_id"`
 	Name         string           `json:"name"`
