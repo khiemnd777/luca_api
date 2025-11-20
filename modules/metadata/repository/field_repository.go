@@ -15,17 +15,17 @@ func NewFieldRepository(db *sql.DB) *FieldRepository { return &FieldRepository{D
 func fieldToDTO(f *model.Field) *model.FieldDTO {
 	var dv *string
 	if f.DefaultValue != nil && f.DefaultValue.Valid {
-		dv = utils.CleanQuote(&f.DefaultValue.String)
+		dv = utils.CleanJSON(&f.DefaultValue.String)
 	}
 
 	var opt *string
 	if f.Options != nil && f.Options.Valid {
-		utils.CleanQuote(&f.Options.String)
+		opt = utils.CleanJSON(&f.Options.String)
 	}
 
 	var rel *string
 	if f.Relation != nil && f.Relation.Valid {
-		rel = utils.CleanQuote(&f.Relation.String)
+		rel = utils.CleanJSON(&f.Relation.String)
 	}
 
 	return &model.FieldDTO{

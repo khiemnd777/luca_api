@@ -4,6 +4,8 @@ type FieldType string
 
 const (
 	TypeText             FieldType = "text"
+	TypeTextArea         FieldType = "textarea"
+	TypeEmail            FieldType = "email"
 	TypeNumber           FieldType = "number"
 	TypeCurrency         FieldType = "currency"
 	TypeCurrencyEquation FieldType = "currency_equation"

@@ -81,7 +81,7 @@ func (m *Manager) Validate(ctx context.Context, slug string, incoming map[string
 
 func coerceValue(f FieldDef, raw any) (any, error) {
 	switch f.Type {
-	case TypeText, TypeRichText, TypeRelation, TypeImage:
+	case TypeText, TypeRichText, TypeTextArea, TypeRelation, TypeImage, TypeEmail:
 		return fmt.Sprintf("%v", raw), nil
 	case TypeNumber:
 		switch v := raw.(type) {
