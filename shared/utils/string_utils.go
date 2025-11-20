@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -119,4 +120,22 @@ func CleanQuote(s *string) *string {
 	v := strings.TrimSpace(*s)
 	v = strings.Trim(v, `"`)
 	return &v
+}
+
+func CleanJSONEscape(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := *s
+	unescaped, err := strconv.Unquote(`"` + v + `"`)
+	if err != nil {
+		return &v
+	}
+	return &unescaped
+}
+
+func CleanJSON(s *string) *string {
+	s = CleanQuote(s)
+	s = CleanJSONEscape(s)
+	return s
 }
