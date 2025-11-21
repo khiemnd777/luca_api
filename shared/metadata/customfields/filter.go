@@ -92,7 +92,7 @@ func LookupNestedField(data any, path string) any {
 	parts := strings.Split(path, ".")
 	current := data
 
-	for _, key := range parts {
+	for i, key := range parts {
 
 		if current == nil {
 			return nil
@@ -106,6 +106,17 @@ func LookupNestedField(data any, path string) any {
 				return nil
 			}
 			val = val.Elem()
+		}
+
+		// -----------------------------
+		// "a.b"
+		// -----------------------------
+		if val.Kind() == reflect.Map && i == 0 {
+			fullKey := reflect.ValueOf(path)
+			mv := val.MapIndex(fullKey)
+			if mv.IsValid() {
+				return mv.Interface()
+			}
 		}
 
 		switch val.Kind() {

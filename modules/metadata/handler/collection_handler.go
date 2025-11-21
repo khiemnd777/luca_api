@@ -98,22 +98,33 @@ func (h *CollectionHandler) GetAvailableOne(c *fiber.Ctx) error {
 	form := c.QueryBool("form", false)
 	idOrSlug := c.Params("idOrSlug")
 
-	var entitydata *map[string]any
+	var entityData map[string]any
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&entityData); err != nil {
+			return client_error.ResponseError(
+				c,
+				fiber.StatusBadRequest,
+				err,
+				"invalid body",
+			)
+		}
+	}
 
-	if err := c.BodyParser(entitydata); err != nil {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+	var entityPtr *map[string]any
+	if entityData != nil {
+		entityPtr = &entityData
 	}
 
 	// ID
 	if id, err := strconv.Atoi(idOrSlug); err == nil {
-		out, err := h.svc.GetAvailableByID(c.UserContext(), id, withFields, table, form, entitydata)
+		out, err := h.svc.GetAvailableByID(c.UserContext(), id, withFields, table, form, entityPtr)
 		if err != nil {
 			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 		}
 		return c.JSON(out)
 	}
 	// slug
-	out, err := h.svc.GetByAvailableSlug(c.UserContext(), idOrSlug, withFields, table, form, entitydata)
+	out, err := h.svc.GetByAvailableSlug(c.UserContext(), idOrSlug, withFields, table, form, entityPtr)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

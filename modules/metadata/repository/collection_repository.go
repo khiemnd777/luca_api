@@ -47,6 +47,7 @@ func evaluateShowIf(result *CollectionWithFields, entityData *map[string]any) *C
 		if err := json.Unmarshal([]byte(*result.ShowIf), &cond); err == nil {
 			ok := customfields.EvaluateShowIf(&cond, *entityData)
 			if !ok {
+				result.Fields = nil
 				return result
 			}
 		}
