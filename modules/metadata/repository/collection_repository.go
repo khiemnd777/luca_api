@@ -3,14 +3,18 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/khiemnd777/andy_api/modules/metadata/model"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
+	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/lib/pq"
 )
 
 type CollectionWithFields struct {
-	model.Collection
+	model.CollectionDTO
 	Fields      []*model.FieldDTO `json:"fields,omitempty"`
 	FieldsCount int               `json:"fields_count,omitempty"`
 }
@@ -21,6 +25,34 @@ type CollectionRepository struct {
 
 func NewCollectionRepository(db *sql.DB) *CollectionRepository {
 	return &CollectionRepository{DB: db}
+}
+
+func colToDTO(c *model.Collection) *model.CollectionDTO {
+	var sif *string
+	if c.ShowIf != nil && c.ShowIf.Valid {
+		sif = utils.CleanJSON(&c.ShowIf.String)
+	}
+
+	return &model.CollectionDTO{
+		ID:     c.ID,
+		Slug:   c.Slug,
+		Name:   c.Name,
+		ShowIf: sif,
+	}
+}
+
+func evaluateShowIf(result *CollectionWithFields, entityData *map[string]any) *CollectionWithFields {
+	if entityData != nil && result.ShowIf != nil && *result.ShowIf != "" {
+		var cond customfields.ShowIfCondition
+		if err := json.Unmarshal([]byte(*result.ShowIf), &cond); err == nil {
+			ok := customfields.EvaluateShowIf(&cond, *entityData)
+			if !ok {
+				return result
+			}
+		}
+	}
+
+	return result
 }
 
 func (r *CollectionRepository) List(ctx context.Context, query string, limit, offset int, withFields, table, form bool) ([]CollectionWithFields, int, error) {
@@ -34,7 +66,7 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 
 	rows, err := r.DB.QueryContext(ctx,
 		fmt.Sprintf(`
-			SELECT id, slug, name
+			SELECT id, slug, name, show_if
 			FROM collections
 			%s
 			ORDER BY slug ASC
@@ -48,10 +80,12 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 
 	for rows.Next() {
 		var c model.Collection
-		if err := rows.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
+		if err := rows.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
 			return nil, 0, err
 		}
-		list = append(list, CollectionWithFields{Collection: c})
+		coldto := colToDTO(&c)
+
+		list = append(list, CollectionWithFields{CollectionDTO: *coldto})
 	}
 
 	// count
@@ -85,73 +119,116 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 	return list, total, nil
 }
 
-func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields, table, form, showHidden bool) (*CollectionWithFields, error) {
+func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name FROM collections WHERE slug = $1
+		SELECT id, slug, name, show_if FROM collections WHERE slug = $1
 	`, slug)
+
 	var c model.Collection
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
+
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
 		return nil, err
 	}
 
-	result := &CollectionWithFields{Collection: c}
+	coldto := colToDTO(&c)
+
+	result := &CollectionWithFields{CollectionDTO: *coldto}
 	if withFields {
 		fields, _ := r.GetFieldsByCollectionID(ctx, c.ID, table, form, showHidden)
 		result.Fields = fields
 	}
+
+	result = evaluateShowIf(result, entityData)
+
 	return result, nil
 }
 
-func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields, table, form, showHidden bool) (*CollectionWithFields, error) {
+func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name FROM collections WHERE id = $1
+		SELECT id, slug, name, show_if FROM collections WHERE id = $1
 	`, id)
 	var c model.Collection
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
-		return nil, err
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
+		return nil,
+			err
 	}
-	result := &CollectionWithFields{Collection: c}
+
+	coldto := colToDTO(&c)
+
+	result := &CollectionWithFields{CollectionDTO: *coldto}
 	if withFields {
 		fields, _ := r.GetFieldsByCollectionID(ctx, id, table, form, showHidden)
 		result.Fields = fields
 	}
+
+	result = evaluateShowIf(result, entityData)
+
 	return result, nil
 }
 
-func (r *CollectionRepository) Create(ctx context.Context, slug, name string) (*model.Collection, error) {
+func (r *CollectionRepository) Create(ctx context.Context, slug, name string, showIf *sql.NullString) (*model.CollectionDTO, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		INSERT INTO collections (slug, name) VALUES ($1, $2) RETURNING id, slug, name
-	`, slug, name)
+		INSERT INTO collections (slug, name, show_if) VALUES ($1, $2, $3) RETURNING id, slug, name, show_if
+	`, slug, name, showIf)
 	var c model.Collection
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
 		return nil, err
 	}
-	return &c, nil
+	dto := colToDTO(&c)
+	return dto, nil
 }
 
-func (r *CollectionRepository) Update(ctx context.Context, id int, slug, name *string) (*model.Collection, error) {
-	q := "UPDATE collections SET "
+func (r *CollectionRepository) Update(
+	ctx context.Context,
+	id int,
+	slug, name *string,
+	showIf *sql.NullString,
+) (*model.CollectionDTO, error) {
+
+	setParts := []string{}
 	args := []any{}
+
+	// slug
 	if slug != nil {
-		q += "slug=$1"
+		setParts = append(setParts, fmt.Sprintf("slug=$%d", len(args)+1))
 		args = append(args, *slug)
 	}
-	if name != nil {
-		if len(args) > 0 {
-			q += ", "
-		}
-		args = append(args, *name)
-		q += fmt.Sprintf("name=$%d", len(args))
-	}
-	args = append(args, id)
-	q += fmt.Sprintf(" WHERE id=$%d RETURNING id, slug, name", len(args))
 
-	row := r.DB.QueryRowContext(ctx, q, args...)
+	// name
+	if name != nil {
+		setParts = append(setParts, fmt.Sprintf("name=$%d", len(args)+1))
+		args = append(args, *name)
+	}
+
+	// show_if
+	if showIf != nil {
+		setParts = append(setParts, fmt.Sprintf("show_if=$%d", len(args)+1))
+		args = append(args, *showIf)
+	}
+
+	if len(setParts) == 0 {
+		return nil, fmt.Errorf("nothing to update")
+	}
+
+	// WHERE id = ...
+	args = append(args, id)
+	wherePos := len(args)
+
+	query := fmt.Sprintf(`
+		UPDATE collections
+		SET %s
+		WHERE id=$%d
+		RETURNING id, slug, name, show_if
+	`, strings.Join(setParts, ", "), wherePos)
+
+	row := r.DB.QueryRowContext(ctx, query, args...)
+
 	var c model.Collection
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name); err != nil {
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
 		return nil, err
 	}
-	return &c, nil
+
+	return colToDTO(&c), nil
 }
 
 func (r *CollectionRepository) Delete(ctx context.Context, id int) error {

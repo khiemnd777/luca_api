@@ -1,5 +1,13 @@
 package customfields
 
+type ShowIfCondition struct {
+	Field string            `json:"field"`
+	Op    string            `json:"op"`
+	Value any               `json:"value,omitempty"`
+	All   []ShowIfCondition `json:"all,omitempty"`
+	Any   []ShowIfCondition `json:"any,omitempty"`
+}
+
 type FieldType string
 
 const (

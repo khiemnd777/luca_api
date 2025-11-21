@@ -10,43 +10,43 @@ import (
 )
 
 func init() {
-	logger.Debug("[RELATION] Register materials - suppliers")
-	policy.Register("material",
+	logger.Debug("[RELATION] Register products - processes")
+	policy.Register("product",
 		policy.Config{
-			MainTable: "materials",
-			RefTable:  "suppliers",
+			MainTable: "products",
+			RefTable:  "processes",
 
 			GetMainID: func(entity any) (int, error) {
-				e, ok := entity.(*generated.Material)
+				e, ok := entity.(*generated.Product)
 				if !ok || e == nil {
-					return 0, fmt.Errorf("relation material: entity is not *generated.Material")
+					return 0, fmt.Errorf("relation product: entity is not *generated.Product")
 				}
 				return e.ID, nil
 			},
 
 			GetIDs: func(input any) ([]int, error) {
-				in, ok := input.(model.MaterialDTO)
+				in, ok := input.(model.ProductDTO)
 				if !ok {
-					return nil, fmt.Errorf("relation material: input is not *model.MaterialDTO")
+					return nil, fmt.Errorf("relation product: input is not *model.ProductDTO")
 				}
-				return in.SupplierIDs, nil
+				return in.ProcessIDs, nil
 			},
 
 			SetResult: func(output any, ids []int, resStr *string, res []string) error {
-				out, ok := output.(*model.MaterialDTO)
+				out, ok := output.(*model.ProductDTO)
 				if !ok || out == nil {
-					return fmt.Errorf("relation material: output is not *model.MaterialDTO")
+					return fmt.Errorf("relation product: output is not *model.ProductDTO")
 				}
 
-				out.SupplierNames = resStr
+				out.ProcessNames = resStr
 
 				return nil
 			},
 
 			GetRefList: &policy.RefListConfig{
-				Permissions: []string{"supplier.view"},
-				RefDTO:      model.SupplierDTO{},
-				CachePrefix: "supplier:list",
+				Permissions: []string{"process.view"},
+				RefDTO:      model.ProcessDTO{},
+				CachePrefix: "process:list",
 			},
 		},
 	)

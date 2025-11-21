@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -63,13 +65,15 @@ type ListCollectionsInput struct {
 }
 
 type CreateCollectionInput struct {
-	Slug string `json:"slug"`
-	Name string `json:"name"`
+	Slug   string           `json:"slug"`
+	Name   string           `json:"name"`
+	ShowIf *json.RawMessage `json:"show_if"`
 }
 
 type UpdateCollectionInput struct {
-	Slug *string `json:"slug"`
-	Name *string `json:"name"`
+	Slug   *string          `json:"slug"`
+	Name   *string          `json:"name"`
+	ShowIf *json.RawMessage `json:"show_if"`
 }
 
 var slugRegex = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -107,16 +111,16 @@ func (s *CollectionService) GetBySlug(ctx context.Context, slug string, withFiel
 	key := cacheKeySlug(slug, withFields, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetBySlug(ctx, slug, withFields, table, form, true)
+		return s.repo.GetBySlug(ctx, slug, withFields, table, form, true, nil)
 	})
 }
 
-func (s *CollectionService) GetByAvailableSlug(ctx context.Context, slug string, withFields, table, form bool) (*repository.CollectionWithFields, error) {
+func (s *CollectionService) GetByAvailableSlug(ctx context.Context, slug string, withFields, table, form bool, entityData *map[string]any) (*repository.CollectionWithFields, error) {
 	slug = normalizeSlug(slug)
 	key := cacheKeyAvailableSlug(slug, withFields, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetBySlug(ctx, slug, withFields, table, form, false)
+		return s.repo.GetBySlug(ctx, slug, withFields, table, form, false, entityData)
 	})
 }
 
@@ -124,19 +128,19 @@ func (s *CollectionService) GetByID(ctx context.Context, id int, withFields, tab
 	key := cacheKeyID(id, withFields, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetByID(ctx, id, withFields, table, form, true)
+		return s.repo.GetByID(ctx, id, withFields, table, form, true, nil)
 	})
 }
 
-func (s *CollectionService) GetAvailableByID(ctx context.Context, id int, withFields, table, form bool) (*repository.CollectionWithFields, error) {
+func (s *CollectionService) GetAvailableByID(ctx context.Context, id int, withFields, table, form bool, entityData *map[string]any) (*repository.CollectionWithFields, error) {
 	key := cacheKeyAvaialbleID(id, withFields, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetByID(ctx, id, withFields, table, form, false)
+		return s.repo.GetByID(ctx, id, withFields, table, form, false, entityData)
 	})
 }
 
-func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput) (*model.Collection, error) {
+func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput) (*model.CollectionDTO, error) {
 	in.Slug = normalizeSlug(in.Slug)
 	if !slugRegex.MatchString(in.Slug) {
 		return nil, ErrBadSlug
@@ -152,7 +156,13 @@ func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput
 		return nil, ErrConflict("slug already exists")
 	}
 
-	c, err := s.repo.Create(ctx, normalizeSlug(in.Slug), in.Name)
+	var showIfVal *sql.NullString = nil
+	if in.ShowIf != nil && len(*in.ShowIf) > 0 {
+		sif := toNullString(*in.ShowIf)
+		showIfVal = &sif
+	}
+
+	c, err := s.repo.Create(ctx, normalizeSlug(in.Slug), in.Name, showIfVal)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +171,7 @@ func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput
 
 }
 
-func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollectionInput) (*model.Collection, error) {
+func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollectionInput) (*model.CollectionDTO, error) {
 	var ex *int = &id
 	if in.Slug != nil {
 		slug := normalizeSlug(*in.Slug)
@@ -184,8 +194,13 @@ func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollect
 		}
 		in.Name = &name
 	}
+	var showIfVal *sql.NullString = nil
+	if in.ShowIf != nil && len(*in.ShowIf) > 0 {
+		sif := toNullString(*in.ShowIf)
+		showIfVal = &sif
+	}
 
-	c, err := s.repo.Update(ctx, id, in.Slug, in.Name)
+	c, err := s.repo.Update(ctx, id, in.Slug, in.Name, showIfVal)
 	if err != nil {
 		return nil, err
 	}

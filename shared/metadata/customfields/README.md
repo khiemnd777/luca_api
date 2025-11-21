@@ -28,6 +28,74 @@ Index biểu thức cho key hay lọc nhiều (ví dụ: color)
 CREATE INDEX IF NOT EXISTS idx_products_cf_color ON products ((custom_fields->>'color'));
 ```
 
+- Collection `show_if`
+
+```json
+{
+  "field": "clinics.customFields.clinicCode",
+  "op": "equals",
+  "value": "ABC123"
+}
+
+// or
+
+{
+  "any": [
+    { "field": "clinics.status", "op": "equals", "value": "active" },
+    { "field": "clinics.type", "op": "in", "value": ["A", "B"] }
+  ]
+}
+```
+
+- `LookupNestedField`
+
+```go
+// 1. Nested fields
+LookupNestedField(
+  map[string]any{
+    "a": map[string]any{
+      "b": "hello",
+    },
+  }, 
+  "a.b",
+)
+// → "hello"
+
+// 2. Struct
+type User struct {
+    Name string
+    Age  int
+}
+
+LookupNestedField(User{Name: "Khiem", Age: 20}, "Name")  
+// → "Khiem"
+
+// 3. Struct + json tag
+type Clinic struct {
+    ClinicCode string `json:"clinicCode"`
+}
+
+LookupNestedField(Clinic{ClinicCode: "A1"}, "clinicCode")
+// → "A1"
+
+// 4. Slice + struct
+users := []User{{Name: "A"}, {Name: "B"}}
+LookupNestedField(users, "1.Name")
+// → "B"
+
+// 5. Slice + map
+data := map[string]any{
+    "items": []map[string]any{
+        {"price": 10},
+        {"price": 20},
+    },
+}
+
+LookupNestedField(data, "items.1.price")
+// → 20
+
+```
+
 - Create
 
 ```go

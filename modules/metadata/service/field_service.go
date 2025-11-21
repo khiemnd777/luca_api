@@ -66,7 +66,7 @@ func (s *FieldService) Get(ctx context.Context, id int) (*model.FieldDTO, error)
 }
 
 func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.FieldDTO, error) {
-	if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true); err != nil {
+	if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true, nil); err != nil {
 		return nil, fmt.Errorf("collection not found")
 	}
 	in.Name = strings.TrimSpace(in.Name)
@@ -115,7 +115,7 @@ func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.
 		return nil, err
 	}
 
-	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false)
+	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false, nil)
 
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) 
 	oldColID := cur.CollectionID
 
 	if in.CollectionID != 0 && in.CollectionID != cur.CollectionID {
-		if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true); err != nil {
+		if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true, nil); err != nil {
 			return nil, fmt.Errorf("collection not found")
 		}
 		cur.CollectionID = in.CollectionID
@@ -195,7 +195,7 @@ func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) 
 		return nil, err
 	}
 
-	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false)
+	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false, nil)
 
 	if err != nil {
 		return nil, err

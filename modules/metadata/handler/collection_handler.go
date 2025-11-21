@@ -28,7 +28,7 @@ func (h *CollectionHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/collections", h.List) // collections?query=&limit=&offset=&with_fields=true&table=false&form=false
 	app.RouterPost(router, "/collections", h.Create)
 	app.RouterGet(router, "/collections/:idOrSlug", h.GetOne)
-	app.RouterGet(router, "/collections/available/:idOrSlug", h.GetAvailableOne)
+	app.RouterPost(router, "/collections/available/:idOrSlug", h.GetAvailableOne)
 	app.RouterPut(router, "/collections/:id", h.Update)
 	app.RouterDelete(router, "/collections/:id", h.Delete)
 }
@@ -97,16 +97,23 @@ func (h *CollectionHandler) GetAvailableOne(c *fiber.Ctx) error {
 	table := c.QueryBool("table", false)
 	form := c.QueryBool("form", false)
 	idOrSlug := c.Params("idOrSlug")
+
+	var entitydata *map[string]any
+
+	if err := c.BodyParser(entitydata); err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+	}
+
 	// ID
 	if id, err := strconv.Atoi(idOrSlug); err == nil {
-		out, err := h.svc.GetAvailableByID(c.UserContext(), id, withFields, table, form)
+		out, err := h.svc.GetAvailableByID(c.UserContext(), id, withFields, table, form, entitydata)
 		if err != nil {
 			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 		}
 		return c.JSON(out)
 	}
 	// slug
-	out, err := h.svc.GetByAvailableSlug(c.UserContext(), idOrSlug, withFields, table, form)
+	out, err := h.svc.GetByAvailableSlug(c.UserContext(), idOrSlug, withFields, table, form, entitydata)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
