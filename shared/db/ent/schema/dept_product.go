@@ -23,6 +23,10 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.String("process_names").
+			Optional().
+			Nillable(),
+
 		field.Bool("active").
 			Default(true),
 
