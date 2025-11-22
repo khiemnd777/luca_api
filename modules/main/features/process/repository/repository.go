@@ -1,4 +1,3 @@
-
 package repository
 
 import (
@@ -53,7 +52,13 @@ func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (*mode
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "process", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"process"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +69,7 @@ func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (*mode
 	}
 
 	dto := mapper.MapAs[*generated.Process, *model.ProcessDTO](entity)
-	
+
 	_, err = relation.Upsert(ctx, tx, "process", entity, input, dto)
 	if err != nil {
 		return nil, err
@@ -90,7 +95,13 @@ func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (*mode
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "process", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"process"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +112,7 @@ func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (*mode
 	}
 
 	dto := mapper.MapAs[*generated.Process, *model.ProcessDTO](entity)
-	
+
 	_, err = relation.Upsert(ctx, tx, "process", entity, input, dto)
 	if err != nil {
 		return nil, err

@@ -106,7 +106,13 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input model.{{Module}}
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "{{moduleSnake}}", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"{{moduleSnake}}"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +149,13 @@ func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input model.{{Module}}
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "{{moduleSnake}}", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"{{moduleSnake}}"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}

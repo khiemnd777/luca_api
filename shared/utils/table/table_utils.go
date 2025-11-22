@@ -192,9 +192,9 @@ func TableList[
 	ctx context.Context,
 	q Q,
 	opts TableQuery,
-	table string, // ví dụ: role.Table
-	pkField string, // field PK để tie-breaker
-	defaultField string, // field mặc định khi order_by rỗng
+	table string, // e.g.: role.Table
+	pkField string,
+	defaultField string,
 	mapItems func(src []*T) []*R, // optional mapper
 ) (TableListResult[R], error) {
 
