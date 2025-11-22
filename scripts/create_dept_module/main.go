@@ -45,7 +45,12 @@ type %sDTO struct {
 %s	CreatedAt time.Time `+"`json:\"created_at\"`"+`
 	UpdatedAt time.Time `+"`json:\"updated_at\"`"+`
 }
-`, structName, cfLine)
+
+type %sUpsertDTO struct {
+	DTO         %sDTO   `+"`json:\"dto\"`"+`
+	Collections *[]string `+"`json:\"collections,omitempty\"`"+`
+}
+`, structName, cfLine, structName, structName)
 }
 
 // Repository: modules/main/features/{module}/repository/repository.go
@@ -71,8 +76,8 @@ import (
 )
 
 type {{Module}}Repository interface {
-	Create(ctx context.Context, input model.{{Module}}DTO) (*model.{{Module}}DTO, error)
-	Update(ctx context.Context, input model.{{Module}}DTO) (*model.{{Module}}DTO, error)
+	Create(ctx context.Context, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error)
+	Update(ctx context.Context, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error)
 	GetByID(ctx context.Context, id int) (*model.{{Module}}DTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.{{Module}}DTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.{{Module}}DTO], error)
@@ -89,7 +94,7 @@ func New{{Module}}Repository(db *generated.Client, deps *module.ModuleDeps[confi
 	return &{{moduleSnake}}Repo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
-func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input model.{{Module}}DTO) (*model.{{Module}}DTO, error) {
+func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -102,19 +107,23 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input model.{{Module}}
 		}
 	}()
 
-	q := tx.{{Module}}.Create().
-		SetNillableCode(input.Code).
-		SetNillableName(input.Name)
+	dto := &input.DTO
 
-	_, err = customfields.PrepareCustomFields(ctx,
-		r.cfMgr,
-		[]string{"{{moduleSnake}}"},
-		input.CustomFields,
-		q,
-		false,
-	)
-	if err != nil {
-		return nil, err
+	q := tx.{{Module}}.Create().
+		SetNillableCode(dto.Code).
+		SetNillableName(dto.Name)
+
+	if input.Collections != nil && len(*input.Collections) > 0 {
+		_, err = customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			input.Collections,
+			dto.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	entity, err := q.Save(ctx)
@@ -122,9 +131,9 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input model.{{Module}}
 		return nil, err
 	}
 
-	dto := mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
-	
-	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input, dto)
+	dto = mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
+
+	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +141,7 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input model.{{Module}}
 	return dto, nil
 }
 
-func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input model.{{Module}}DTO) (*model.{{Module}}DTO, error) {
+func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -145,19 +154,24 @@ func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input model.{{Module}}
 		}
 	}()
 
-	q := tx.{{Module}}.UpdateOneID(input.ID).
-		SetNillableCode(input.Code).
-		SetNillableName(input.Name)
+	dto := &input.DTO
 
-	_, err = customfields.PrepareCustomFields(ctx,
-		r.cfMgr,
-		[]string{"{{moduleSnake}}"},
-		input.CustomFields,
-		q,
-		false,
-	)
-	if err != nil {
-		return nil, err
+	q := tx.{{Module}}.UpdateOneID(dto.ID).
+		SetNillableCode(dto.Code).
+		SetNillableName(dto.Name)
+
+	if input.Collections != nil && len(*input.Collections) > 0 {
+		_, err = customfields.PrepareCustomFields(
+			ctx,
+			r.cfMgr,
+			input.Collections,
+			dto.CustomFields,
+			q,
+			true, // update mode → isPatch = true
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	entity, err := q.Save(ctx)
@@ -165,9 +179,9 @@ func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input model.{{Module}}
 		return nil, err
 	}
 
-	dto := mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
-	
-	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input, dto)
+	dto = mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
+
+	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -267,8 +281,8 @@ import (
 )
 
 type {{Module}}Service interface {
-	Create(ctx context.Context, deptID int, input model.{{Module}}DTO) (*model.{{Module}}DTO, error)
-	Update(ctx context.Context, deptID int, input model.{{Module}}DTO) (*model.{{Module}}DTO, error)
+	Create(ctx context.Context, deptID int, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error)
+	Update(ctx context.Context, deptID int, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error)
 	GetByID(ctx context.Context, id int) (*model.{{Module}}DTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.{{Module}}DTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.{{Module}}DTO], error)
@@ -328,7 +342,7 @@ func k{{Module}}Search(q dbutils.SearchQuery) string {
 // Create
 // ----------------------------------------------------------------------------
 
-func (s *{{moduleSnake}}Service) Create(ctx context.Context, deptID int, input model.{{Module}}DTO) (*model.{{Module}}DTO, error) {
+func (s *{{moduleSnake}}Service) Create(ctx context.Context, deptID int, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error) {
 	dto, err := s.repo.Create(ctx, input)
 	if err != nil {
 		return nil, err
@@ -348,7 +362,7 @@ func (s *{{moduleSnake}}Service) Create(ctx context.Context, deptID int, input m
 // Update
 // ----------------------------------------------------------------------------
 
-func (s *{{moduleSnake}}Service) Update(ctx context.Context, deptID int, input model.{{Module}}DTO) (*model.{{Module}}DTO, error) {
+func (s *{{moduleSnake}}Service) Update(ctx context.Context, deptID int, *input model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error) {
 	dto, err := s.repo.Update(ctx, input)
 	if err != nil {
 		return nil, err
@@ -543,11 +557,11 @@ func (h *%[2]sHandler) Create(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "%[1]s.create"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
-	var payload model.%[2]sDTO
-	if err := c.BodyParser(&payload); err != nil {
+
+	payload, err := app.ParseBody[model.%[2]sUpsertDTO](c)
+	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
- 	}
-	// phần validate tuỳ module, tạm giữ nguyên generic.
+	}
 
 	deptID, _ := utils.GetDeptIDInt(c)
 
@@ -555,6 +569,7 @@ func (h *%[2]sHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
+
 	return c.Status(fiber.StatusCreated).JSON(dto)
 }
 
@@ -562,16 +577,18 @@ func (h *%[2]sHandler) Update(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "%[1]s.update"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
+
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
 	}
 
-	var payload model.%[2]sDTO
-	if err := c.BodyParser(&payload); err != nil {
+	payload, err := app.ParseBody[model.%[2]sUpsertDTO](c)
+	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
-	payload.ID = id
+
+	payload.DTO.ID = id
 
 	deptID, _ := utils.GetDeptIDInt(c)
 
@@ -579,6 +596,7 @@ func (h *%[2]sHandler) Update(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
+
 	return c.Status(fiber.StatusOK).JSON(dto)
 }
 

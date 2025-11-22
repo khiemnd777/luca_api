@@ -78,12 +78,10 @@ func (h *ProductHandler) Create(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.create"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
-	var payload model.ProductDTO
-	if err := c.BodyParser(&payload); err != nil {
+	payload, err := app.ParseBody[model.ProductUpsertDTO](c)
+	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
- 	}
-	// phần validate tuỳ module, tạm giữ nguyên generic.
-
+	}
 	deptID, _ := utils.GetDeptIDInt(c)
 
 	dto, err := h.svc.Create(c.UserContext(), deptID, payload)
@@ -102,11 +100,11 @@ func (h *ProductHandler) Update(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
 	}
 
-	var payload model.ProductDTO
-	if err := c.BodyParser(&payload); err != nil {
+	payload, err := app.ParseBody[model.ProductUpsertDTO](c)
+	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
-	payload.ID = id
+	payload.DTO.ID = id
 
 	deptID, _ := utils.GetDeptIDInt(c)
 

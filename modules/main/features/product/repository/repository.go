@@ -17,8 +17,8 @@ import (
 )
 
 type ProductRepository interface {
-	Create(ctx context.Context, input model.ProductDTO) (*model.ProductDTO, error)
-	Update(ctx context.Context, input model.ProductDTO) (*model.ProductDTO, error)
+	Create(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
+	Update(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
 	GetByID(ctx context.Context, id int) (*model.ProductDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProductDTO], error)
@@ -35,7 +35,7 @@ func NewProductRepository(db *generated.Client, deps *module.ModuleDeps[config.M
 	return &productRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
-func (r *productRepo) Create(ctx context.Context, input model.ProductDTO) (*model.ProductDTO, error) {
+func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -48,19 +48,23 @@ func (r *productRepo) Create(ctx context.Context, input model.ProductDTO) (*mode
 		}
 	}()
 
-	q := tx.Product.Create().
-		SetNillableCode(input.Code).
-		SetNillableName(input.Name)
+	dto := &input.DTO
 
-	_, err = customfields.PrepareCustomFields(ctx,
-		r.cfMgr,
-		[]string{"product", "product-a", "product-b"},
-		input.CustomFields,
-		q,
-		false,
-	)
-	if err != nil {
-		return nil, err
+	q := tx.Product.Create().
+		SetNillableCode(dto.Code).
+		SetNillableName(dto.Name)
+
+	if input.Collections != nil && len(*input.Collections) > 0 {
+		_, err = customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			*input.Collections,
+			dto.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	entity, err := q.Save(ctx)
@@ -68,9 +72,9 @@ func (r *productRepo) Create(ctx context.Context, input model.ProductDTO) (*mode
 		return nil, err
 	}
 
-	dto := mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
+	dto = mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "product", entity, input, dto)
+	_, err = relation.Upsert(ctx, tx, "product", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +82,7 @@ func (r *productRepo) Create(ctx context.Context, input model.ProductDTO) (*mode
 	return dto, nil
 }
 
-func (r *productRepo) Update(ctx context.Context, input model.ProductDTO) (*model.ProductDTO, error) {
+func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -91,19 +95,23 @@ func (r *productRepo) Update(ctx context.Context, input model.ProductDTO) (*mode
 		}
 	}()
 
-	q := tx.Product.UpdateOneID(input.ID).
-		SetNillableCode(input.Code).
-		SetNillableName(input.Name)
+	dto := &input.DTO
 
-	_, err = customfields.PrepareCustomFields(ctx,
-		r.cfMgr,
-		[]string{"product", "product-a", "product-b"},
-		input.CustomFields,
-		q,
-		false,
-	)
-	if err != nil {
-		return nil, err
+	q := tx.Product.UpdateOneID(dto.ID).
+		SetNillableCode(dto.Code).
+		SetNillableName(dto.Name)
+
+	if input.Collections != nil && len(*input.Collections) > 0 {
+		_, err = customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			*input.Collections,
+			dto.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	entity, err := q.Save(ctx)
@@ -111,9 +119,9 @@ func (r *productRepo) Update(ctx context.Context, input model.ProductDTO) (*mode
 		return nil, err
 	}
 
-	dto := mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
+	dto = mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "product", entity, input, dto)
+	_, err = relation.Upsert(ctx, tx, "product", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -20,8 +19,8 @@ import (
 )
 
 type ProductService interface {
-	Create(ctx context.Context, deptID int, input model.ProductDTO) (*model.ProductDTO, error)
-	Update(ctx context.Context, deptID int, input model.ProductDTO) (*model.ProductDTO, error)
+	Create(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
+	Update(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
 	GetByID(ctx context.Context, id int) (*model.ProductDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProductDTO], error)
@@ -81,7 +80,7 @@ func kProductSearch(q dbutils.SearchQuery) string {
 // Create
 // ----------------------------------------------------------------------------
 
-func (s *productService) Create(ctx context.Context, deptID int, input model.ProductDTO) (*model.ProductDTO, error) {
+func (s *productService) Create(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
 	dto, err := s.repo.Create(ctx, input)
 	if err != nil {
 		return nil, err
@@ -101,7 +100,7 @@ func (s *productService) Create(ctx context.Context, deptID int, input model.Pro
 // Update
 // ----------------------------------------------------------------------------
 
-func (s *productService) Update(ctx context.Context, deptID int, input model.ProductDTO) (*model.ProductDTO, error) {
+func (s *productService) Update(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
 	dto, err := s.repo.Update(ctx, input)
 	if err != nil {
 		return nil, err
@@ -129,9 +128,9 @@ func (s *productService) upsertSearch(ctx context.Context, deptID int, dto *mode
 		EntityType: "product",
 		EntityID:   int64(dto.ID),
 		Title:      *dto.Name,
-		Subtitle:   nil,     
+		Subtitle:   nil,
 		Keywords:   &kwPtr,
-		Content:    nil,     
+		Content:    nil,
 		Attributes: map[string]any{},
 		OrgID:      utils.Ptr(int64(deptID)),
 		OwnerID:    nil,
