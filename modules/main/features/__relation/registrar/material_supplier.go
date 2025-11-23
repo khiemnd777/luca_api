@@ -48,6 +48,12 @@ func init() {
 				RefDTO:      model.SupplierDTO{},
 				CachePrefix: "supplier:list",
 			},
+
+			GetRefSearch: &policy.RefSearchConfig{
+				Permissions: []string{"supplier.search"},
+				RefDTO:      model.SupplierDTO{},
+				CachePrefix: "supplier:list",
+			},
 		},
 	)
 }

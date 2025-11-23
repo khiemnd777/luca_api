@@ -1,6 +1,20 @@
 package relation
 
+import (
+	"context"
+
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+)
+
 type RefListConfig struct {
+	Permissions []string
+	RefDTO      any
+	CachePrefix string
+}
+
+type SearchHandler func(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[any], error)
+
+type RefSearchConfig struct {
 	Permissions []string
 	RefDTO      any
 	CachePrefix string
@@ -18,5 +32,6 @@ type Config struct {
 	GetIDs    func(input any) ([]int, error)
 	SetResult func(output any, resIDs []int, resAsStr *string, res []string) error
 
-	GetRefList *RefListConfig
+	GetRefList   *RefListConfig
+	GetRefSearch *RefSearchConfig
 }

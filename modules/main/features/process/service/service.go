@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -129,9 +128,9 @@ func (s *processService) upsertSearch(ctx context.Context, deptID int, dto *mode
 		EntityType: "process",
 		EntityID:   int64(dto.ID),
 		Title:      *dto.Name,
-		Subtitle:   nil,     
+		Subtitle:   nil,
 		Keywords:   &kwPtr,
-		Content:    nil,     
+		Content:    nil,
 		Attributes: map[string]any{},
 		OrgID:      utils.Ptr(int64(deptID)),
 		OwnerID:    nil,

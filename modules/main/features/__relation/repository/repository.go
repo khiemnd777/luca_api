@@ -9,6 +9,7 @@ import (
 
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	tableutils "github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -165,4 +166,193 @@ func (r *RelationRepository) List(
 	out.FieldByName("Total").SetInt(int64(total))
 
 	return out.Interface(), nil
+}
+
+func (r *RelationRepository) Search(
+	ctx context.Context,
+	tx *generated.Tx,
+	cfg relation.Config,
+	sq dbutils.SearchQuery,
+) (any, error) {
+
+	dtoType := reflect.TypeOf(cfg.GetRefSearch.RefDTO)
+	if dtoType.Kind() == reflect.Ptr {
+		dtoType = dtoType.Elem()
+	}
+
+	// build SELECT columns
+	cols := make([]string, 0, dtoType.NumField())
+	for i := 0; i < dtoType.NumField(); i++ {
+		f := dtoType.Field(i)
+		colName := utils.ToSnake(f.Name)
+		cols = append(cols, "r."+colName)
+	}
+	selectCols := strings.Join(cols, ", ")
+
+	refTable := cfg.RefTable
+
+	// =============================
+	// BUILD WHERE
+	// =============================
+	args := []any{}
+	whereParts := []string{}
+
+	norm := utils.NormalizeSearchKeyword(sq.Keyword)
+	if norm != "" {
+		likeParts := make([]string, 0)
+		for i := 0; i < dtoType.NumField(); i++ {
+			f := dtoType.Field(i)
+
+			// allow string or *string
+			isString :=
+				f.Type.Kind() == reflect.String ||
+					(f.Type.Kind() == reflect.Ptr && f.Type.Elem().Kind() == reflect.String)
+
+			if !isString {
+				continue
+			}
+
+			col := utils.ToSnake(f.Name)
+			likeParts = append(likeParts,
+				fmt.Sprintf("LOWER(r.%s) LIKE $%d", col, len(args)+1))
+			args = append(args, "%"+norm+"%")
+		}
+
+		whereParts = append(whereParts, "("+strings.Join(likeParts, " OR ")+")")
+	}
+
+	whereSQL := ""
+	if len(whereParts) > 0 {
+		whereSQL = "WHERE " + strings.Join(whereParts, " AND ")
+	}
+
+	// =============================
+	// ORDER BY
+	// =============================
+	orderField := dbutils.ResolveOrderField(sq.OrderBy, "id")
+	direction := "ASC"
+	if strings.EqualFold(sq.Direction, "desc") {
+		direction = "DESC"
+	}
+	orderSQL := fmt.Sprintf("ORDER BY r.%s %s", orderField, direction)
+
+	// =============================
+	// LIMIT + OFFSET
+	// =============================
+	limit := sq.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	offset := sq.Offset
+	limitSQL := fmt.Sprintf("LIMIT %d OFFSET %d", limit+1, offset)
+
+	// =============================
+	// FINAL SQL
+	// =============================
+	finalSQL := fmt.Sprintf(`
+		SELECT %s
+		FROM %s r
+		%s
+		%s
+		%s
+	`, selectCols, refTable, whereSQL, orderSQL, limitSQL)
+
+	rows, err := tx.QueryContext(ctx, finalSQL, args...)
+	if err != nil {
+		return nil, fmt.Errorf("relationRepo.Search query: %w", err)
+	}
+	defer rows.Close()
+
+	// =============================
+	// SCAN rows
+	// =============================
+	ptrType := reflect.PointerTo(dtoType)
+	sliceType := reflect.SliceOf(ptrType)
+	sliceValue := reflect.MakeSlice(sliceType, 0, 20)
+
+	for rows.Next() {
+		elem := reflect.New(dtoType)
+		elemVal := elem.Elem()
+
+		scanTargets := make([]any, dtoType.NumField())
+
+		for i := 0; i < dtoType.NumField(); i++ {
+			f := elemVal.Field(i)
+			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
+				var raw json.RawMessage
+				scanTargets[i] = &raw
+			} else {
+				scanTargets[i] = f.Addr().Interface()
+			}
+		}
+
+		if err := rows.Scan(scanTargets...); err != nil {
+			return nil, fmt.Errorf("relationRepo.Search scan: %w", err)
+		}
+
+		// convert JSONB
+		for i := 0; i < dtoType.NumField(); i++ {
+			f := elemVal.Field(i)
+			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
+				raw, ok := scanTargets[i].(*json.RawMessage)
+				if ok && raw != nil && len(*raw) > 0 {
+					var m map[string]any
+					json.Unmarshal(*raw, &m)
+					f.Set(reflect.ValueOf(m))
+				}
+			}
+		}
+
+		sliceValue = reflect.Append(sliceValue, elem)
+	}
+
+	// =============================
+	// Check has_more
+	// =============================
+	hasMore := false
+	totalItems := sliceValue.Len()
+	if totalItems > limit {
+		hasMore = true
+		sliceValue = sliceValue.Slice(0, limit)
+	}
+
+	// =============================
+	// COUNT SQL
+	// =============================
+	countSQL := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM %s r
+		%s
+	`, refTable, whereSQL)
+
+	countRows, err := tx.QueryContext(ctx, countSQL, args...)
+	if err != nil {
+		return nil, fmt.Errorf("relationRepo.Search count query: %w", err)
+	}
+	defer countRows.Close()
+
+	var total int
+	if countRows.Next() {
+		if err := countRows.Scan(&total); err != nil {
+			return nil, fmt.Errorf("relationRepo.Search count scan: %w", err)
+		}
+	}
+
+	// =============================
+	// Convert [] *DTO => [] *any
+	// =============================
+	n := sliceValue.Len()
+	items := make([]*any, n)
+
+	for i := 0; i < n; i++ {
+		v := sliceValue.Index(i).Interface() // *DTO
+		tmp := any(v)
+		items[i] = &tmp
+	}
+
+	return dbutils.SearchResult[any]{
+		Items:   items,
+		HasMore: hasMore,
+		Total:   total,
+	}, nil
 }

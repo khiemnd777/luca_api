@@ -65,7 +65,7 @@ func ParseSearchQuery(c *fiber.Ctx, defLimit int) SearchQuery {
 
 func isDesc(dir string) bool { return strings.EqualFold(dir, "desc") }
 
-func resolveOrderField(orderBy *string, defaultField string) (field string) {
+func ResolveOrderField(orderBy *string, defaultField string) (field string) {
 	field = defaultField
 	if orderBy != nil && strings.TrimSpace(*orderBy) != "" {
 		field = strings.TrimSpace(*orderBy)
@@ -214,7 +214,7 @@ func Search[
 	}
 
 	// ORDER BY
-	field := resolveOrderField(sq.OrderBy, defaultField)
+	field := ResolveOrderField(sq.OrderBy, defaultField)
 	desc := isDesc(sq.Direction)
 	orderOpts := buildSQLOptions[O](table, field, desc, pkField)
 	query = query.Order(orderOpts...)

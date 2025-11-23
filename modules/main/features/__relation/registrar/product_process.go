@@ -48,6 +48,12 @@ func init() {
 				RefDTO:      model.ProcessDTO{},
 				CachePrefix: "process:list",
 			},
+
+			GetRefSearch: &policy.RefSearchConfig{
+				Permissions: []string{"process.search"},
+				RefDTO:      model.ProcessDTO{},
+				CachePrefix: "process:list",
+			},
 		},
 	)
 }
