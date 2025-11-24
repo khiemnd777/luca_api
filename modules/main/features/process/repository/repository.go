@@ -70,7 +70,7 @@ func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (*mode
 
 	dto := mapper.MapAs[*generated.Process, *model.ProcessDTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "process", entity, input, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "process", entity, input, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (*mode
 
 	dto := mapper.MapAs[*generated.Process, *model.ProcessDTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "process", entity, input, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "process", entity, input, dto)
 	if err != nil {
 		return nil, err
 	}

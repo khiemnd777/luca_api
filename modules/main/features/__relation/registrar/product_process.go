@@ -11,8 +11,8 @@ import (
 
 func init() {
 	logger.Debug("[RELATION] Register products - processes")
-	policy.Register("product",
-		policy.Config{
+	policy.RegisterM2M("product",
+		policy.ConfigM2M{
 			MainTable: "products",
 			RefTable:  "processes",
 
@@ -48,12 +48,12 @@ func init() {
 				RefDTO:      model.ProcessDTO{},
 				CachePrefix: "process:list",
 			},
-
-			GetRefSearch: &policy.RefSearchConfig{
-				Permissions: []string{"process.search"},
-				RefDTO:      model.ProcessDTO{},
-				CachePrefix: "process:list",
-			},
 		},
 	)
+	policy.RegisterRefSearch("product", policy.ConfigSearch{
+		RefTable:    "processes",
+		Permissions: []string{"process.search"},
+		RefDTO:      model.ProcessDTO{},
+		CachePrefix: "process:list",
+	})
 }

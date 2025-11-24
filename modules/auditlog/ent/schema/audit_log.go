@@ -17,6 +17,7 @@ type AuditLog struct {
 func (AuditLog) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("user_id").Positive(),
+		field.String("user_fullname").Optional().Nillable(),
 		field.String("action").NotEmpty(),
 		field.String("module").NotEmpty(),
 		field.Int("target_id").Optional().Nillable(),
