@@ -8,6 +8,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -25,13 +26,12 @@ func NewRelationHandler(svc *service.RelationService, deps *module.ModuleDeps[co
 
 func (h *RelationHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/relation/:key/:main_id<int>/list", h.List)
+	app.RouterGet(router, "/:dept_id<int>/relation/:key/search", h.Search)
 }
 
 // GET /relation/:main/:main_id/:ref/list
 func (h *RelationHandler) List(c *fiber.Ctx) error {
-
 	key := c.Params("key")
-
 	if key == "" {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "missing key or ref")
 	}
@@ -55,6 +55,35 @@ func (h *RelationHandler) List(c *fiber.Ctx) error {
 	q := table.ParseTableQuery(c, 10)
 
 	res, err := h.svc.List(c.UserContext(), key, mainID, q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.JSON(res)
+}
+
+// GET /relation/:ref/search
+func (h *RelationHandler) Search(c *fiber.Ctx) error {
+	key := c.Params("key")
+	if key == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "missing key or ref")
+	}
+
+	cfg, err := relation.GetConfig(key)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusNotFound, err, err.Error())
+	}
+
+	if cfg.GetRefSearch != nil && len(cfg.GetRefSearch.Permissions) > 0 {
+		if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), cfg.GetRefSearch.Permissions...); err != nil {
+			return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+		}
+	}
+
+	q := dbutils.ParseSearchQuery(c, 10)
+
+	res, err := h.svc.Search(c.UserContext(), key, q)
+
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

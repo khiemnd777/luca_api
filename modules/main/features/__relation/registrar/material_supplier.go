@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	logger.Debug("[RELATION] Register material")
+	logger.Debug("[RELATION] Register materials - suppliers")
 	policy.Register("material",
 		policy.Config{
 			MainTable: "materials",
@@ -45,6 +45,12 @@ func init() {
 
 			GetRefList: &policy.RefListConfig{
 				Permissions: []string{"supplier.view"},
+				RefDTO:      model.SupplierDTO{},
+				CachePrefix: "supplier:list",
+			},
+
+			GetRefSearch: &policy.RefSearchConfig{
+				Permissions: []string{"supplier.search"},
 				RefDTO:      model.SupplierDTO{},
 				CachePrefix: "supplier:list",
 			},

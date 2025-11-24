@@ -15,7 +15,6 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staffsection"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -83,7 +82,13 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 		SetUserID(userEnt.ID)
 
 	// customfields
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "staff", input.CustomFields, staffQ, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"staff"},
+		input.CustomFields,
+		staffQ,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -274,8 +279,13 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 		SetNillableSectionNames(&sectionNamesStr)
 
 	// customfields
-	logger.Debug(fmt.Sprintf("[STAFF] %v", input.CustomFields))
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "staff", input.CustomFields, staffQ, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"staff"},
+		input.CustomFields,
+		staffQ,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}

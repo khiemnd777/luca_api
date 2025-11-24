@@ -60,7 +60,13 @@ func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.
 		SetNillableLogo(input.Logo)
 
 	// customfields
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "clinic", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"clinic"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +119,13 @@ func (r *clinicRepo) Update(ctx context.Context, input model.ClinicDTO) (*model.
 		SetNillableLogo(input.Logo)
 
 	// customfields
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "clinic", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"clinic"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}

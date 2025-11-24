@@ -1,8 +1,9 @@
 -- A) Metadata cho schema động
 CREATE TABLE IF NOT EXISTS collections (
-  id SERIAL PRIMARY KEY,
-  slug TEXT UNIQUE NOT NULL,     -- ví dụ: 'products', 'orders'
-  name TEXT NOT NULL
+  id      SERIAL  PRIMARY KEY,
+  slug    TEXT    UNIQUE  NOT NULL,     -- ví dụ: 'products', 'orders'
+  show_if JSONB   NULL,
+  name    TEXT    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS fields (

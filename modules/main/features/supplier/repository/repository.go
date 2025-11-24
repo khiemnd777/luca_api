@@ -54,7 +54,13 @@ func (r *supplierRepo) Create(ctx context.Context, input model.SupplierDTO) (*mo
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "supplier", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"supplier"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +97,13 @@ func (r *supplierRepo) Update(ctx context.Context, input model.SupplierDTO) (*mo
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	err = customfields.SetCustomFields(ctx, r.cfMgr, "supplier", input.CustomFields, q, false)
+	_, err = customfields.PrepareCustomFields(ctx,
+		r.cfMgr,
+		[]string{"supplier"},
+		input.CustomFields,
+		q,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,8 @@ package customfields
 
 import (
 	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -75,4 +77,118 @@ func opSQL(op string) string {
 	default:
 		return "="
 	}
+}
+
+// LookupNestedField supports:
+// - map[string]any
+// - map[string]interface{}
+// - struct fields
+// - array/slice indices (items.0.name)
+func LookupNestedField(data any, path string) any {
+	if data == nil || path == "" {
+		return nil
+	}
+
+	parts := strings.Split(path, ".")
+	current := data
+
+	for i, key := range parts {
+
+		if current == nil {
+			return nil
+		}
+
+		val := reflect.ValueOf(current)
+
+		// unwrap pointer
+		if val.Kind() == reflect.Ptr {
+			if val.IsNil() {
+				return nil
+			}
+			val = val.Elem()
+		}
+
+		// -----------------------------
+		// "a.b"
+		// -----------------------------
+		if val.Kind() == reflect.Map && i == 0 {
+			fullKey := reflect.ValueOf(path)
+			mv := val.MapIndex(fullKey)
+			if mv.IsValid() {
+				return mv.Interface()
+			}
+		}
+
+		switch val.Kind() {
+
+		// -----------------------------
+		// map[string]any
+		// -----------------------------
+		case reflect.Map:
+			mapKey := reflect.ValueOf(key)
+			mv := val.MapIndex(mapKey)
+			if !mv.IsValid() {
+				return nil
+			}
+			current = mv.Interface()
+			continue
+
+		// -----------------------------
+		// slice/array (allow index)
+		// -----------------------------
+		case reflect.Slice, reflect.Array:
+			idx, err := strconv.Atoi(key)
+			if err != nil {
+				return nil // invalid index
+			}
+			if idx < 0 || idx >= val.Len() {
+				return nil
+			}
+			current = val.Index(idx).Interface()
+			continue
+
+		// -----------------------------
+		// struct (public fields)
+		// -----------------------------
+		case reflect.Struct:
+			// Try exact case first: FieldByName("Field")
+			f := val.FieldByName(key)
+			if f.IsValid() {
+				current = f.Interface()
+				continue
+			}
+
+			// Try case-insensitive match
+			typ := val.Type()
+			for i := 0; i < typ.NumField(); i++ {
+				sf := typ.Field(i)
+				if strings.EqualFold(sf.Name, key) {
+					current = val.Field(i).Interface()
+					goto nextPart
+				}
+			}
+
+			// Try json tag `json:"field_name"`
+			for i := 0; i < typ.NumField(); i++ {
+				sf := typ.Field(i)
+				if tag := sf.Tag.Get("json"); tag != "" {
+					tagName := strings.Split(tag, ",")[0]
+					if tagName == key {
+						current = val.Field(i).Interface()
+						goto nextPart
+					}
+				}
+			}
+
+			return nil
+
+		default:
+			return nil
+		}
+
+	nextPart:
+		continue
+	}
+
+	return current
 }
