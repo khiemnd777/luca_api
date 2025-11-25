@@ -124,7 +124,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 
 	dto = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
 
-	err = relation.Upsert1(ctx, tx, "order", entity, input.DTO, dto)
+	err = relation.Upsert1(ctx, tx, "order", entity, &input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}

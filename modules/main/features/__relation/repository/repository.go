@@ -10,7 +10,6 @@ import (
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	tableutils "github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -48,8 +47,6 @@ func (r *RelationRepository) Get1(
         WHERE %s = $1
         LIMIT 1
     `, selectCols, cfg.RefTable, cfg.RefIDCol)
-
-	logger.Debug(fmt.Sprintf("[SQL] %s", sql))
 
 	rows, err := tx.QueryContext(ctx, sql, id)
 	if err != nil {
