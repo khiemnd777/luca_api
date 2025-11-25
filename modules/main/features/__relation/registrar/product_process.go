@@ -52,6 +52,7 @@ func init() {
 	)
 	policy.RegisterRefSearch("product", policy.ConfigSearch{
 		RefTable:    "processes",
+		NormFields:  []string{"code", "name"},
 		Permissions: []string{"process.search"},
 		RefDTO:      model.ProcessDTO{},
 		CachePrefix: "process:list",

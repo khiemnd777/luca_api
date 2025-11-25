@@ -10,6 +10,7 @@ import (
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	tableutils "github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -46,7 +47,9 @@ func (r *RelationRepository) Get1(
         FROM %s
         WHERE %s = $1
         LIMIT 1
-    `, selectCols, cfg.RefTable, cfg.IDCol)
+    `, selectCols, cfg.RefTable, cfg.RefIDCol)
+
+	logger.Debug(fmt.Sprintf("[SQL] %s", sql))
 
 	rows, err := tx.QueryContext(ctx, sql, id)
 	if err != nil {
@@ -414,26 +417,10 @@ func (r *RelationRepository) Search(
 
 	norm := utils.NormalizeSearchKeyword(sq.Keyword)
 	if norm != "" {
-		likeParts := make([]string, 0)
-		for i := 0; i < dtoType.NumField(); i++ {
-			f := dtoType.Field(i)
-
-			// allow string or *string
-			isString :=
-				f.Type.Kind() == reflect.String ||
-					(f.Type.Kind() == reflect.Ptr && f.Type.Elem().Kind() == reflect.String)
-
-			if !isString {
-				continue
-			}
-
-			col := utils.ToSnake(f.Name)
-			likeParts = append(likeParts,
-				fmt.Sprintf("LOWER(r.%s) LIKE $%d", col, len(args)+1))
-			args = append(args, "%"+norm+"%")
+		normWhere := dbutils.BuildLikeNormSQL(norm, cfg.NormFields, &args)
+		if normWhere != "" {
+			whereParts = append(whereParts, normWhere)
 		}
-
-		whereParts = append(whereParts, "("+strings.Join(likeParts, " OR ")+")")
 	}
 
 	whereSQL := ""

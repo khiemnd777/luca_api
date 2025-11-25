@@ -52,6 +52,7 @@ func init() {
 	)
 	policy.RegisterRefSearch("material", policy.ConfigSearch{
 		RefTable:    "suppliers",
+		NormFields:  []string{"code", "name"},
 		Permissions: []string{"supplier.search"},
 		RefDTO:      model.SupplierDTO{},
 		CachePrefix: "supplier:list",

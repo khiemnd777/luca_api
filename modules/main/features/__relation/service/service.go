@@ -37,7 +37,7 @@ func (s *RelationService) Get1(
 		return nil, nil
 	}
 
-	cKey := fmt.Sprintf(cfg.CachePrefix+":%s:%d", key, id)
+	cKey := fmt.Sprintf(cfg.CachePrefix+":id:%d", id)
 
 	return cache.Get(cKey, cache.TTLShort, func() (*any, error) {
 		tx, err := s.deps.Ent.(*generated.Client).Tx(ctx)

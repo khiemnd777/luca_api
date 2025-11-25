@@ -31,7 +31,7 @@ type orderRepository struct {
 	cfMgr *customfields.Manager
 }
 
-func NewMaterialRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) OrderRepository {
+func NewOrderRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) OrderRepository {
 	return &orderRepository{db: db, deps: deps, cfMgr: cfMgr}
 }
 
@@ -51,9 +51,7 @@ func (r *orderRepository) Create(ctx context.Context, input *model.OrderUpsertDT
 	dto := &input.DTO
 
 	q := tx.Order.Create().
-		SetNillableCode(dto.Code).
-		SetCustomerID(dto.CustomerID).
-		SetNillableCustomerName(dto.CustomerName)
+		SetNillableCode(dto.Code)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
@@ -74,6 +72,11 @@ func (r *orderRepository) Create(ctx context.Context, input *model.OrderUpsertDT
 	}
 
 	dto = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
+
+	err = relation.Upsert1(ctx, tx, "order", entity, &input.DTO, dto)
+	if err != nil {
+		return nil, err
+	}
 
 	_, err = relation.UpsertM2M(ctx, tx, "order", entity, input.DTO, dto)
 	if err != nil {
@@ -99,9 +102,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	dto := &input.DTO
 
 	q := tx.Order.UpdateOneID(dto.ID).
-		SetNillableCode(dto.Code).
-		SetCustomerID(dto.CustomerID).
-		SetNillableCustomerName(dto.CustomerName)
+		SetNillableCode(dto.Code)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
@@ -122,6 +123,11 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	}
 
 	dto = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
+
+	err = relation.Upsert1(ctx, tx, "order", entity, input.DTO, dto)
+	if err != nil {
+		return nil, err
+	}
 
 	_, err = relation.UpsertM2M(ctx, tx, "order", entity, input.DTO, dto)
 	if err != nil {

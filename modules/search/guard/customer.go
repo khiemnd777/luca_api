@@ -8,11 +8,11 @@ import (
 )
 
 func init() {
-	logger.Debug("[GuardSearch] Register Dentist")
-	search.RegisterGuard("dentist", func(ctx search.GuardCtx, rows []model.Row) []model.Row {
+	logger.Debug("[GuardSearch] Register Customer")
+	search.RegisterGuard("customer", func(ctx search.GuardCtx, rows []model.Row) []model.Row {
 		perms := ctx.Perms
 
-		if !rbac.HasAnyPerm(perms, "clinic.search") {
+		if !rbac.HasAnyPerm(perms, "customer.search") {
 			return []model.Row{}
 		}
 
