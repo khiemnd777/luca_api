@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type OrderItem struct {
@@ -20,9 +21,18 @@ func (OrderItem) Fields() []ent.Field {
 			SchemaType(map[string]string{
 				"postgres": "bigserial",
 			}),
+
 		field.Int64("order_id"),
 
 		field.Int64("parent_item_id").
+			Optional().
+			Nillable(),
+
+		field.String("code").
+			Optional().
+			Nillable(),
+
+		field.String("code_original").
 			Optional().
 			Nillable(),
 
@@ -36,13 +46,13 @@ func (OrderItem) Fields() []ent.Field {
 			Default(0),
 
 		// product info
-		field.String("product_type"), // crown | veneer | ...
-		field.Int64("material_id").Optional(),
-		field.String("shade").Optional(),
+		// field.String("product_type"), // crown | veneer | ...
+		// field.Int64("material_id").Optional(),
+		// field.String("shade").Optional(),
 
 		field.Strings("tooth_positions").Optional(),
 
-		field.String("category_slug"),
+		// field.String("category_slug"),
 
 		field.JSON("custom_fields", map[string]any{}).
 			Default(map[string]any{}),
@@ -54,6 +64,10 @@ func (OrderItem) Fields() []ent.Field {
 			Default(time.Now),
 		field.Time("updated_at").
 			Default(time.Now).UpdateDefault(time.Now),
+
+		field.Time("deleted_at").
+			Optional().
+			Nillable(),
 	}
 }
 
@@ -77,5 +91,17 @@ func (OrderItem) Edges() []ent.Edge {
 			Unique(),
 
 		edge.To("children", OrderItem.Type),
+	}
+}
+
+func (OrderItem) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("id", "deleted_at"),
+		index.Fields("code"),
+		index.Fields("code_original"),
+		index.Fields("code", "deleted_at").Unique(),
+		index.Fields("code_original", "created_at", "deleted_at"),
+		index.Fields("order_id", "created_at", "deleted_at"),
+		index.Fields("deleted_at"),
 	}
 }

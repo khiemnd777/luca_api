@@ -1,4 +1,3 @@
-CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS ix_orders_id_not_deleted
   ON orders(id)

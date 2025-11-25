@@ -139,3 +139,17 @@ func CleanJSON(s *string) *string {
 	s = CleanJSONEscape(s)
 	return s
 }
+
+func AlphabetSeq(n int) string {
+	// n = 1 => A
+	// n = 26 => Z
+	// n = 27 => AA
+	// n = 28 => AB
+	result := ""
+	for n > 0 {
+		n--
+		result = string(rune('A'+(n%26))) + result
+		n /= 26
+	}
+	return result
+}
