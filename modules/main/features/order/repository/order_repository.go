@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -10,6 +11,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -89,7 +91,7 @@ func (r *orderRepository) createNewOrder(
 	out := mapper.MapAs[*generated.Order, *model.OrderDTO](orderEnt)
 
 	// create first-latest order item
-	loi := input.DTO.LatestOrderItem
+	loi := input.DTO.LatestOrderItemUpsert
 	loi.DTO.OrderID = out.ID
 	loi.DTO.CodeOriginal = out.Code
 
@@ -98,10 +100,27 @@ func (r *orderRepository) createNewOrder(
 		return nil, err
 	}
 
-	out.LatestOrderItem = &model.OrderItemUpsertDTO{
-		DTO:         *latest,
-		Collections: loi.Collections,
+	out.LatestOrderItem = latest
+
+	// reassign latest order item -> order as cache to appear them on the table
+	lstStatus := latest.CustomFields["status"].(string)
+	lstPriority := latest.CustomFields["priority"].(string)
+
+	_, err = orderEnt.
+		Update().
+		SetNillableCodeLatest(latest.Code).
+		SetNillableStatusLatest(&lstStatus).
+		SetNillablePriorityLatest(&lstPriority).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
 	}
+
+	// Assign latest ones to output
+	out.CodeLatest = latest.Code
+	out.StatusLatest = &lstStatus
+	out.PriorityLatest = &lstPriority
 
 	// relation
 	if err := relation.Upsert1(ctx, tx, "order", orderEnt, &input.DTO, out); err != nil {
@@ -150,7 +169,7 @@ func (r *orderRepository) upsertExistingOrder(
 
 	out := mapper.MapAs[*generated.Order, *model.OrderDTO](orderEnt)
 
-	loi := input.DTO.LatestOrderItem
+	loi := input.DTO.LatestOrderItemUpsert
 	loi.DTO.OrderID = out.ID
 	loi.DTO.CodeOriginal = out.Code
 
@@ -159,10 +178,27 @@ func (r *orderRepository) upsertExistingOrder(
 		return nil, err
 	}
 
-	out.LatestOrderItem = &model.OrderItemUpsertDTO{
-		DTO:         *latest,
-		Collections: loi.Collections,
+	out.LatestOrderItem = latest
+
+	// reassign latest order item -> order as cache to appear them on the table
+	lstStatus := latest.CustomFields["status"].(string)
+	lstPriority := latest.CustomFields["priority"].(string)
+
+	_, err = orderEnt.
+		Update().
+		SetNillableCodeLatest(latest.Code).
+		SetNillableStatusLatest(&lstStatus).
+		SetNillablePriorityLatest(&lstPriority).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
 	}
+
+	// Assign latest ones to output
+	out.CodeLatest = latest.Code
+	out.StatusLatest = &lstStatus
+	out.PriorityLatest = &lstPriority
 
 	// relations
 	if err := relation.Upsert1(ctx, tx, "order", orderEnt, &input.DTO, out); err != nil {
@@ -201,10 +237,19 @@ func (r *orderRepository) Create(ctx context.Context, input *model.OrderUpsertDT
 	}
 
 	if exists {
-		return r.upsertExistingOrder(ctx, tx, input)
+		up, err := r.upsertExistingOrder(ctx, tx, input)
+		if err != nil {
+			return nil, err
+		}
+		return up, nil
 	}
 
-	return r.createNewOrder(ctx, tx, input)
+	new, err := r.createNewOrder(ctx, tx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	return new, nil
 }
 
 func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
@@ -220,22 +265,21 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 		}
 	}()
 
-	dto := &input.DTO
+	output := &input.DTO
 
-	q := tx.Order.UpdateOneID(dto.ID).
-		SetNillableCode(dto.Code)
+	q := tx.Order.UpdateOneID(output.ID).
+		SetNillableCode(output.Code)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
 			*input.Collections,
-			dto.CustomFields,
+			output.CustomFields,
 			q,
 			false,
 		)
 		if err != nil {
 			return nil, err
-
 		}
 	}
 
@@ -244,30 +288,54 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
+	output = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
 
 	// latest order item
-	latestOrderItemDto, err := r.orderItemRepo.Update(ctx, tx, input.DTO.LatestOrderItem)
+	latest, err := r.orderItemRepo.Update(ctx, tx, input.DTO.LatestOrderItemUpsert)
 	if err != nil {
 		return nil, err
 	}
-	dto.LatestOrderItem = &model.OrderItemUpsertDTO{
-		DTO:         *latestOrderItemDto,
-		Collections: input.DTO.LatestOrderItem.Collections,
+
+	// reassign latest order item -> order as cache to appear them on the table
+	isLatest, err := r.orderItemRepo.IsLatestIfOrderID(ctx, entity.ID, latest.ID)
+	if err != nil {
+		return nil, err
 	}
+	if isLatest {
+		lstStatus := latest.CustomFields["status"].(string)
+		lstPriority := latest.CustomFields["priority"].(string)
+
+		_, err = entity.
+			Update().
+			SetNillableCodeLatest(latest.Code).
+			SetNillableStatusLatest(&lstStatus).
+			SetNillablePriorityLatest(&lstPriority).
+			Save(ctx)
+
+		if err != nil {
+			return nil, err
+		}
+
+		// Assign latest ones to output
+		output.CodeLatest = latest.Code
+		output.StatusLatest = &lstStatus
+		output.PriorityLatest = &lstPriority
+	}
+
+	output.LatestOrderItem = latest
 
 	// relation
-	err = relation.Upsert1(ctx, tx, "order", entity, &input.DTO, dto)
+	err = relation.Upsert1(ctx, tx, "order", entity, &input.DTO, output)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = relation.UpsertM2M(ctx, tx, "order", entity, input.DTO, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "order", entity, input.DTO, output)
 	if err != nil {
 		return nil, err
 	}
 
-	return dto, nil
+	return output, nil
 }
 
 func (r *orderRepository) GetByID(ctx context.Context, id int64) (*model.OrderDTO, error) {
@@ -285,14 +353,12 @@ func (r *orderRepository) GetByID(ctx context.Context, id int64) (*model.OrderDT
 	dto := mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
 
 	// latest order item
-	latestOrderItemDto, err := r.orderItemRepo.GetLatestByOrderID(ctx, id)
+	latest, err := r.orderItemRepo.GetLatestByOrderID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	dto.LatestOrderItem = &model.OrderItemUpsertDTO{
-		DTO: *latestOrderItemDto,
-	}
-
+	logger.Debug(fmt.Sprintf("[GET] %v", latest))
+	dto.LatestOrderItem = latest
 	return dto, nil
 }
 

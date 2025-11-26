@@ -36,6 +36,10 @@ func (OrderItem) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.String("code_parent").
+			Optional().
+			Nillable(),
+
 		field.String("remake_type").
 			Optional().Nillable(), // adjust | remake
 

@@ -19,6 +19,8 @@ import (
 )
 
 type OrderItemRepository interface {
+	IsLatest(ctx context.Context, orderItemID int64) (bool, error)
+	IsLatestIfOrderID(ctx context.Context, orderID, orderItemID int64) (bool, error)
 	GetLatestByOrderID(ctx context.Context, orderID int64) (*model.OrderItemDTO, error)
 	// -- general functions
 	Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
@@ -37,6 +39,49 @@ type orderItemRepository struct {
 
 func NewOrderItemRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) OrderItemRepository {
 	return &orderItemRepository{db: db, deps: deps, cfMgr: cfMgr}
+}
+
+func (r *orderItemRepository) IsLatest(ctx context.Context, orderItemID int64) (bool, error) {
+	cur, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.ID(orderItemID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	orderID := cur.OrderID
+
+	latest, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt)).
+		First(ctx)
+	if err != nil {
+		return false, err
+	}
+	return latest.ID == orderItemID, nil
+}
+
+func (r *orderItemRepository) IsLatestIfOrderID(ctx context.Context, orderID, orderItemID int64) (bool, error) {
+	latest, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt)).
+		First(ctx)
+	if err != nil {
+		return false, err
+	}
+	return latest.ID == orderItemID, nil
 }
 
 func (r *orderItemRepository) GetLatestByOrderID(ctx context.Context, orderID int64) (*model.OrderItemDTO, error) {
@@ -73,18 +118,6 @@ func (r *orderItemRepository) getNextItemSeq(ctx context.Context, orderID int64)
 
 // -- general functions
 func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
-	tx, err := r.db.Tx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		} else {
-			_ = tx.Commit()
-		}
-	}()
-
 	dto := &input.DTO
 
 	// order item - ParentItemID + RemakeCount
@@ -110,14 +143,17 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		dto.Code = &code
 	}
 
-	q := tx.OrderItem.Create().SetCode(*dto.Code)
+	q := tx.OrderItem.Create().
+		SetCode(*dto.Code)
 	if dto.ParentItemID != nil {
 		q.SetParentItemID(*dto.ParentItemID)
 	}
 	q.SetRemakeCount(dto.RemakeCount)
+	q.SetOrderID(dto.OrderID)
+	q.SetNillableCodeOriginal(dto.CodeOriginal)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
-		_, err = customfields.PrepareCustomFields(ctx,
+		_, err := customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
 			*input.Collections,
 			dto.CustomFields,
@@ -150,25 +186,13 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 }
 
 func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
-	tx, err := r.db.Tx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		} else {
-			_ = tx.Commit()
-		}
-	}()
-
 	dto := &input.DTO
 
 	q := tx.OrderItem.UpdateOneID(dto.ID).
 		SetNillableCode(dto.Code)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
-		_, err = customfields.PrepareCustomFields(ctx,
+		_, err := customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
 			*input.Collections,
 			dto.CustomFields,
