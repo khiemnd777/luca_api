@@ -90,10 +90,33 @@ func Upsert1(
 		defer rows.Close()
 
 		outVal := reflect.ValueOf(outputDTO).Elem()
-		outVal.FieldByName(cfg.UpsertedIDProp).SetInt(0)
+
+		f := outVal.FieldByName(cfg.UpsertedIDProp)
+
+		if f.IsValid() && f.CanSet() {
+			switch f.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				f.SetInt(0)
+			case reflect.Ptr:
+				if f.Type().Elem().Kind() >= reflect.Int && f.Type().Elem().Kind() <= reflect.Int64 {
+					f.Set(reflect.Zero(f.Type()))
+				}
+			}
+		}
 
 		if cfg.UpsertedNameProp != nil {
-			outVal.FieldByName(*cfg.UpsertedNameProp).SetString("")
+			f := outVal.FieldByName(*cfg.UpsertedNameProp)
+			if !f.IsValid() || !f.CanSet() {
+			} else {
+				switch f.Kind() {
+				case reflect.String:
+					f.SetString("")
+				case reflect.Ptr:
+					if f.Type().Elem().Kind() == reflect.String {
+						f.Set(reflect.Zero(f.Type()))
+					}
+				}
+			}
 		}
 
 		return nil
@@ -165,7 +188,25 @@ func Upsert1(
 
 	outVal := reflect.ValueOf(outputDTO).Elem()
 
-	outVal.FieldByName(cfg.UpsertedIDProp).SetInt(int64(outRefID))
+	f := outVal.FieldByName(cfg.UpsertedIDProp)
+
+	if !f.IsValid() || !f.CanSet() {
+	}
+
+	switch f.Kind() {
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// direct int
+		f.SetInt(int64(outRefID))
+
+	case reflect.Ptr:
+		if f.Type().Elem().Kind() >= reflect.Int && f.Type().Elem().Kind() <= reflect.Int64 {
+			v := int64(outRefID)
+			f.Set(reflect.ValueOf(&v))
+		}
+
+	default:
+	}
 
 	if cfg.UpsertedNameProp != nil {
 		fv := outVal.FieldByName(*cfg.UpsertedNameProp)

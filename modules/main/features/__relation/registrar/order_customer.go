@@ -18,7 +18,7 @@ func init() {
 		RefTable:   "customers",
 		RefIDCol:   "id",
 		RefNameCol: "name",
-		RefDTO:     model.CustomerDTO{},
+		RefDTO:     model.CustomerShortDTO{},
 
 		UpsertedIDProp:   "CustomerID",
 		UpsertedNameProp: utils.Ptr("CustomerName"),
@@ -30,7 +30,7 @@ func init() {
 		RefTable:    "customers",
 		NormFields:  []string{"code", "name"},
 		Permissions: []string{"customer.search"},
-		RefDTO:      model.CustomerDTO{},
+		RefDTO:      model.CustomerShortDTO{},
 		CachePrefix: "customer:search",
 	})
 }

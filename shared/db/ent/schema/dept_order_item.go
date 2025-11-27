@@ -40,23 +40,14 @@ func (OrderItem) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
-		field.String("remake_type").
-			Optional().Nillable(), // adjust | remake
-
-		field.String("remake_reason").
-			Optional().Nillable(),
-
 		field.Int("remake_count").
 			Default(0),
 
 		// product info
-		// field.String("product_type"), // crown | veneer | ...
-		// field.Int64("material_id").Optional(),
-		// field.String("shade").Optional(),
-
-		field.Strings("tooth_positions").Optional(),
-
-		// field.String("category_slug"),
+		field.Int("product_id").Optional(),
+		field.String("product_name").
+			Nillable().
+			Optional(),
 
 		field.JSON("custom_fields", map[string]any{}).
 			Default(map[string]any{}),

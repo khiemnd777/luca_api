@@ -26,6 +26,16 @@ func (Order) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.JSON("custom_fields", map[string]any{}).
+			Optional().
+			Default(map[string]any{}),
+
+		field.Int64("customer_id").Optional(),
+		field.String("customer_name").
+			Nillable().
+			Optional(),
+
+		// Cache & Table
 		field.String("code_latest").
 			Optional().
 			Nillable(),
@@ -38,12 +48,28 @@ func (Order) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
-		field.JSON("custom_fields", map[string]any{}).
-			Optional().
-			Default(map[string]any{}),
+		field.Int("product_id").Optional(),
+		field.String("product_name").
+			Nillable().
+			Optional(),
 
-		field.Int64("customer_id").Optional(),
-		field.String("customer_name").
+		field.Int("quantity").
+			Nillable().
+			Optional(),
+
+		field.Float("total_price").
+			Nillable().
+			Optional(),
+
+		field.Time("delivery_date").
+			Nillable().
+			Optional(),
+
+		field.String("remake_type").
+			Nillable().
+			Optional(),
+
+		field.Int("remake_count").
 			Nillable().
 			Optional(),
 

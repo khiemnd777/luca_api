@@ -32,13 +32,20 @@ type OrderItemRepository interface {
 }
 
 type orderItemRepository struct {
-	db    *generated.Client
-	deps  *module.ModuleDeps[config.ModuleConfig]
-	cfMgr *customfields.Manager
+	db                   *generated.Client
+	deps                 *module.ModuleDeps[config.ModuleConfig]
+	cfMgr                *customfields.Manager
+	orderItemProcessRepo OrderItemProcessRepository
 }
 
 func NewOrderItemRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) OrderItemRepository {
-	return &orderItemRepository{db: db, deps: deps, cfMgr: cfMgr}
+	orderItemProcessRepo := NewOrderItemProcessRepository(db, deps, cfMgr)
+	return &orderItemRepository{
+		db:                   db,
+		deps:                 deps,
+		cfMgr:                cfMgr,
+		orderItemProcessRepo: orderItemProcessRepo,
+	}
 }
 
 func (r *orderItemRepository) IsLatest(ctx context.Context, orderItemID int64) (bool, error) {
@@ -152,9 +159,12 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 	if dto.ParentItemID != nil {
 		q.SetParentItemID(*dto.ParentItemID)
 	}
-	q.SetRemakeCount(dto.RemakeCount)
-	q.SetOrderID(dto.OrderID)
-	q.SetNillableCodeOriginal(dto.CodeOriginal)
+	q.SetRemakeCount(dto.RemakeCount).
+		SetOrderID(dto.OrderID).
+		SetNillableCodeOriginal(dto.CodeOriginal)
+
+	q.SetNillableProductID(dto.ProductID).
+		SetNillableProductName(dto.ProductName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err := customfields.PrepareCustomFields(ctx,
@@ -175,6 +185,11 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 	}
 
 	dto = mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+
+	// processes
+	if entity.ProductID > 0 {
+		r.orderItemProcessRepo.CreateManyByProductID(ctx, tx, entity.ID, entity.ProductID)
+	}
 
 	err = relation.Upsert1(ctx, tx, "orderitem", entity, &input.DTO, dto)
 	if err != nil {
@@ -241,6 +256,14 @@ func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.Ord
 	}
 
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+
+	// processes
+	prcs, err := r.orderItemProcessRepo.GetByOrderItemID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	dto.OrderItemProcesses = prcs
+
 	return dto, nil
 }
 

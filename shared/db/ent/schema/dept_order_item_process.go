@@ -4,6 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type OrderItemProcess struct {
@@ -20,14 +21,24 @@ func (OrderItemProcess) Fields() []ent.Field {
 			}),
 		field.Int64("order_item_id"),
 
-		field.String("process_name"),
+		field.String("process_name").
+			Nillable().
+			Optional(),
+
 		field.Int("step_number"),
 
-		field.Int64("assigned_to").
+		field.Int64("assigned_id").
+			Optional().Nillable(),
+
+		field.String("assigned_name").
 			Optional().Nillable(),
 
 		field.String("status").
 			Default("pending"), // pending | in_progress | paused | qc | completed | rework | issue
+
+		field.JSON("custom_fields", map[string]any{}).
+			Optional().
+			Default(map[string]any{}),
 
 		field.Time("started_at").
 			Optional().Nillable(),
@@ -47,5 +58,11 @@ func (OrderItemProcess) Edges() []ent.Edge {
 			Field("order_item_id").
 			Required().
 			Unique(),
+	}
+}
+
+func (OrderItemProcess) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("order_item_id", "step_number"),
 	}
 }

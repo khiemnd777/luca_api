@@ -3,15 +3,22 @@ package model
 import "time"
 
 type OrderItemDTO struct {
+	// general
 	ID           int64          `json:"id,omitempty"`
 	OrderID      int64          `json:"order_id,omitempty"`
 	ParentItemID *int64         `json:"parent_item_id,omitempty"`
-	Code         *string        `json:"code,omitempty"`
-	CodeOriginal *string        `json:"code_original,omitempty"`
-	RemakeCount  int            `json:"remake_count,omitempty"`
 	CustomFields map[string]any `json:"custom_fields,omitempty"`
 	CreatedAt    time.Time      `json:"created_at,omitempty"`
 	UpdatedAt    time.Time      `json:"updated_at,omitempty"`
+	// order
+	Code         *string `json:"code,omitempty"`
+	CodeOriginal *string `json:"code_original,omitempty"`
+	RemakeCount  int     `json:"remake_count,omitempty"`
+	// product
+	ProductID   *int    `json:"product_id,omitempty"`
+	ProductName *string `json:"product_name,omitempty"`
+	// processes
+	OrderItemProcesses []*OrderItemProcessDTO `json:"order_item_processes,omitempty"`
 }
 
 type OrderItemUpsertDTO struct {
