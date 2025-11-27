@@ -3,6 +3,7 @@ package customfields
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
@@ -61,9 +62,38 @@ func EvaluateShowIf(cond *ShowIfCondition, data map[string]any) bool {
 	// --- SINGLE CONDITION ---
 	v := LookupNestedField(data, cond.Field)
 
+	// normalize bool
+	boolVal := toBool(v)
+
 	switch cond.Op {
+
+	// =============================
+	// BOOLEAN SPECIAL CASES
+	// =============================
+
+	case "is_true":
+		return boolVal
+
+	case "is_false":
+		return !boolVal
+
+	case "truthy":
+		return isTruthy(v)
+
+	case "falsy":
+		return !isTruthy(v)
+
+	case "exists":
+		return !isNilLike(v)
+
+	case "not_exists":
+		return isNilLike(v)
+
+	// =============================
+	// EXISTING OPS
+	// =============================
+
 	case "eq", "equals":
-		// special case eq nil
 		if cond.Value == nil {
 			return isNilLike(v)
 		}
@@ -86,4 +116,34 @@ func EvaluateShowIf(cond *ShowIfCondition, data map[string]any) bool {
 	}
 
 	return false
+}
+
+func toBool(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case int, int8, int16, int32, int64:
+		return utils.ToFloat(t) != 0
+	case float32, float64:
+		return utils.ToFloat(t) != 0
+	case string:
+		s := strings.TrimSpace(strings.ToLower(t))
+		return s == "true" || s == "1" || s == "yes"
+	}
+
+	return false
+}
+
+func isTruthy(v any) bool {
+	if isNilLike(v) {
+		return false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		s := strings.TrimSpace(strings.ToLower(t))
+		return s != "" && s != "0" && s != "false" && s != "no"
+	}
+	return true
 }

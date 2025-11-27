@@ -267,8 +267,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 
 	output := &input.DTO
 
-	q := tx.Order.UpdateOneID(output.ID).
-		SetNillableCode(output.Code)
+	q := tx.Order.UpdateOneID(output.ID)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,

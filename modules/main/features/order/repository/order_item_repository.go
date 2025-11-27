@@ -132,15 +132,19 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 
 	// order item - code
 	if dto.Code == nil || *dto.Code == "" {
-		seq, errSeq := r.getNextItemSeq(ctx, dto.OrderID)
-		if errSeq != nil {
-			return nil, errSeq
+		if dto.RemakeCount > 0 {
+			seq, errSeq := r.getNextItemSeq(ctx, dto.OrderID)
+			if errSeq != nil {
+				return nil, errSeq
+			}
+
+			alpha := utils.AlphabetSeq(seq)
+
+			code := fmt.Sprintf("%s%s", alpha, *dto.CodeOriginal)
+			dto.Code = &code
+		} else {
+			dto.Code = dto.CodeOriginal
 		}
-
-		alpha := utils.AlphabetSeq(seq)
-
-		code := fmt.Sprintf("%s-%s", alpha, *dto.CodeOriginal)
-		dto.Code = &code
 	}
 
 	q := tx.OrderItem.Create().
