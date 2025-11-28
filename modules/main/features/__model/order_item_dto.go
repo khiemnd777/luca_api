@@ -15,7 +15,7 @@ type OrderItemDTO struct {
 	CodeOriginal *string `json:"code_original,omitempty"`
 	RemakeCount  int     `json:"remake_count,omitempty"`
 	// product
-	ProductID   *int    `json:"product_id,omitempty"`
+	ProductID   int     `json:"product_id,omitempty"`
 	ProductName *string `json:"product_name,omitempty"`
 	// processes
 	OrderItemProcesses []*OrderItemProcessDTO `json:"order_item_processes,omitempty"`
@@ -24,4 +24,12 @@ type OrderItemDTO struct {
 type OrderItemUpsertDTO struct {
 	DTO         OrderItemDTO `json:"dto"`
 	Collections *[]string    `json:"collections,omitempty"`
+}
+
+type OrderItemHistoricalDTO struct {
+	ID          int64     `json:"id"`
+	Code        string    `json:"code"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+	IsCurrent   bool      `json:"is_current"`
+	IsHighlight bool      `json:"is_highlight"`
 }

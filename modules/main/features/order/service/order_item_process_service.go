@@ -13,6 +13,13 @@ import (
 )
 
 type OrderItemProcessService interface {
+	GetRawProcessesByProductID(ctx context.Context, productID int) ([]*model.ProcessDTO, error)
+
+	GetByOrderItemID(
+		ctx context.Context,
+		orderID int64,
+		orderItemID int64,
+	) ([]*model.OrderItemProcessDTO, error)
 }
 
 type orderItemProcessService struct {
@@ -36,5 +43,15 @@ func NewOrderItemProcessService(
 func (s *orderItemProcessService) GetRawProcessesByProductID(ctx context.Context, productID int) ([]*model.ProcessDTO, error) {
 	return cache.GetList(fmt.Sprintf("product:id:%d:processes", productID), cache.TTLMedium, func() ([]*model.ProcessDTO, error) {
 		return s.repo.GetRawProcessesByProductID(ctx, productID)
+	})
+}
+
+func (s *orderItemProcessService) GetByOrderItemID(
+	ctx context.Context,
+	orderID int64,
+	orderItemID int64,
+) ([]*model.OrderItemProcessDTO, error) {
+	return cache.GetList(fmt.Sprintf("order:id:%d:oid:%d:processes", orderID, orderItemID), cache.TTLShort, func() ([]*model.OrderItemProcessDTO, error) {
+		return s.repo.GetByOrderItemID(ctx, orderItemID)
 	})
 }

@@ -19,10 +19,21 @@ func (feature) ID() string    { return "order" }
 func (feature) Priority() int { return 79 }
 
 func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) error {
-	repo := repository.NewOrderRepository(deps.Ent.(*generated.Client), deps, cfMgr)
-	svc := service.NewOrderService(repo, deps, cfMgr)
-	h := handler.NewOrderHandler(svc, deps)
-	h.RegisterRoutes(router)
+	ordRepo := repository.NewOrderRepository(deps.Ent.(*generated.Client), deps, cfMgr)
+	ordSvc := service.NewOrderService(ordRepo, deps, cfMgr)
+	ordHandler := handler.NewOrderHandler(ordSvc, deps)
+	ordHandler.RegisterRoutes(router)
+
+	ordItemRepo := repository.NewOrderItemRepository(deps.Ent.(*generated.Client), deps, cfMgr)
+	ordItemSvc := service.NewOrderItemService(ordItemRepo, deps, cfMgr)
+	ordItemHandler := handler.NewOrderItemHandler(ordItemSvc, deps)
+	ordItemHandler.RegisterRoutes(router)
+
+	ordItemProcessRepo := repository.NewOrderItemProcessRepository(deps.Ent.(*generated.Client), deps, cfMgr)
+	ordItemProcessSvc := service.NewOrderItemProcessService(ordItemProcessRepo, deps, cfMgr)
+	ordItemProcessHandler := handler.NewOrderItemProcessHandler(ordItemProcessSvc, deps)
+	ordItemProcessHandler.RegisterRoutes(router)
+
 	return nil
 }
 

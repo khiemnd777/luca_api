@@ -22,6 +22,7 @@ type OrderService interface {
 	Create(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
+	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
@@ -43,6 +44,14 @@ func NewOrderService(repo repository.OrderRepository, deps *module.ModuleDeps[co
 
 func kOrderByID(id int64) string {
 	return fmt.Sprintf("order:id:%d", id)
+}
+
+func kOrderByIDAll(id int64) string {
+	return fmt.Sprintf("order:id:%d:*", id)
+}
+
+func kOrderByOrderIDAndOrderItemID(orderID, orderItemID int64) string {
+	return fmt.Sprintf("order:id:%d:oid:%d", orderID, orderItemID)
 }
 
 func kOrderAll() []string {
@@ -87,7 +96,7 @@ func (s *orderService) Create(ctx context.Context, deptID int, input *model.Orde
 	}
 
 	if dto != nil && dto.ID > 0 {
-		cache.InvalidateKeys(kOrderByID(dto.ID))
+		cache.InvalidateKeys(kOrderByID(dto.ID), kOrderByIDAll(dto.ID))
 	}
 	cache.InvalidateKeys(kOrderAll()...)
 
@@ -107,7 +116,7 @@ func (s *orderService) Update(ctx context.Context, deptID int, input *model.Orde
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kOrderByID(dto.ID))
+		cache.InvalidateKeys(kOrderByID(dto.ID), kOrderByIDAll(dto.ID))
 	}
 	cache.InvalidateKeys(kOrderAll()...)
 
@@ -141,9 +150,17 @@ func (s *orderService) upsertSearch(ctx context.Context, deptID int, dto *model.
 // ----------------------------------------------------------------------------
 
 func (s *orderService) GetByID(ctx context.Context, id int64) (*model.OrderDTO, error) {
-	return cache.Get(kOrderByID(id), cache.TTLMedium, func() (*model.OrderDTO, error) {
-		return s.repo.GetByID(ctx, id)
-	})
+	return s.repo.GetByID(ctx, id)
+	// return cache.Get(kOrderByID(id), cache.TTLMedium, func() (*model.OrderDTO, error) {
+	// 	return s.repo.GetByID(ctx, id)
+	// })
+}
+
+func (s *orderService) GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error) {
+	return s.repo.GetByOrderIDAndOrderItemID(ctx, orderID, orderItemID)
+	// return cache.Get(kOrderByOrderIDAndOrderItemID(orderID, orderItemID), cache.TTLMedium, func() (*model.OrderDTO, error) {
+	// 	return s.repo.GetByOrderIDAndOrderItemID(ctx, orderID, orderItemID)
+	// })
 }
 
 // ----------------------------------------------------------------------------

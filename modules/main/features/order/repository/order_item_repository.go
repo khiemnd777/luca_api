@@ -22,6 +22,7 @@ type OrderItemRepository interface {
 	IsLatest(ctx context.Context, orderItemID int64) (bool, error)
 	IsLatestIfOrderID(ctx context.Context, orderID, orderItemID int64) (bool, error)
 	GetLatestByOrderID(ctx context.Context, orderID int64) (*model.OrderItemDTO, error)
+	GetHistoricalByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) ([]*model.OrderItemHistoricalDTO, error)
 	// -- general functions
 	Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
 	Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
@@ -108,6 +109,54 @@ func (r *orderItemRepository) GetLatestByOrderID(ctx context.Context, orderID in
 	return dto, nil
 }
 
+func (r *orderItemRepository) GetHistoricalByOrderIDAndOrderItemID(
+	ctx context.Context,
+	orderID, orderItemID int64,
+) ([]*model.OrderItemHistoricalDTO, error) {
+
+	items, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemHistoricalDTO, 0, len(items))
+
+	var latestID int64 = 0
+	if len(items) > 0 {
+		latestID = items[0].ID
+	}
+
+	for _, it := range items {
+		id := it.ID
+
+		isCurrent := (id == latestID)
+
+		var isHighlight bool
+		if orderItemID == 0 {
+			isHighlight = (id == latestID)
+		} else {
+			isHighlight = (id == orderItemID)
+		}
+
+		out = append(out, &model.OrderItemHistoricalDTO{
+			ID:          id,
+			Code:        *it.Code,
+			CreatedAt:   it.CreatedAt,
+			IsCurrent:   isCurrent,
+			IsHighlight: isHighlight,
+		})
+	}
+
+	return out, nil
+}
+
 // -- helpers
 func (r *orderItemRepository) getNextItemSeq(ctx context.Context, orderID int64) (int, error) {
 	count, err := r.db.OrderItem.
@@ -163,7 +212,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		SetOrderID(dto.OrderID).
 		SetNillableCodeOriginal(dto.CodeOriginal)
 
-	q.SetNillableProductID(dto.ProductID).
+	q.SetNillableProductID(&dto.ProductID).
 		SetNillableProductName(dto.ProductName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
@@ -258,11 +307,11 @@ func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.Ord
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
 
 	// processes
-	prcs, err := r.orderItemProcessRepo.GetByOrderItemID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	dto.OrderItemProcesses = prcs
+	// prcs, err := r.orderItemProcessRepo.GetByOrderItemID(ctx, id)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// dto.OrderItemProcesses = prcs
 
 	return dto, nil
 }

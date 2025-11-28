@@ -21,6 +21,7 @@ import (
 
 type OrderRepository interface {
 	ExistsByCode(ctx context.Context, code string) (bool, error)
+	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	// -- general functions
 	Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
@@ -58,6 +59,30 @@ func (r *orderRepository) ExistsByCode(ctx context.Context, code string) (bool, 
 			order.DeletedAtIsNil(),
 		).
 		Exist(ctx)
+}
+
+func (r *orderRepository) GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error) {
+	q := r.db.Order.Query().
+		Where(
+			order.ID(orderID),
+			order.DeletedAtIsNil(),
+		)
+
+	entity, err := q.Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
+
+	// latest order item
+	latest, err := r.orderItemRepo.GetByID(ctx, orderItemID)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug(fmt.Sprintf("[GET] %v", latest))
+	dto.LatestOrderItem = latest
+	return dto, nil
 }
 
 // -- helpers
@@ -415,7 +440,7 @@ func (r *orderRepository) GetByID(ctx context.Context, id int64) (*model.OrderDT
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug(fmt.Sprintf("[GET] %v", latest))
+	logger.Debug(fmt.Sprintf("[GET] ProductID: %d", latest.ProductID))
 	dto.LatestOrderItem = latest
 	return dto, nil
 }

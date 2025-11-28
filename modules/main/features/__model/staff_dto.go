@@ -18,3 +18,8 @@ type StaffDTO struct {
 	CreatedAt    time.Time      `json:"created_at,omitempty"`
 	UpdatedAt    time.Time      `json:"updated_at,omitempty"`
 }
+
+type StaffShortDTO struct {
+	ID   int    `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+}
