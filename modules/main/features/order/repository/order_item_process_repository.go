@@ -25,6 +25,7 @@ type OrderItemProcessRepository interface {
 		tx *generated.Tx,
 		orderItemID int64,
 		orderID int64,
+		orderCode *string,
 		productID int,
 	) ([]*model.OrderItemProcessDTO, error)
 
@@ -66,6 +67,12 @@ type OrderItemProcessRepository interface {
 		orderItemID int64,
 	) ([]*model.OrderItemProcessDTO, error)
 
+	GetProcessesByAssignedID(
+		ctx context.Context,
+		tx *generated.Tx,
+		assignedID int64,
+	) ([]*model.OrderItemProcessDTO, error)
+
 	GetProcessesByOrderID(
 		ctx context.Context,
 		tx *generated.Tx,
@@ -93,6 +100,7 @@ func (r *orderItemProcessRepository) CreateManyByProductID(
 	tx *generated.Tx,
 	orderItemID int64,
 	orderID int64,
+	orderCode *string,
 	productID int,
 ) ([]*model.OrderItemProcessDTO, error) {
 	processes, err := r.GetRawProcessesByProductID(ctx, productID)
@@ -130,6 +138,7 @@ func (r *orderItemProcessRepository) CreateManyByProductID(
 			DTO: model.OrderItemProcessDTO{
 				OrderID:      &orderID,
 				OrderItemID:  orderItemID,
+				OrderCode:    orderCode,
 				ProcessName:  pname,
 				StepNumber:   step,
 				CustomFields: cf,
@@ -353,6 +362,36 @@ func (r *orderItemProcessRepository) GetProcessesByOrderItemID(
 		Query().
 		Where(
 			orderitemprocess.OrderItemID(orderItemID),
+		).
+		Order(
+			orderitemprocess.ByStepNumber(
+				sql.OrderAsc(),
+			),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := mapper.MapListAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](items)
+	return out, nil
+}
+
+func (r *orderItemProcessRepository) GetProcessesByAssignedID(
+	ctx context.Context,
+	tx *generated.Tx,
+	assignedID int64,
+) ([]*model.OrderItemProcessDTO, error) {
+	var oipC *generated.OrderItemProcessClient
+	if tx != nil {
+		oipC = tx.OrderItemProcess
+	} else {
+		oipC = r.db.OrderItemProcess
+	}
+	items, err := oipC.
+		Query().
+		Where(
+			orderitemprocess.AssignedID(assignedID),
 		).
 		Order(
 			orderitemprocess.ByStepNumber(

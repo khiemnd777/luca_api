@@ -22,6 +22,11 @@ type OrderItemProcessService interface {
 		orderItemID int64,
 	) ([]*model.OrderItemProcessDTO, error)
 
+	GetProcessesByAssignedID(
+		ctx context.Context,
+		assignedID int64,
+	) ([]*model.OrderItemProcessDTO, error)
+
 	Update(
 		ctx context.Context,
 		deptID int,
@@ -60,6 +65,15 @@ func (s *orderItemProcessService) GetProcessesByOrderItemID(
 ) ([]*model.OrderItemProcessDTO, error) {
 	return cache.GetList(fmt.Sprintf("order:id:%d:oid:%d:processes", orderID, orderItemID), cache.TTLShort, func() ([]*model.OrderItemProcessDTO, error) {
 		return s.repo.GetProcessesByOrderItemID(ctx, nil, orderItemID)
+	})
+}
+
+func (s *orderItemProcessService) GetProcessesByAssignedID(
+	ctx context.Context,
+	assignedID int64,
+) ([]*model.OrderItemProcessDTO, error) {
+	return cache.GetList(fmt.Sprintf("order:assigned:%d:processes", assignedID), cache.TTLShort, func() ([]*model.OrderItemProcessDTO, error) {
+		return s.repo.GetProcessesByAssignedID(ctx, nil, assignedID)
 	})
 }
 

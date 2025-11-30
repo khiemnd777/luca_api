@@ -59,6 +59,7 @@ func kOrderAll() []string {
 	return []string{
 		kOrderListAll(),
 		kOrderSearchAll(),
+		"order:assigned:*",
 	}
 }
 

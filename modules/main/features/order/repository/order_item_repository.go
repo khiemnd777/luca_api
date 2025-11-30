@@ -237,7 +237,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 
 	// processes
 	if entity.ProductID > 0 {
-		r.orderItemProcessRepo.CreateManyByProductID(ctx, tx, entity.ID, entity.OrderID, entity.ProductID)
+		r.orderItemProcessRepo.CreateManyByProductID(ctx, tx, entity.ID, entity.OrderID, entity.Code, entity.ProductID)
 	}
 
 	err = relation.Upsert1(ctx, tx, "orderitem", entity, &input.DTO, dto)
