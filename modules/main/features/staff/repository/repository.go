@@ -35,6 +35,7 @@ type StaffRepository interface {
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
+	SearchWithRoleName(ctx context.Context, roleName string, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -539,6 +540,31 @@ func (r *staffRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbut
 		ctx,
 		r.db.User.Query().
 			Where(user.DeletedAtIsNil()),
+		[]string{
+			dbutils.GetNormField(user.FieldName),
+			dbutils.GetNormField(user.FieldPhone),
+			dbutils.GetNormField(user.FieldEmail),
+		},
+		query,
+		user.Table,
+		user.FieldID,
+		user.FieldID,
+		user.Or,
+		func(src []*generated.User) []*model.StaffDTO {
+			mapped := mapper.MapListAs[*generated.User, *model.StaffDTO](src)
+			return mapped
+		},
+	)
+}
+
+func (r *staffRepo) SearchWithRoleName(ctx context.Context, roleName string, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error) {
+	return dbutils.Search(
+		ctx,
+		r.db.User.Query().
+			Where(
+				user.DeletedAtIsNil(),
+				user.HasRolesWith(role.RoleNameEQ(roleName)),
+			),
 		[]string{
 			dbutils.GetNormField(user.FieldName),
 			dbutils.GetNormField(user.FieldPhone),

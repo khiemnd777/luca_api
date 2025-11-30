@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -10,6 +11,8 @@ import (
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
@@ -22,6 +25,7 @@ import (
 type OrderRepository interface {
 	ExistsByCode(ctx context.Context, code string) (bool, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
+	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	// -- general functions
 	Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
@@ -32,10 +36,11 @@ type OrderRepository interface {
 }
 
 type orderRepository struct {
-	db            *generated.Client
-	deps          *module.ModuleDeps[config.ModuleConfig]
-	cfMgr         *customfields.Manager
-	orderItemRepo OrderItemRepository
+	db                   *generated.Client
+	deps                 *module.ModuleDeps[config.ModuleConfig]
+	cfMgr                *customfields.Manager
+	orderItemRepo        OrderItemRepository
+	orderItemProcessRepo OrderItemProcessRepository
 }
 
 func NewOrderRepository(
@@ -44,10 +49,11 @@ func NewOrderRepository(
 	cfMgr *customfields.Manager,
 ) OrderRepository {
 	return &orderRepository{
-		db:            db,
-		deps:          deps,
-		cfMgr:         cfMgr,
-		orderItemRepo: NewOrderItemRepository(db, deps, cfMgr),
+		db:                   db,
+		deps:                 deps,
+		cfMgr:                cfMgr,
+		orderItemRepo:        NewOrderItemRepository(db, deps, cfMgr),
+		orderItemProcessRepo: NewOrderItemProcessRepository(db, deps, cfMgr),
 	}
 }
 
@@ -419,6 +425,134 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	}
 
 	return output, nil
+}
+
+func (r *orderRepository) UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error) {
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	_, err = r.orderItemProcessRepo.UpdateStatus(ctx, tx, orderItemProcessID, status)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get oip from memory to ensure CF == latest status, because not yet Committed to db
+	updatedOIP, err := tx.OrderItemProcess.
+		Query().
+		Where(orderitemprocess.IDEQ(orderItemProcessID)).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if updatedOIP.OrderID == nil {
+		err = fmt.Errorf("OrderID is nil after updating process")
+		return nil, err
+	}
+
+	processes, err := r.orderItemProcessRepo.GetProcessesByOrderItemID(ctx, tx, updatedOIP.OrderItemID)
+	if err != nil {
+		return nil, err
+	}
+
+	orderDTO, err := r.recalculateOrderStatusByProcesses(ctx, tx, *updatedOIP.OrderID, updatedOIP.OrderItemID, processes)
+	if err != nil {
+		return nil, err
+	}
+
+	return orderDTO, nil
+}
+
+func (r *orderRepository) recalculateOrderStatusByProcesses(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID,
+	orderItemID int64,
+	processes []*model.OrderItemProcessDTO,
+) (*model.OrderItemDTO, error) {
+
+	if len(processes) == 0 {
+		return nil, fmt.Errorf("no processes found for order %d", orderItemID)
+	}
+
+	allWaiting := true
+	allCompleted := true
+	anyInProgress := false
+
+	for _, p := range processes {
+		status := utils.SafeGetString(p.CustomFields, "status")
+
+		switch status {
+		case "waiting":
+		case "completed":
+			allWaiting = false
+		case "in_progress", "qc", "rework":
+			allWaiting = false
+			allCompleted = false
+			anyInProgress = true
+		default:
+			allWaiting = false
+			allCompleted = false
+		}
+
+		if status != "waiting" {
+			allWaiting = false
+		}
+		if status != "completed" {
+			allCompleted = false
+		}
+	}
+
+	var orderStatus string
+
+	switch {
+	case allWaiting:
+		orderStatus = "received"
+
+	case anyInProgress:
+		orderStatus = "in_progress"
+
+	case allCompleted:
+		orderStatus = "completed"
+
+	default:
+		orderStatus = "in_progress"
+	}
+
+	oi, err := tx.OrderItem.Query().
+		Where(orderitem.IDEQ(orderItemID)).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cf := maps.Clone(oi.CustomFields)
+	cf["status"] = orderStatus
+
+	updated, err := tx.OrderItem.
+		UpdateOne(oi).
+		SetCustomFields(cf).
+		Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](updated)
+
+	tx.Order.UpdateOneID(orderID).
+		SetNillableStatusLatest(&orderStatus).
+		Save(ctx)
+
+	return dto, nil
 }
 
 func (r *orderRepository) GetByID(ctx context.Context, id int64) (*model.OrderDTO, error) {

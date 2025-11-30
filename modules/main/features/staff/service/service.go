@@ -29,6 +29,7 @@ type StaffService interface {
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
+	SearchWithRoleName(ctx context.Context, roleName string, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -108,6 +109,14 @@ func kStaffSearch(q dbutils.SearchQuery) string {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("staff:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kStaffSearchWithRoleName(roleName string, q dbutils.SearchQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("staff:search:r%s:k%s:l%d:p%d:o%s:d%s", roleName, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func (s *staffService) Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error) {
@@ -249,6 +258,24 @@ func (s *staffService) Search(ctx context.Context, q dbutils.SearchQuery) (dbuti
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
 		res, e := s.repo.Search(ctx, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
+func (s *staffService) SearchWithRoleName(ctx context.Context, roleName string, q dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error) {
+	type boxed = dbutils.SearchResult[model.StaffDTO]
+	key := kStaffSearchWithRoleName(roleName, q)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.SearchWithRoleName(ctx, roleName, q)
 		if e != nil {
 			return nil, e
 		}

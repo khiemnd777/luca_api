@@ -21,6 +21,7 @@ import (
 type OrderService interface {
 	Create(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
@@ -123,6 +124,23 @@ func (s *orderService) Update(ctx context.Context, deptID int, input *model.Orde
 	s.upsertSearch(ctx, deptID, dto)
 
 	return dto, nil
+}
+
+func (s *orderService) UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error) {
+	out, err := s.repo.UpdateStatus(ctx, orderItemProcessID, status)
+	if err != nil {
+		return nil, err
+	}
+
+	if out != nil {
+		cache.InvalidateKeys(
+			kOrderByID(out.OrderID),
+			kOrderByIDAll(out.OrderID),
+		)
+	}
+	cache.InvalidateKeys(kOrderAll()...)
+
+	return out, nil
 }
 
 // ----------------------------------------------------------------------------

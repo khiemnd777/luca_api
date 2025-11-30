@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
+	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/order/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
@@ -24,6 +25,7 @@ func NewOrderItemProcessHandler(svc service.OrderItemProcessService, deps *modul
 
 func (h *OrderItemProcessHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes", h.Processes)
+	app.RouterPut(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/:order_item_process_id<int>", h.Update)
 }
 
 func (h *OrderItemProcessHandler) Processes(c *fiber.Ctx) error {
@@ -32,9 +34,33 @@ func (h *OrderItemProcessHandler) Processes(c *fiber.Ctx) error {
 	}
 	orderID, _ := utils.GetParamAsInt(c, "order_id")
 	orderItemID, _ := utils.GetParamAsInt(c, "order_item_id")
-	res, err := h.svc.GetByOrderItemID(c.UserContext(), int64(orderID), int64(orderItemID))
+	res, err := h.svc.GetProcessesByOrderItemID(c.UserContext(), int64(orderID), int64(orderItemID))
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemProcessHandler) Update(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	id, _ := utils.GetParamAsInt(c, "order_item_process_id")
+	if id <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+	}
+
+	payload, err := app.ParseBody[model.OrderItemProcessUpsertDTO](c)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+	}
+	payload.DTO.ID = int64(id)
+
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	dto, err := h.svc.Update(c.UserContext(), deptID, payload)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(dto)
 }

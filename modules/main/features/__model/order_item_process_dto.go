@@ -4,6 +4,7 @@ import "time"
 
 type OrderItemProcessDTO struct {
 	ID           int64      `json:"id,omitempty"`
+	OrderID      *int64     `json:"order_id,omitempty"`
 	OrderItemID  int64      `json:"order_item_id,omitempty"`
 	ProcessName  *string    `json:"process_name,omitempty"`
 	StepNumber   int        `json:"step_number,omitempty"`

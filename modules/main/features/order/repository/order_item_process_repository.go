@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 
 	"entgo.io/ent/dialect/sql"
@@ -23,6 +24,7 @@ type OrderItemProcessRepository interface {
 		ctx context.Context,
 		tx *generated.Tx,
 		orderItemID int64,
+		orderID int64,
 		productID int,
 	) ([]*model.OrderItemProcessDTO, error)
 
@@ -51,9 +53,23 @@ type OrderItemProcessRepository interface {
 		input *model.OrderItemProcessUpsertDTO,
 	) (*model.OrderItemProcessDTO, error)
 
-	GetByOrderItemID(
+	UpdateStatus(
 		ctx context.Context,
+		tx *generated.Tx,
+		id int64,
+		status string,
+	) (*model.OrderItemProcessDTO, error)
+
+	GetProcessesByOrderItemID(
+		ctx context.Context,
+		tx *generated.Tx,
 		orderItemID int64,
+	) ([]*model.OrderItemProcessDTO, error)
+
+	GetProcessesByOrderID(
+		ctx context.Context,
+		tx *generated.Tx,
+		orderID int64,
 	) ([]*model.OrderItemProcessDTO, error)
 
 	GetRawProcessesByProductID(
@@ -76,6 +92,7 @@ func (r *orderItemProcessRepository) CreateManyByProductID(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderItemID int64,
+	orderID int64,
 	productID int,
 ) ([]*model.OrderItemProcessDTO, error) {
 	processes, err := r.GetRawProcessesByProductID(ctx, productID)
@@ -111,6 +128,7 @@ func (r *orderItemProcessRepository) CreateManyByProductID(
 
 		dto := &model.OrderItemProcessUpsertDTO{
 			DTO: model.OrderItemProcessDTO{
+				OrderID:      &orderID,
 				OrderItemID:  orderItemID,
 				ProcessName:  pname,
 				StepNumber:   step,
@@ -289,15 +307,77 @@ func (r *orderItemProcessRepository) Update(
 	return out, nil
 }
 
-func (r *orderItemProcessRepository) GetByOrderItemID(
+func (r *orderItemProcessRepository) UpdateStatus(
 	ctx context.Context,
+	tx *generated.Tx,
+	id int64,
+	status string,
+) (*model.OrderItemProcessDTO, error) {
+
+	oip, err := tx.OrderItemProcess.
+		Query().
+		Where(orderitemprocess.IDEQ(id)).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cf := maps.Clone(oip.CustomFields)
+	cf["status"] = status
+
+	entity, err := tx.OrderItemProcess.
+		UpdateOneID(id).
+		SetCustomFields(cf).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+	out := mapper.MapAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](entity)
+
+	return out, nil
+}
+
+func (r *orderItemProcessRepository) GetProcessesByOrderItemID(
+	ctx context.Context,
+	tx *generated.Tx,
 	orderItemID int64,
 ) ([]*model.OrderItemProcessDTO, error) {
-
-	items, err := r.db.OrderItemProcess.
+	var oipC *generated.OrderItemProcessClient
+	if tx != nil {
+		oipC = tx.OrderItemProcess
+	} else {
+		oipC = r.db.OrderItemProcess
+	}
+	items, err := oipC.
 		Query().
 		Where(
 			orderitemprocess.OrderItemID(orderItemID),
+		).
+		Order(
+			orderitemprocess.ByStepNumber(
+				sql.OrderAsc(),
+			),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := mapper.MapListAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](items)
+	return out, nil
+}
+
+func (r *orderItemProcessRepository) GetProcessesByOrderID(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+) ([]*model.OrderItemProcessDTO, error) {
+
+	items, err := tx.OrderItemProcess.
+		Query().
+		Where(
+			orderitemprocess.OrderID(orderID),
 		).
 		Order(
 			orderitemprocess.ByStepNumber(

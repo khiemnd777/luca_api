@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -20,6 +22,11 @@ func (OrderItemProcess) Fields() []ent.Field {
 				"postgres": "bigserial",
 			}),
 		field.Int64("order_item_id"),
+
+		// cache
+		field.Int64("order_id").
+			Nillable().
+			Optional(),
 
 		field.String("process_name").
 			Nillable().
@@ -48,6 +55,9 @@ func (OrderItemProcess) Fields() []ent.Field {
 
 		field.String("note").
 			Optional().Nillable(),
+
+		field.Time("updated_at").
+			Default(time.Now).UpdateDefault(time.Now),
 	}
 }
 
@@ -64,5 +74,6 @@ func (OrderItemProcess) Edges() []ent.Edge {
 func (OrderItemProcess) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("order_item_id", "step_number"),
+		index.Fields("order_id", "step_number"),
 	}
 }

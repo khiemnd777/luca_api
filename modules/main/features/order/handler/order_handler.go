@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -32,6 +34,7 @@ func (h *OrderHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>", h.GetByOrderIDAndOrderItemID)
 	app.RouterPost(router, "/:dept_id<int>/order", h.Create)
 	app.RouterPut(router, "/:dept_id<int>/order/:id<int>", h.Update)
+	app.RouterPut(router, "/:dept_id<int>/order/:id<int>/process/:order_item_process_id<int>/change-status/:status", h.UpdateStatus)
 	app.RouterDelete(router, "/:dept_id<int>/order/:id<int>", h.Delete)
 }
 
@@ -131,6 +134,28 @@ func (h *OrderHandler) Update(c *fiber.Ctx) error {
 	deptID, _ := utils.GetDeptIDInt(c)
 
 	dto, err := h.svc.Update(c.UserContext(), deptID, payload)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *OrderHandler) UpdateStatus(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	oipID, _ := utils.GetParamAsInt(c, "order_item_process_id")
+	if oipID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid oip id")
+	}
+
+	status := utils.GetParamAsString(c, "status")
+	if strings.TrimSpace(status) == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid status")
+	}
+
+	dto, err := h.svc.UpdateStatus(c.UserContext(), int64(oipID), status)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

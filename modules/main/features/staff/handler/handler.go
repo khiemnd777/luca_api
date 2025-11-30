@@ -28,6 +28,7 @@ func NewStaffHandler(svc service.StaffService, deps *module.ModuleDeps[config.Mo
 func (h *StaffHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/staff/list", h.List)
 	app.RouterGet(router, "/:dept_id<int>/staff/search", h.Search)
+	app.RouterGet(router, "/:dept_id<int>/staff/role/:role_name/search", h.SearchWithRoleName)
 	app.RouterGet(router, "/:dept_id<int>/section/:section_id<int>/staffs", h.ListBySectionID)
 	app.RouterGet(router, "/:dept_id<int>/role/:role_name/staffs", h.ListByRoleName)
 	app.RouterGet(router, "/:dept_id<int>/staff/:id<int>", h.GetByID)
@@ -83,6 +84,19 @@ func (h *StaffHandler) Search(c *fiber.Ctx) error {
 	}
 	q := dbutils.ParseSearchQuery(c, 20)
 	res, err := h.svc.Search(c.UserContext(), q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *StaffHandler) SearchWithRoleName(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	q := dbutils.ParseSearchQuery(c, 20)
+	roleName := utils.GetParamAsString(c, "role_name")
+	res, err := h.svc.SearchWithRoleName(c.UserContext(), roleName, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
