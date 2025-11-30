@@ -15,7 +15,7 @@ func init() {
 		MainRefIDCol:   "assigned_id",
 		MainRefNameCol: utils.Ptr("assigned_name"),
 
-		RefTable:   "staffs",
+		RefTable:   "users",
 		RefIDCol:   "id",
 		RefNameCol: "name",
 		RefDTO:     model.StaffShortDTO{},
@@ -27,7 +27,7 @@ func init() {
 		CachePrefix: "staff",
 	})
 	policy.RegisterRefSearch("orderitemprocess-assignee", policy.ConfigSearch{
-		RefTable:    "staffs",
+		RefTable:    "users",
 		NormFields:  []string{"name"},
 		Permissions: []string{"staff.search"},
 		RefDTO:      model.StaffShortDTO{},

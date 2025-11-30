@@ -27,6 +27,7 @@ type StaffService interface {
 	CheckEmailExists(ctx context.Context, userID int, email string) (bool, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
+	ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -91,6 +92,14 @@ func kSectionStaffList(sectionID int, q table.TableQuery) string {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("staff:section:%d:list:l%d:p%d:o%s:d%s", sectionID, q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kStaffByRole(roleName string, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("staff:role:%s:list:l%d:p%d:o%s:d%s", roleName, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kStaffSearch(q dbutils.SearchQuery) string {
@@ -187,6 +196,24 @@ func (s *staffService) ListBySectionID(ctx context.Context, sectionID int, query
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
 		res, e := s.repo.ListBySectionID(ctx, sectionID, query)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
+func (s *staffService) ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error) {
+	type boxed = table.TableListResult[model.StaffDTO]
+	key := kStaffByRole(roleName, query)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.ListByRoleName(ctx, roleName, query)
 		if e != nil {
 			return nil, e
 		}

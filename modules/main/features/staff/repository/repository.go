@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/role"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/section"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staff"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staffsection"
@@ -32,6 +33,7 @@ type StaffRepository interface {
 	CheckEmailExists(ctx context.Context, userID int, email string) (bool, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
+	ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -450,6 +452,50 @@ func (r *staffRepo) ListBySectionID(ctx context.Context, sectionID int, query ta
 					staffsection.SectionIDEQ(sectionID),
 				),
 			),
+		).
+		WithStaff(func(sq *generated.StaffQuery) {
+			sq.WithSections(func(ssq *generated.StaffSectionQuery) {
+				ssq.WithSection()
+			})
+		})
+
+	return table.TableList(
+		ctx,
+		q,
+		query,
+		user.Table,
+		user.FieldID,
+		user.FieldID,
+		func(src []*generated.User) []*model.StaffDTO {
+			out := make([]*model.StaffDTO, 0, len(src))
+			for _, u := range src {
+				dto := mapper.MapAs[*generated.User, *model.StaffDTO](u)
+				if u.Edges.Staff != nil {
+					st := u.Edges.Staff
+
+					for _, ss := range st.Edges.Sections {
+						if ss.Edges.Section != nil {
+							dto.SectionIDs = append(dto.SectionIDs, ss.SectionID)
+							dto.SectionNames = append(dto.SectionNames, ss.Edges.Section.Name)
+						}
+					}
+
+					// customfields
+					dto.CustomFields = st.CustomFields
+				}
+				out = append(out, dto)
+			}
+			return out
+		},
+	)
+}
+
+func (r *staffRepo) ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error) {
+	q := r.db.User.
+		Query().
+		Where(
+			user.DeletedAtIsNil(),
+			user.HasRolesWith(role.RoleNameEQ(roleName)),
 		).
 		WithStaff(func(sq *generated.StaffQuery) {
 			sq.WithSections(func(ssq *generated.StaffSectionQuery) {
