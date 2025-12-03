@@ -176,7 +176,7 @@ func (r *orderRepository) createNewOrder(
 	out.RemakeCount = &rmkCount
 
 	// relation
-	if err := relation.Upsert1(ctx, tx, "order", orderEnt, &input.DTO, out); err != nil {
+	if err := relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
 	if _, err := relation.UpsertM2M(ctx, tx, "order", orderEnt, input.DTO, out); err != nil {
@@ -266,7 +266,7 @@ func (r *orderRepository) upsertExistingOrder(
 	out.RemakeCount = &rmkCount
 
 	// relations
-	if err := relation.Upsert1(ctx, tx, "order", orderEnt, &input.DTO, out); err != nil {
+	if err := relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
 	if _, err := relation.UpsertM2M(ctx, tx, "order", orderEnt, input.DTO, out); err != nil {
@@ -300,9 +300,6 @@ func (r *orderRepository) Create(ctx context.Context, input *model.OrderUpsertDT
 	if err != nil {
 		return nil, err
 	}
-
-	logger.Debug(fmt.Sprintf("[CODE] %s", *code))
-	logger.Debug(fmt.Sprintf("[EXISTS] %v", exists))
 
 	if exists {
 		up, err := r.upsertExistingOrder(ctx, tx, input)
@@ -376,16 +373,6 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 		rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 		rmkCount := latest.RemakeCount
 
-		// logger.Debug(fmt.Sprintf(
-		// 	"[DEBUG CustomFields] status=%v priority=%v total_price=%v delivery_date=%v remake_type=%v remake_count=%v",
-		// 	lstStatus,
-		// 	lstPriority,
-		// 	prdTotalPrice,
-		// 	dlrDate,
-		// 	rmkType,
-		// 	rmkCount,
-		// ))
-
 		_, err = entity.
 			Update().
 			SetNillableCodeLatest(latest.Code).
@@ -414,7 +401,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	output.LatestOrderItem = latest
 
 	// relation
-	err = relation.Upsert1(ctx, tx, "order", entity, &input.DTO, output)
+	err = relation.Upsert1(ctx, tx, "orders_customers", entity, &input.DTO, output)
 	if err != nil {
 		return nil, err
 	}

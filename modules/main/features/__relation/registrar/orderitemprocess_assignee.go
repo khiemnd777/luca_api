@@ -10,7 +10,7 @@ import (
 
 func init() {
 	logger.Debug("[RELATION] Register orderitemprocess - assignee")
-	policy.Register1("orderitemprocess-assignee", policy.Config1{
+	policy.Register1("orderitemprocess_assignee", policy.Config1{
 		MainTable:      "order_item_processes",
 		MainIDProp:     "ID",
 		MainRefIDCol:   "assigned_id",
@@ -40,7 +40,7 @@ func init() {
 		ORDER BY name ASC                -- order_by name -> uses column alias
 		LIMIT 21 OFFSET 0;               -- limit+1 for has_more
 	*/
-	policy.RegisterRefSearch("orderitemprocess-assignee", policy.ConfigSearch{
+	policy.RegisterRefSearch("orderitemprocess_assignee", policy.ConfigSearch{
 		RefTable:     "staffs",
 		Alias:        "s",
 		NormFields:   []string{"u.name"},

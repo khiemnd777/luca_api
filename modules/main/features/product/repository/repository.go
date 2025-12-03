@@ -74,7 +74,7 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 
 	dto = mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
-	_, err = relation.UpsertM2M(ctx, tx, "product", entity, input.DTO, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +101,7 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 		SetNillableCode(dto.Code).
 		SetNillableName(dto.Name)
 
+	// custom fields
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
@@ -121,7 +122,7 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 
 	dto = mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
-	_, err = relation.UpsertM2M(ctx, tx, "product", entity, input.DTO, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}

@@ -8,7 +8,7 @@ import (
 
 func init() {
 	logger.Debug("[RELATION] Register order - product")
-	policy.Register1("order-product", policy.Config1{
+	policy.Register1("orders_products", policy.Config1{
 		MainTable:      "order_items",
 		MainIDProp:     "ID",
 		MainRefIDCol:   "product_id",
@@ -25,7 +25,7 @@ func init() {
 		Permissions: []string{"product.view"},
 		CachePrefix: "product",
 	})
-	policy.RegisterRefSearch("order-product", policy.ConfigSearch{
+	policy.RegisterRefSearch("orders_products", policy.ConfigSearch{
 		RefTable:    "products",
 		NormFields:  []string{"code", "name"},
 		RefFields:   []string{"id", "name", "code"},

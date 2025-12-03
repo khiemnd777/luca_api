@@ -8,7 +8,7 @@ import (
 
 func init() {
 	logger.Debug("[RELATION] Register order - customer")
-	policy.Register1("order", policy.Config1{
+	policy.Register1("orders_customers", policy.Config1{
 		MainTable:      "orders",
 		MainIDProp:     "ID",
 		MainRefIDCol:   "customer_id",
@@ -25,7 +25,7 @@ func init() {
 		Permissions: []string{"customer.view"},
 		CachePrefix: "customer",
 	})
-	policy.RegisterRefSearch("order", policy.ConfigSearch{
+	policy.RegisterRefSearch("orders_customers", policy.ConfigSearch{
 		RefTable:    "customers",
 		NormFields:  []string{"code", "name"},
 		RefFields:   []string{"id", "name", "code"},
