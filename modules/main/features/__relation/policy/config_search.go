@@ -1,9 +1,13 @@
 package relation
 
 type ConfigSearch struct {
-	RefTable    string
-	NormFields  []string // []string{"code", "customer_name"}
-	RefFields   []string
-	Permissions []string
-	CachePrefix string
+	RefTable     string
+	Alias        string
+	NormFields   []string // []string{"code", "customer_name"}
+	RefFields    []string
+	SelectFields []string
+	Permissions  []string
+	CachePrefix  string
+	ExtraJoins   func() string
+	ExtraWhere   func(args *[]any) string
 }

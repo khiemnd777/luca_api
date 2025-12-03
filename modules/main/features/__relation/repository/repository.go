@@ -248,24 +248,45 @@ func (r *RelationRepository) Search(
 		return nil, fmt.Errorf("relationRepo.Search: RefFields is empty")
 	}
 
-	selectCols, err := buildSelectCols("r", cfg.RefFields)
-	if err != nil {
-		return nil, err
+	alias := cfg.Alias
+	if alias == "" {
+		alias = "r"
+	}
+
+	selectCols := ""
+	if len(cfg.SelectFields) > 0 {
+		if len(cfg.SelectFields) != len(cfg.RefFields) {
+			return nil, fmt.Errorf("relationRepo.Search: SelectFields and RefFields length mismatch")
+		}
+		parts := make([]string, len(cfg.SelectFields))
+		for i, expr := range cfg.SelectFields {
+			parts[i] = fmt.Sprintf("%s AS %s", expr, cfg.RefFields[i])
+		}
+		selectCols = strings.Join(parts, ", ")
+	} else {
+		var err error
+		selectCols, err = buildSelectCols(alias, cfg.RefFields)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	refTable := cfg.RefTable
 
-	// =============================
 	// BUILD WHERE
-	// =============================
 	args := []any{}
 	whereParts := []string{}
 
 	norm := utils.NormalizeSearchKeyword(sq.Keyword)
 	if norm != "" {
-		normWhere := dbutils.BuildLikeNormSQL(norm, cfg.NormFields, &args)
+		normWhere := dbutils.BuildLikeNormSQLAlias(norm, alias, cfg.NormFields, &args)
 		if normWhere != "" {
 			whereParts = append(whereParts, normWhere)
+		}
+	}
+	if cfg.ExtraWhere != nil {
+		if w := cfg.ExtraWhere(&args); strings.TrimSpace(w) != "" {
+			whereParts = append(whereParts, w)
 		}
 	}
 
@@ -274,19 +295,27 @@ func (r *RelationRepository) Search(
 		whereSQL = "WHERE " + strings.Join(whereParts, " AND ")
 	}
 
-	// =============================
+	// BUILD JOINS
+	joins := ""
+	if cfg.ExtraJoins != nil {
+		joins = cfg.ExtraJoins()
+	}
+
 	// ORDER BY
-	// =============================
 	orderField := dbutils.ResolveOrderField(sq.OrderBy, "id")
 	direction := "ASC"
 	if strings.EqualFold(sq.Direction, "desc") {
 		direction = "DESC"
 	}
-	orderSQL := fmt.Sprintf("ORDER BY r.%s %s", orderField, direction)
+	orderExpr := orderField
+	if strings.Contains(orderField, ".") {
+		orderExpr = orderField
+	} else if len(cfg.SelectFields) == 0 {
+		orderExpr = fmt.Sprintf("%s.%s", alias, orderField)
+	}
+	orderSQL := fmt.Sprintf("ORDER BY %s %s", orderExpr, direction)
 
-	// =============================
 	// LIMIT + OFFSET
-	// =============================
 	limit := sq.Limit
 	if limit <= 0 {
 		limit = 20
@@ -299,11 +328,12 @@ func (r *RelationRepository) Search(
 	// =============================
 	finalSQL := fmt.Sprintf(`
 		SELECT %s
-		FROM %s r
+		FROM %s %s
 		%s
 		%s
 		%s
-	`, selectCols, refTable, whereSQL, orderSQL, limitSQL)
+		%s
+	`, selectCols, refTable, alias, joins, whereSQL, orderSQL, limitSQL)
 
 	rows, err := tx.QueryContext(ctx, finalSQL, args...)
 	if err != nil {
@@ -311,9 +341,7 @@ func (r *RelationRepository) Search(
 	}
 	defer rows.Close()
 
-	// =============================
 	// SCAN rows
-	// =============================
 	items := make([]map[string]any, 0, 20)
 
 	for rows.Next() {
@@ -328,9 +356,7 @@ func (r *RelationRepository) Search(
 		items = append(items, row)
 	}
 
-	// =============================
 	// Check has_more
-	// =============================
 	hasMore := false
 	totalItems := len(items)
 	if totalItems > limit {
@@ -343,9 +369,10 @@ func (r *RelationRepository) Search(
 	// =============================
 	countSQL := fmt.Sprintf(`
 		SELECT COUNT(*)
-		FROM %s r
+		FROM %s %s
 		%s
-	`, refTable, whereSQL)
+		%s
+	`, refTable, alias, joins, whereSQL)
 
 	countRows, err := tx.QueryContext(ctx, countSQL, args...)
 	if err != nil {

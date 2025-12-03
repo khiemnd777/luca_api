@@ -1,6 +1,8 @@
 package registrar
 
 import (
+	"fmt"
+
 	policy "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -26,10 +28,23 @@ func init() {
 		CachePrefix: "staff",
 	})
 	policy.RegisterRefSearch("orderitemprocess-assignee", policy.ConfigSearch{
-		RefTable:    "users",
-		NormFields:  []string{"name"},
-		RefFields:   []string{"id", "name"},
-		Permissions: []string{"staff.search"},
-		CachePrefix: "staff:search",
+		RefTable:     "staffs",
+		Alias:        "s",
+		NormFields:   []string{"u.name"},
+		RefFields:    []string{"id", "name"},
+		SelectFields: []string{"u.id", "u.name"},
+		Permissions:  []string{"staff.search"},
+		CachePrefix:  "staff:search",
+		ExtraJoins: func() string {
+			return `
+				JOIN users u ON u.id = s.user_staff
+				JOIN user_roles ur ON ur.user_id = u.id
+				JOIN roles r ON r.id = ur.role_id
+			`
+		},
+		ExtraWhere: func(args *[]any) string {
+			*args = append(*args, "technician")
+			return fmt.Sprintf("r.role_name = $%d", len(*args))
+		},
 	})
 }

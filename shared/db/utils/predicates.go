@@ -47,6 +47,10 @@ func LikeNormWithMultiColumns[P ~func(*sql.Selector)](kw string, columns ...stri
 }
 
 func BuildLikeNormSQL(norm string, normColumns []string, args *[]any) string {
+	return BuildLikeNormSQLAlias(norm, "r", normColumns, args)
+}
+
+func BuildLikeNormSQLAlias(norm string, alias string, normColumns []string, args *[]any) string {
 	if norm == "" || len(normColumns) == 0 {
 		return ""
 	}
@@ -57,7 +61,11 @@ func BuildLikeNormSQL(norm string, normColumns []string, args *[]any) string {
 
 	parts := make([]string, 0, len(normColumns))
 	for _, col := range normColumns {
-		parts = append(parts, fmt.Sprintf("r.%s LIKE $%d", col+"_norm", idx))
+		target := fmt.Sprintf("%s.%s", alias, col+"_norm")
+		if strings.Contains(col, ".") {
+			target = fmt.Sprintf("%s%s", col, "_norm")
+		}
+		parts = append(parts, fmt.Sprintf("%s LIKE $%d", target, idx))
 	}
 
 	return "(" + strings.Join(parts, " OR ") + ")"
