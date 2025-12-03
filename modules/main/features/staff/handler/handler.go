@@ -28,7 +28,9 @@ func NewStaffHandler(svc service.StaffService, deps *module.ModuleDeps[config.Mo
 func (h *StaffHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/staff/list", h.List)
 	app.RouterGet(router, "/:dept_id<int>/staff/search", h.Search)
+	app.RouterGet(router, "/:dept_id<int>/staff/role/:role_name/search", h.SearchWithRoleName)
 	app.RouterGet(router, "/:dept_id<int>/section/:section_id<int>/staffs", h.ListBySectionID)
+	app.RouterGet(router, "/:dept_id<int>/role/:role_name/staffs", h.ListByRoleName)
 	app.RouterGet(router, "/:dept_id<int>/staff/:id<int>", h.GetByID)
 	app.RouterPost(router, "/:dept_id<int>/staff", h.Create)
 	app.RouterPost(router, "/:dept_id<int>/staff/change-password", h.ChangePassword)
@@ -63,12 +65,38 @@ func (h *StaffHandler) ListBySectionID(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
+func (h *StaffHandler) ListByRoleName(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	q := table.ParseTableQuery(c, 20)
+	roleName := utils.GetParamAsString(c, "role_name")
+	res, err := h.svc.ListByRoleName(c.UserContext(), roleName, q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
 func (h *StaffHandler) Search(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := dbutils.ParseSearchQuery(c, 20)
 	res, err := h.svc.Search(c.UserContext(), q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *StaffHandler) SearchWithRoleName(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	q := dbutils.ParseSearchQuery(c, 20)
+	roleName := utils.GetParamAsString(c, "role_name")
+	res, err := h.svc.SearchWithRoleName(c.UserContext(), roleName, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -177,7 +205,7 @@ func (h *StaffHandler) Update(c *fiber.Ctx) error {
 
 	var payload model.StaffDTO
 	if err := c.BodyParser(&payload); err != nil {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, "invalid body")
 	}
 	payload.ID = id
 

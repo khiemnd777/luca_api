@@ -70,7 +70,7 @@ func (r *materialRepo) Create(ctx context.Context, input model.MaterialDTO) (*mo
 
 	dto := mapper.MapAs[*generated.Material, *model.MaterialDTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "material", entity, input, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "material", entity, input, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (r *materialRepo) Update(ctx context.Context, input model.MaterialDTO) (*mo
 	}
 
 	dto := mapper.MapAs[*generated.Material, *model.MaterialDTO](entity)
-	_, err = relation.Upsert(ctx, tx, "material", entity, input, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "material", entity, input, dto)
 	if err != nil {
 		return nil, err
 	}

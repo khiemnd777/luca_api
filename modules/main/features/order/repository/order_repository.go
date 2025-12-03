@@ -1,0 +1,625 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+	"maps"
+	"time"
+
+	"github.com/khiemnd777/andy_api/modules/main/config"
+	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/khiemnd777/andy_api/shared/mapper"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
+	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/utils"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
+)
+
+type OrderRepository interface {
+	ExistsByCode(ctx context.Context, code string) (bool, error)
+	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
+	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
+	// -- general functions
+	Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
+	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
+	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
+	Delete(ctx context.Context, id int64) error
+}
+
+type orderRepository struct {
+	db                   *generated.Client
+	deps                 *module.ModuleDeps[config.ModuleConfig]
+	cfMgr                *customfields.Manager
+	orderItemRepo        OrderItemRepository
+	orderItemProcessRepo OrderItemProcessRepository
+}
+
+func NewOrderRepository(
+	db *generated.Client,
+	deps *module.ModuleDeps[config.ModuleConfig],
+	cfMgr *customfields.Manager,
+) OrderRepository {
+	return &orderRepository{
+		db:                   db,
+		deps:                 deps,
+		cfMgr:                cfMgr,
+		orderItemRepo:        NewOrderItemRepository(db, deps, cfMgr),
+		orderItemProcessRepo: NewOrderItemProcessRepository(db, deps, cfMgr),
+	}
+}
+
+func (r *orderRepository) ExistsByCode(ctx context.Context, code string) (bool, error) {
+	return r.db.Order.
+		Query().
+		Where(
+			order.CodeEQ(code),
+			order.DeletedAtIsNil(),
+		).
+		Exist(ctx)
+}
+
+func (r *orderRepository) GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error) {
+	q := r.db.Order.Query().
+		Where(
+			order.ID(orderID),
+			order.DeletedAtIsNil(),
+		)
+
+	entity, err := q.Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
+
+	// latest order item
+	latest, err := r.orderItemRepo.GetByID(ctx, orderItemID)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug(fmt.Sprintf("[GET] %v", latest))
+	dto.LatestOrderItem = latest
+	return dto, nil
+}
+
+// -- helpers
+
+func (r *orderRepository) createNewOrder(
+	ctx context.Context,
+	tx *generated.Tx,
+	input *model.OrderUpsertDTO,
+) (*model.OrderDTO, error) {
+
+	dto := &input.DTO
+
+	q := tx.Order.Create().
+		SetNillableCode(dto.Code)
+
+	// custom fields
+	if input.Collections != nil && len(*input.Collections) > 0 {
+		if _, err := customfields.PrepareCustomFields(
+			ctx, r.cfMgr, *input.Collections, dto.CustomFields, q, false,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	// save order
+	orderEnt, err := q.Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// map back
+	out := mapper.MapAs[*generated.Order, *model.OrderDTO](orderEnt)
+
+	// create first-latest order item
+	loi := input.DTO.LatestOrderItemUpsert
+	loi.DTO.OrderID = out.ID
+	loi.DTO.CodeOriginal = out.Code
+
+	latest, err := r.orderItemRepo.Create(ctx, tx, loi)
+	if err != nil {
+		return nil, err
+	}
+
+	out.LatestOrderItem = latest
+
+	// reassign latest order item -> order as cache to appear them on the table
+	lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
+	lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
+	prdId := utils.SafeGetIntPtr(latest.CustomFields, "product_id")
+	prdName := utils.SafeGetStringPtr(latest.CustomFields, "product_name")
+	prdQty := utils.SafeGetIntPtr(latest.CustomFields, "quantity")
+	prdTotalPrice := utils.SafeGetFloatPtr(latest.CustomFields, "total_price")
+	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
+	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
+	rmkCount := latest.RemakeCount
+
+	_, err = orderEnt.
+		Update().
+		SetNillableCodeLatest(latest.Code).
+		SetNillableStatusLatest(lstStatus).
+		SetNillablePriorityLatest(lstPriority).
+		SetNillableProductID(prdId).
+		SetNillableProductName(prdName).
+		SetNillableQuantity(prdQty).
+		SetNillableTotalPrice(prdTotalPrice).
+		SetNillableDeliveryDate(dlrDate).
+		SetNillableRemakeType(rmkType).
+		SetNillableRemakeCount(&rmkCount).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Assign latest ones to output
+	out.CodeLatest = latest.Code
+	out.StatusLatest = lstStatus
+	out.PriorityLatest = lstPriority
+	out.ProductID = *prdId
+	out.ProductName = prdName
+	out.Quantity = prdQty
+	out.TotalPrice = prdTotalPrice
+	out.DeliveryDate = dlrDate
+	out.RemakeType = rmkType
+	out.RemakeCount = &rmkCount
+
+	// relation
+	if err := relation.Upsert1(ctx, tx, "order", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err := relation.UpsertM2M(ctx, tx, "order", orderEnt, input.DTO, out); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (r *orderRepository) upsertExistingOrder(
+	ctx context.Context,
+	tx *generated.Tx,
+	input *model.OrderUpsertDTO,
+) (*model.OrderDTO, error) {
+
+	dto := &input.DTO
+
+	// Load order theo code
+	orderEnt, err := r.db.Order.
+		Query().
+		Where(order.CodeEQ(*dto.Code), order.DeletedAtIsNil()).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// UPDATE ORDER (custom fields + m2m + 1)
+	up := tx.Order.UpdateOneID(orderEnt.ID).
+		SetNillableCode(dto.Code)
+
+	if input.Collections != nil && len(*input.Collections) > 0 {
+		if _, err := customfields.PrepareCustomFields(
+			ctx, r.cfMgr, *input.Collections, dto.CustomFields, up, false,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	orderEnt, err = up.Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := mapper.MapAs[*generated.Order, *model.OrderDTO](orderEnt)
+
+	loi := input.DTO.LatestOrderItemUpsert
+	loi.DTO.OrderID = out.ID
+	loi.DTO.CodeOriginal = out.Code
+
+	latest, err := r.orderItemRepo.Create(ctx, tx, loi)
+	if err != nil {
+		return nil, err
+	}
+
+	out.LatestOrderItem = latest
+
+	// reassign latest order item -> order as cache to appear them on the table
+	lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
+	lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
+	prdTotalPrice := utils.SafeGetFloatPtr(latest.CustomFields, "total_price")
+	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
+	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
+	rmkCount := latest.RemakeCount
+
+	_, err = orderEnt.
+		Update().
+		SetNillableCodeLatest(latest.Code).
+		SetNillableStatusLatest(lstStatus).
+		SetNillablePriorityLatest(lstPriority).
+		SetNillableTotalPrice(prdTotalPrice).
+		SetNillableDeliveryDate(dlrDate).
+		SetNillableRemakeType(rmkType).
+		SetNillableRemakeCount(&rmkCount).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Assign latest ones to output
+	out.CodeLatest = latest.Code
+	out.StatusLatest = lstStatus
+	out.PriorityLatest = lstPriority
+	out.TotalPrice = prdTotalPrice
+	out.DeliveryDate = dlrDate
+	out.RemakeType = rmkType
+	out.RemakeCount = &rmkCount
+
+	// relations
+	if err := relation.Upsert1(ctx, tx, "order", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err := relation.UpsertM2M(ctx, tx, "order", orderEnt, input.DTO, out); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+// -- general functions
+
+func (r *orderRepository) Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
+	var err error
+
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	dto := &input.DTO
+	code := dto.Code
+
+	exists, err := r.ExistsByCode(ctx, *code)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Debug(fmt.Sprintf("[CODE] %s", *code))
+	logger.Debug(fmt.Sprintf("[EXISTS] %v", exists))
+
+	if exists {
+		up, err := r.upsertExistingOrder(ctx, tx, input)
+		if err != nil {
+			return nil, err
+		}
+		return up, nil
+	}
+
+	new, err := r.createNewOrder(ctx, tx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	return new, nil
+}
+
+func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	output := &input.DTO
+
+	q := tx.Order.UpdateOneID(output.ID)
+
+	if input.Collections != nil && len(*input.Collections) > 0 {
+		_, err = customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			*input.Collections,
+			output.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	entity, err := q.Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	output = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
+
+	// latest order item
+	latest, err := r.orderItemRepo.Update(ctx, tx, input.DTO.LatestOrderItemUpsert)
+	if err != nil {
+		return nil, err
+	}
+
+	// reassign latest order item -> order as cache to appear them on the table
+	isLatest, err := r.orderItemRepo.IsLatestIfOrderID(ctx, entity.ID, latest.ID)
+	if err != nil {
+		return nil, err
+	}
+	if isLatest {
+		lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
+		lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
+		prdTotalPrice := utils.SafeGetFloatPtr(latest.CustomFields, "total_price")
+		dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
+		rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
+		rmkCount := latest.RemakeCount
+
+		// logger.Debug(fmt.Sprintf(
+		// 	"[DEBUG CustomFields] status=%v priority=%v total_price=%v delivery_date=%v remake_type=%v remake_count=%v",
+		// 	lstStatus,
+		// 	lstPriority,
+		// 	prdTotalPrice,
+		// 	dlrDate,
+		// 	rmkType,
+		// 	rmkCount,
+		// ))
+
+		_, err = entity.
+			Update().
+			SetNillableCodeLatest(latest.Code).
+			SetNillableStatusLatest(lstStatus).
+			SetNillablePriorityLatest(lstPriority).
+			SetNillableTotalPrice(prdTotalPrice).
+			SetNillableDeliveryDate(dlrDate).
+			SetNillableRemakeType(rmkType).
+			SetNillableRemakeCount(&rmkCount).
+			Save(ctx)
+
+		if err != nil {
+			return nil, err
+		}
+
+		// Assign latest ones to output
+		output.CodeLatest = latest.Code
+		output.StatusLatest = lstStatus
+		output.PriorityLatest = lstPriority
+		output.TotalPrice = prdTotalPrice
+		output.DeliveryDate = dlrDate
+		output.RemakeType = rmkType
+		output.RemakeCount = &rmkCount
+	}
+
+	output.LatestOrderItem = latest
+
+	// relation
+	err = relation.Upsert1(ctx, tx, "order", entity, &input.DTO, output)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = relation.UpsertM2M(ctx, tx, "order", entity, input.DTO, output)
+	if err != nil {
+		return nil, err
+	}
+
+	return output, nil
+}
+
+func (r *orderRepository) UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error) {
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	_, err = r.orderItemProcessRepo.UpdateStatus(ctx, tx, orderItemProcessID, status)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get oip from memory to ensure CF == latest status, because not yet Committed to db
+	updatedOIP, err := tx.OrderItemProcess.
+		Query().
+		Where(orderitemprocess.IDEQ(orderItemProcessID)).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if updatedOIP.OrderID == nil {
+		err = fmt.Errorf("OrderID is nil after updating process")
+		return nil, err
+	}
+
+	processes, err := r.orderItemProcessRepo.GetProcessesByOrderItemID(ctx, tx, updatedOIP.OrderItemID)
+	if err != nil {
+		return nil, err
+	}
+
+	orderDTO, err := r.recalculateOrderStatusByProcesses(ctx, tx, *updatedOIP.OrderID, updatedOIP.OrderItemID, processes)
+	if err != nil {
+		return nil, err
+	}
+
+	return orderDTO, nil
+}
+
+func (r *orderRepository) recalculateOrderStatusByProcesses(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID,
+	orderItemID int64,
+	processes []*model.OrderItemProcessDTO,
+) (*model.OrderItemDTO, error) {
+
+	if len(processes) == 0 {
+		return nil, fmt.Errorf("no processes found for order %d", orderItemID)
+	}
+
+	allWaiting := true
+	allCompleted := true
+	anyInProgress := false
+
+	for _, p := range processes {
+		status := utils.SafeGetString(p.CustomFields, "status")
+
+		switch status {
+		case "waiting":
+		case "completed":
+			allWaiting = false
+		case "in_progress", "qc", "rework":
+			allWaiting = false
+			allCompleted = false
+			anyInProgress = true
+		default:
+			allWaiting = false
+			allCompleted = false
+		}
+
+		if status != "waiting" {
+			allWaiting = false
+		}
+		if status != "completed" {
+			allCompleted = false
+		}
+	}
+
+	var orderStatus string
+
+	switch {
+	case allWaiting:
+		orderStatus = "received"
+
+	case anyInProgress:
+		orderStatus = "in_progress"
+
+	case allCompleted:
+		orderStatus = "completed"
+
+	default:
+		orderStatus = "in_progress"
+	}
+
+	oi, err := tx.OrderItem.Query().
+		Where(orderitem.IDEQ(orderItemID)).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cf := maps.Clone(oi.CustomFields)
+	cf["status"] = orderStatus
+
+	updated, err := tx.OrderItem.
+		UpdateOne(oi).
+		SetCustomFields(cf).
+		Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](updated)
+
+	tx.Order.UpdateOneID(orderID).
+		SetNillableStatusLatest(&orderStatus).
+		Save(ctx)
+
+	return dto, nil
+}
+
+func (r *orderRepository) GetByID(ctx context.Context, id int64) (*model.OrderDTO, error) {
+	q := r.db.Order.Query().
+		Where(
+			order.ID(id),
+			order.DeletedAtIsNil(),
+		)
+
+	entity, err := q.Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
+
+	// latest order item
+	latest, err := r.orderItemRepo.GetLatestByOrderID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug(fmt.Sprintf("[GET] ProductID: %d", latest.ProductID))
+	dto.LatestOrderItem = latest
+	return dto, nil
+}
+
+func (r *orderRepository) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Order.Query().
+			Where(order.DeletedAtIsNil()),
+		query,
+		order.Table,
+		order.FieldID,
+		order.FieldID,
+		func(src []*generated.Order) []*model.OrderDTO {
+			return mapper.MapListAs[*generated.Order, *model.OrderDTO](src)
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.OrderDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *orderRepository) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error) {
+	return dbutils.Search(
+		ctx,
+		r.db.Order.Query().
+			Where(order.DeletedAtIsNil()),
+		[]string{
+			dbutils.GetNormField(order.FieldCode),
+		},
+		query,
+		order.Table,
+		order.FieldID,
+		order.FieldID,
+		order.Or,
+		func(src []*generated.Order) []*model.OrderDTO {
+			return mapper.MapListAs[*generated.Order, *model.OrderDTO](src)
+		},
+	)
+}
+
+func (r *orderRepository) Delete(ctx context.Context, id int64) error {
+	return r.db.Order.UpdateOneID(id).
+		SetDeletedAt(time.Now()).
+		Exec(ctx)
+}

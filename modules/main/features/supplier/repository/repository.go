@@ -72,7 +72,7 @@ func (r *supplierRepo) Create(ctx context.Context, input model.SupplierDTO) (*mo
 
 	dto := mapper.MapAs[*generated.Supplier, *model.SupplierDTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "supplier", entity, input, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "supplier", entity, input, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (r *supplierRepo) Update(ctx context.Context, input model.SupplierDTO) (*mo
 
 	dto := mapper.MapAs[*generated.Supplier, *model.SupplierDTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "supplier", entity, input, dto)
+	_, err = relation.UpsertM2M(ctx, tx, "supplier", entity, input, dto)
 	if err != nil {
 		return nil, err
 	}

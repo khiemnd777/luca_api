@@ -15,10 +15,10 @@ import (
 
 var (
 	mu       sync.RWMutex
-	registry = map[string]Config{}
+	registry = map[string]ConfigM2M{}
 )
 
-func Register(key string, cfg Config) {
+func RegisterM2M(key string, cfg ConfigM2M) {
 	if cfg.MainTable == "" || cfg.RefTable == "" {
 		panic("relation.Register: missing MainTable or RefTable")
 	}
@@ -33,17 +33,17 @@ func Register(key string, cfg Config) {
 	registry[key] = cfg
 }
 
-func GetConfig(key string) (Config, error) {
+func GetConfigM2M(key string) (ConfigM2M, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	cfg, ok := registry[key]
 	if !ok {
-		return Config{}, fmt.Errorf("relation '%s' not registered", key)
+		return ConfigM2M{}, fmt.Errorf("relation '%s' not registered", key)
 	}
 	return cfg, nil
 }
 
-func Upsert(
+func UpsertM2M(
 	ctx context.Context,
 	tx *generated.Tx,
 	key string,
@@ -51,7 +51,7 @@ func Upsert(
 	input any,
 	output any,
 ) ([]string, error) {
-	cfg, err := GetConfig(key)
+	cfg, err := GetConfigM2M(key)
 	if err != nil {
 		return nil, nil
 	}

@@ -153,10 +153,20 @@ func buildSrcIndex(src reflect.Value) map[string]int {
 	}
 	return idx
 }
-func isStructLike(v reflect.Value) bool {
-	k := v.Kind()
-	return k == reflect.Struct || (k == reflect.Pointer && v.Type().Elem().Kind() == reflect.Struct)
+func isSimpleStruct(t reflect.Type) bool {
+	return t.PkgPath() != ""
 }
+func isStructLike(v reflect.Value) bool {
+	t := v.Type()
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return false
+	}
+	return !isSimpleStruct(t)
+}
+
 func ptrOrValue(v reflect.Value) reflect.Value {
 	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {

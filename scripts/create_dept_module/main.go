@@ -133,7 +133,12 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input *model.{{Module}
 
 	dto = mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input.DTO, dto)
+	err = relation.Upsert1(ctx, tx, "{{moduleSnake}}", entity, &input.DTO, dto)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = relation.UpsertM2M(ctx, tx, "{{moduleSnake}}", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +186,12 @@ func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input *model.{{Module}
 
 	dto = mapper.MapAs[*generated.{{Module}}, *model.{{Module}}DTO](entity)
 
-	_, err = relation.Upsert(ctx, tx, "{{moduleSnake}}", entity, input.DTO, dto)
+		err = relation.Upsert1(ctx, tx, "{{moduleSnake}}", entity, &input.DTO, dto)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = relation.UpsertM2M(ctx, tx, "{{moduleSnake}}", entity, input.DTO, dto)
 	if err != nil {
 		return nil, err
 	}

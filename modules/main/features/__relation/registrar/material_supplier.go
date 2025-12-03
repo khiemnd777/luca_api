@@ -11,8 +11,8 @@ import (
 
 func init() {
 	logger.Debug("[RELATION] Register materials - suppliers")
-	policy.Register("material",
-		policy.Config{
+	policy.RegisterM2M("material",
+		policy.ConfigM2M{
 			MainTable: "materials",
 			RefTable:  "suppliers",
 
@@ -48,12 +48,13 @@ func init() {
 				RefDTO:      model.SupplierDTO{},
 				CachePrefix: "supplier:list",
 			},
-
-			GetRefSearch: &policy.RefSearchConfig{
-				Permissions: []string{"supplier.search"},
-				RefDTO:      model.SupplierDTO{},
-				CachePrefix: "supplier:list",
-			},
 		},
 	)
+	policy.RegisterRefSearch("material", policy.ConfigSearch{
+		RefTable:    "suppliers",
+		NormFields:  []string{"code", "name"},
+		Permissions: []string{"supplier.search"},
+		RefDTO:      model.SupplierDTO{},
+		CachePrefix: "supplier:list",
+	})
 }
