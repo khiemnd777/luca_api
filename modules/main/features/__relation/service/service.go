@@ -114,7 +114,7 @@ func (s *RelationService) ListM2M(
 		return nil, nil
 	}
 
-	if cfg.GetRefList == nil {
+	if cfg.RefList == nil {
 		return nil, nil
 	}
 
@@ -123,7 +123,7 @@ func (s *RelationService) ListM2M(
 		orderBy = *q.OrderBy
 	}
 
-	cKey := fmt.Sprintf(cfg.GetRefList.CachePrefix+":%s:%d:l%d:p%d:o%s:d%s", key, mainID, q.Limit, q.Page, orderBy, q.Direction)
+	cKey := fmt.Sprintf(cfg.RefList.CachePrefix+":%s:%d:l%d:p%d:o%s:d%s", key, mainID, q.Limit, q.Page, orderBy, q.Direction)
 
 	return cache.Get(cKey, cache.TTLShort, func() (*any, error) {
 		tx, err := s.deps.Ent.(*generated.Client).Tx(ctx)

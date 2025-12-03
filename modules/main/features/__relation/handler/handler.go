@@ -109,8 +109,8 @@ func (h *RelationHandler) ListM2M(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusNotFound, err, err.Error())
 	}
 
-	if cfg.GetRefList != nil && len(cfg.GetRefList.Permissions) > 0 {
-		if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), cfg.GetRefList.Permissions...); err != nil {
+	if cfg.RefList != nil && len(cfg.RefList.Permissions) > 0 {
+		if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), cfg.RefList.Permissions...); err != nil {
 			return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 		}
 	}

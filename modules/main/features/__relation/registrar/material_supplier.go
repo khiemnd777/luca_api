@@ -15,9 +15,9 @@ func init() {
 			RefIDsProp:  "SupplierIDs",
 			DisplayProp: "SupplierNames",
 
-			GetRefList: &policy.RefListConfig{
+			RefList: &policy.RefListConfig{
 				Permissions: []string{"supplier.view"},
-				RefFields:   []string{"id", "code", "name", "custom_fields", "created_at", "updated_at"},
+				RefFields:   []string{"id", "code", "name"},
 				CachePrefix: "supplier:list",
 			},
 		},
@@ -25,7 +25,7 @@ func init() {
 	policy.RegisterRefSearch("material", policy.ConfigSearch{
 		RefTable:    "suppliers",
 		NormFields:  []string{"code", "name"},
-		RefFields:   []string{"id", "code", "name", "custom_fields", "created_at", "updated_at"},
+		RefFields:   []string{"id", "code", "name"},
 		Permissions: []string{"supplier.search"},
 		CachePrefix: "supplier:list",
 	})

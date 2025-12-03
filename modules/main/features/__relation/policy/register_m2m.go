@@ -207,9 +207,9 @@ func UpsertM2M(
 	}
 
 	// 6) Invalidate
-	if cfg.GetRefList != nil {
-		if cfg.GetRefList.CachePrefix != "" {
-			cache.InvalidateKeys(fmt.Sprintf(cfg.GetRefList.CachePrefix+":%s:%d:*", key, mainID))
+	if cfg.RefList != nil {
+		if cfg.RefList.CachePrefix != "" {
+			cache.InvalidateKeys(fmt.Sprintf(cfg.RefList.CachePrefix+":%s:%d:*", key, mainID))
 		}
 	}
 

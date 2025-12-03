@@ -151,11 +151,11 @@ func (r *RelationRepository) ListM2M(
 	q tableutils.TableQuery,
 ) (any, error) {
 
-	if cfg.GetRefList == nil || len(cfg.GetRefList.RefFields) == 0 {
+	if cfg.RefList == nil || len(cfg.RefList.RefFields) == 0 {
 		return nil, fmt.Errorf("relationRepo.ListM2M: RefFields is empty")
 	}
 
-	selectCols, err := buildSelectCols("r", cfg.GetRefList.RefFields)
+	selectCols, err := buildSelectCols("r", cfg.RefList.RefFields)
 	if err != nil {
 		return nil, err
 	}
@@ -191,14 +191,14 @@ func (r *RelationRepository) ListM2M(
 
 	for rows.Next() {
 
-		scanTargets := buildScanTargets(len(cfg.GetRefList.RefFields))
+		scanTargets := buildScanTargets(len(cfg.RefList.RefFields))
 
 		// Scan row
 		if err := rows.Scan(scanTargets...); err != nil {
 			return nil, fmt.Errorf("relationRepo.List scan: %w", err)
 		}
 
-		row := scanTargetsToMap(cfg.GetRefList.RefFields, scanTargets)
+		row := scanTargetsToMap(cfg.RefList.RefFields, scanTargets)
 
 		items = append(items, row)
 	}

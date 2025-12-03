@@ -21,6 +21,5 @@ type ConfigM2M struct {
 	RefIDsProp  string // e.g. "SupplierIDs"
 	DisplayProp string // e.g. "SupplierNames"
 
-	GetRefList   *RefListConfig
-	GetRefSearch *RefSearchConfig
+	RefList *RefListConfig
 }

@@ -15,9 +15,9 @@ func init() {
 			RefIDsProp:  "ProcessIDs",
 			DisplayProp: "ProcessNames",
 
-			GetRefList: &policy.RefListConfig{
+			RefList: &policy.RefListConfig{
 				Permissions: []string{"process.view"},
-				RefFields:   []string{"id", "code", "name", "custom_fields", "created_at", "updated_at"},
+				RefFields:   []string{"id", "code", "name"},
 				CachePrefix: "process:list",
 			},
 		},
@@ -25,7 +25,7 @@ func init() {
 	policy.RegisterRefSearch("products_processes", policy.ConfigSearch{
 		RefTable:    "processes",
 		NormFields:  []string{"code", "name"},
-		RefFields:   []string{"id", "code", "name", "custom_fields", "created_at", "updated_at"},
+		RefFields:   []string{"id", "code", "name"},
 		Permissions: []string{"process.search"},
 		CachePrefix: "process:list",
 	})
