@@ -14,7 +14,7 @@ type Config1 struct {
 	RefTable   string // customers
 	RefIDCol   string // "id"
 	RefNameCol string // "name"
-	RefDTO     any    // model.CustomerDTO{}
+	RefFields  []string
 
 	Permissions []string
 	CachePrefix string

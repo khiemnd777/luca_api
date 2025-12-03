@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
@@ -27,19 +26,14 @@ func (r *RelationRepository) Get1(
 	id int,
 ) (any, error) {
 
-	dtoType := reflect.TypeOf(cfg.RefDTO)
-	if dtoType.Kind() == reflect.Ptr {
-		dtoType = dtoType.Elem()
+	if len(cfg.RefFields) == 0 {
+		return nil, fmt.Errorf("relationRepo.Get1: RefFields is empty")
 	}
 
-	// Build SELECT columns
-	cols := make([]string, 0, dtoType.NumField())
-	for i := 0; i < dtoType.NumField(); i++ {
-		f := dtoType.Field(i)
-		colName := utils.ToSnake(f.Name)
-		cols = append(cols, colName)
+	selectCols, err := buildSelectCols("", cfg.RefFields)
+	if err != nil {
+		return nil, err
 	}
-	selectCols := strings.Join(cols, ", ")
 
 	sql := fmt.Sprintf(`
         SELECT %s 
@@ -58,47 +52,14 @@ func (r *RelationRepository) Get1(
 		return nil, nil // không có -> return nil
 	}
 
-	// New DTO
-	elem := reflect.New(dtoType)
-	elemVal := elem.Elem()
-
-	scanTargets := make([]any, dtoType.NumField())
-
-	// Prepare scan targets
-	for i := 0; i < dtoType.NumField(); i++ {
-		f := elemVal.Field(i)
-
-		// JSONB → scan vào []byte
-		if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-			var raw json.RawMessage
-			scanTargets[i] = &raw
-		} else {
-			scanTargets[i] = f.Addr().Interface()
-		}
-	}
-
+	scanTargets := buildScanTargets(len(cfg.RefFields))
 	if err := rows.Scan(scanTargets...); err != nil {
 		return nil, fmt.Errorf("relationRepo.Get1 scan: %w", err)
 	}
 
-	// Convert JSONB → map[string]any
-	for i := 0; i < dtoType.NumField(); i++ {
-		f := elemVal.Field(i)
+	row := scanTargetsToMap(cfg.RefFields, scanTargets)
 
-		if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-			rawPtr := scanTargets[i].(*json.RawMessage)
-			if rawPtr == nil || len(*rawPtr) == 0 {
-				continue
-			}
-
-			var m map[string]any
-			if e := json.Unmarshal(*rawPtr, &m); e == nil {
-				f.Set(reflect.ValueOf(m))
-			}
-		}
-	}
-
-	return elem.Interface(), nil
+	return row, nil
 }
 
 func (r *RelationRepository) List1N(
@@ -109,22 +70,14 @@ func (r *RelationRepository) List1N(
 	q tableutils.TableQuery,
 ) (any, error) {
 
-	dtoType := reflect.TypeOf(cfg.RefDTO)
-	if dtoType.Kind() == reflect.Ptr {
-		dtoType = dtoType.Elem()
+	if len(cfg.RefFields) == 0 {
+		return nil, fmt.Errorf("relationRepo.List1N: RefFields is empty")
 	}
 
-	sliceType := reflect.SliceOf(reflect.PointerTo(dtoType))
-	sliceValue := reflect.MakeSlice(sliceType, 0, 20)
-
-	// Build SELECT columns
-	cols := make([]string, 0, dtoType.NumField())
-	for i := 0; i < dtoType.NumField(); i++ {
-		f := dtoType.Field(i)
-		colName := utils.ToSnake(f.Name)
-		cols = append(cols, "r."+colName)
+	selectCols, err := buildSelectCols("r", cfg.RefFields)
+	if err != nil {
+		return nil, err
 	}
-	selectCols := strings.Join(cols, ", ")
 
 	// Build SQL
 	baseSQL := fmt.Sprintf(`
@@ -138,53 +91,22 @@ func (r *RelationRepository) List1N(
 
 	finalSQL := baseSQL + " " + orderSQL + " " + limitSQL
 
-	// Query
 	rows, err := tx.QueryContext(ctx, finalSQL, mainID)
 	if err != nil {
 		return nil, fmt.Errorf("relationRepo.List1N query: %w", err)
 	}
 	defer rows.Close()
 
+	items := make([]map[string]any, 0, 20)
+
 	for rows.Next() {
-		elem := reflect.New(dtoType)
-		elemVal := elem.Elem()
-
-		scanTargets := make([]any, dtoType.NumField())
-
-		for i := 0; i < dtoType.NumField(); i++ {
-			f := elemVal.Field(i)
-
-			// JSONB → scan []byte
-			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-				var raw json.RawMessage
-				scanTargets[i] = &raw
-			} else {
-				scanTargets[i] = f.Addr().Interface()
-			}
-		}
-
+		scanTargets := buildScanTargets(len(cfg.RefFields))
 		if err := rows.Scan(scanTargets...); err != nil {
 			return nil, fmt.Errorf("relationRepo.List1N scan: %w", err)
 		}
 
-		// Convert JSON
-		for i := 0; i < dtoType.NumField(); i++ {
-			f := elemVal.Field(i)
-
-			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-				rawPtr := scanTargets[i].(*json.RawMessage)
-				if rawPtr == nil || len(*rawPtr) == 0 {
-					continue
-				}
-
-				var m map[string]any
-				if e := json.Unmarshal(*rawPtr, &m); e == nil {
-					f.Set(reflect.ValueOf(m))
-				}
-			}
-		}
-
-		sliceValue = reflect.Append(sliceValue, elem)
+		row := scanTargetsToMap(cfg.RefFields, scanTargets)
+		items = append(items, row)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -212,27 +134,13 @@ func (r *RelationRepository) List1N(
 		}
 	}
 
-	// Output struct {items, total}
-	ptrDtoType := reflect.PointerTo(dtoType)
-
-	tableListType := reflect.StructOf([]reflect.StructField{
-		{
-			Name: "Items",
-			Type: reflect.SliceOf(ptrDtoType),
-			Tag:  `json:"items"`,
-		},
-		{
-			Name: "Total",
-			Type: reflect.TypeOf(int(0)),
-			Tag:  `json:"total"`,
-		},
-	})
-
-	out := reflect.New(tableListType).Elem()
-	out.FieldByName("Items").Set(sliceValue)
-	out.FieldByName("Total").SetInt(int64(total))
-
-	return out.Interface(), nil
+	return struct {
+		Items []map[string]any `json:"items"`
+		Total int              `json:"total"`
+	}{
+		Items: items,
+		Total: total,
+	}, nil
 }
 
 func (r *RelationRepository) ListM2M(
@@ -243,23 +151,14 @@ func (r *RelationRepository) ListM2M(
 	q tableutils.TableQuery,
 ) (any, error) {
 
-	dtoType := reflect.TypeOf(cfg.GetRefList.RefDTO)
-	if dtoType.Kind() == reflect.Ptr {
-		dtoType = dtoType.Elem()
+	if cfg.GetRefList == nil || len(cfg.GetRefList.RefFields) == 0 {
+		return nil, fmt.Errorf("relationRepo.ListM2M: RefFields is empty")
 	}
 
-	sliceType := reflect.SliceOf(reflect.PointerTo(dtoType))
-	sliceValue := reflect.MakeSlice(sliceType, 0, 20)
-
-	cols := make([]string, 0, dtoType.NumField())
-
-	for i := 0; i < dtoType.NumField(); i++ {
-		f := dtoType.Field(i)
-		colName := utils.ToSnake(f.Name)
-		cols = append(cols, "r."+colName)
+	selectCols, err := buildSelectCols("r", cfg.GetRefList.RefFields)
+	if err != nil {
+		return nil, err
 	}
-
-	selectCols := strings.Join(cols, ", ")
 
 	mainTable := cfg.MainTable
 	refTable := cfg.RefTable
@@ -288,52 +187,20 @@ func (r *RelationRepository) ListM2M(
 	}
 	defer rows.Close()
 
+	items := make([]map[string]any, 0, 20)
+
 	for rows.Next() {
 
-		elem := reflect.New(dtoType)
-		elemVal := elem.Elem()
-
-		scanTargets := make([]any, dtoType.NumField())
-
-		// build pointer list
-		for i := 0; i < dtoType.NumField(); i++ {
-			f := elemVal.Field(i)
-
-			// JSONB → scan vào []byte trước
-			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-				var raw json.RawMessage
-				scanTargets[i] = &raw
-			} else {
-				scanTargets[i] = f.Addr().Interface()
-			}
-		}
+		scanTargets := buildScanTargets(len(cfg.GetRefList.RefFields))
 
 		// Scan row
 		if err := rows.Scan(scanTargets...); err != nil {
 			return nil, fmt.Errorf("relationRepo.List scan: %w", err)
 		}
 
-		// Convert JSONB → map[string]any
-		for i := 0; i < dtoType.NumField(); i++ {
-			f := elemVal.Field(i)
+		row := scanTargetsToMap(cfg.GetRefList.RefFields, scanTargets)
 
-			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-				rawPtr, ok := scanTargets[i].(*json.RawMessage)
-				if !ok || rawPtr == nil {
-					continue
-				}
-				if len(*rawPtr) == 0 {
-					continue
-				}
-
-				var m map[string]any
-				if e := json.Unmarshal(*rawPtr, &m); e == nil {
-					f.Set(reflect.ValueOf(m))
-				}
-			}
-		}
-
-		sliceValue = reflect.Append(sliceValue, elem)
+		items = append(items, row)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -361,26 +228,13 @@ func (r *RelationRepository) ListM2M(
 		}
 	}
 
-	ptrDtoType := reflect.PointerTo(dtoType)
-
-	tableListType := reflect.StructOf([]reflect.StructField{
-		{
-			Name: "Items",
-			Type: reflect.SliceOf(ptrDtoType),
-			Tag:  `json:"items"`,
-		},
-		{
-			Name: "Total",
-			Type: reflect.TypeOf(int(0)),
-			Tag:  `json:"total"`,
-		},
-	})
-
-	out := reflect.New(tableListType).Elem()
-	out.FieldByName("Items").Set(sliceValue)
-	out.FieldByName("Total").SetInt(int64(total))
-
-	return out.Interface(), nil
+	return struct {
+		Items []map[string]any `json:"items"`
+		Total int              `json:"total"`
+	}{
+		Items: items,
+		Total: total,
+	}, nil
 }
 
 func (r *RelationRepository) Search(
@@ -390,19 +244,14 @@ func (r *RelationRepository) Search(
 	sq dbutils.SearchQuery,
 ) (any, error) {
 
-	dtoType := reflect.TypeOf(cfg.RefDTO)
-	if dtoType.Kind() == reflect.Ptr {
-		dtoType = dtoType.Elem()
+	if len(cfg.RefFields) == 0 {
+		return nil, fmt.Errorf("relationRepo.Search: RefFields is empty")
 	}
 
-	// build SELECT columns
-	cols := make([]string, 0, dtoType.NumField())
-	for i := 0; i < dtoType.NumField(); i++ {
-		f := dtoType.Field(i)
-		colName := utils.ToSnake(f.Name)
-		cols = append(cols, "r."+colName)
+	selectCols, err := buildSelectCols("r", cfg.RefFields)
+	if err != nil {
+		return nil, err
 	}
-	selectCols := strings.Join(cols, ", ")
 
 	refTable := cfg.RefTable
 
@@ -465,54 +314,28 @@ func (r *RelationRepository) Search(
 	// =============================
 	// SCAN rows
 	// =============================
-	ptrType := reflect.PointerTo(dtoType)
-	sliceType := reflect.SliceOf(ptrType)
-	sliceValue := reflect.MakeSlice(sliceType, 0, 20)
+	items := make([]map[string]any, 0, 20)
 
 	for rows.Next() {
-		elem := reflect.New(dtoType)
-		elemVal := elem.Elem()
-
-		scanTargets := make([]any, dtoType.NumField())
-
-		for i := 0; i < dtoType.NumField(); i++ {
-			f := elemVal.Field(i)
-			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-				var raw json.RawMessage
-				scanTargets[i] = &raw
-			} else {
-				scanTargets[i] = f.Addr().Interface()
-			}
-		}
+		scanTargets := buildScanTargets(len(cfg.RefFields))
 
 		if err := rows.Scan(scanTargets...); err != nil {
 			return nil, fmt.Errorf("relationRepo.Search scan: %w", err)
 		}
 
-		// convert JSONB
-		for i := 0; i < dtoType.NumField(); i++ {
-			f := elemVal.Field(i)
-			if f.Kind() == reflect.Map && f.Type().String() == "map[string]interface {}" {
-				raw, ok := scanTargets[i].(*json.RawMessage)
-				if ok && raw != nil && len(*raw) > 0 {
-					var m map[string]any
-					json.Unmarshal(*raw, &m)
-					f.Set(reflect.ValueOf(m))
-				}
-			}
-		}
+		row := scanTargetsToMap(cfg.RefFields, scanTargets)
 
-		sliceValue = reflect.Append(sliceValue, elem)
+		items = append(items, row)
 	}
 
 	// =============================
 	// Check has_more
 	// =============================
 	hasMore := false
-	totalItems := sliceValue.Len()
+	totalItems := len(items)
 	if totalItems > limit {
 		hasMore = true
-		sliceValue = sliceValue.Slice(0, limit)
+		items = items[:limit]
 	}
 
 	// =============================
@@ -540,18 +363,81 @@ func (r *RelationRepository) Search(
 	// =============================
 	// Convert [] *DTO => [] *any
 	// =============================
-	n := sliceValue.Len()
-	items := make([]*any, n)
+	n := len(items)
+	anyItems := make([]*any, n)
 
 	for i := 0; i < n; i++ {
-		v := sliceValue.Index(i).Interface() // *DTO
-		tmp := any(v)
-		items[i] = &tmp
+		tmp := any(items[i])
+		anyItems[i] = &tmp
 	}
 
 	return dbutils.SearchResult[any]{
-		Items:   items,
+		Items:   anyItems,
 		HasMore: hasMore,
 		Total:   total,
 	}, nil
+}
+
+func buildSelectCols(prefix string, cols []string) (string, error) {
+	if len(cols) == 0 {
+		return "", fmt.Errorf("buildSelectCols: empty columns")
+	}
+
+	parts := make([]string, len(cols))
+	for i, col := range cols {
+		if prefix != "" {
+			parts[i] = fmt.Sprintf("%s.%s AS %s", prefix, col, col)
+		} else {
+			parts[i] = col
+		}
+	}
+
+	return strings.Join(parts, ", "), nil
+}
+
+func buildScanTargets(n int) []any {
+	targets := make([]any, n)
+	for i := 0; i < n; i++ {
+		targets[i] = new(any)
+	}
+	return targets
+}
+
+func scanTargetsToMap(cols []string, scanTargets []any) map[string]any {
+	row := make(map[string]any, len(cols))
+
+	for i, col := range cols {
+		valPtr, ok := scanTargets[i].(*any)
+		if !ok || valPtr == nil {
+			continue
+		}
+		row[col] = decodeValue(*valPtr)
+	}
+
+	return row
+}
+
+func decodeValue(v any) any {
+	switch val := v.(type) {
+	case json.RawMessage:
+		if len(val) == 0 {
+			return nil
+		}
+		var out any
+		if err := json.Unmarshal(val, &out); err == nil {
+			return out
+		}
+		return string(val)
+	case []byte:
+		if len(val) == 0 {
+			return nil
+		}
+		var out any
+		if err := json.Unmarshal(val, &out); err == nil {
+			return out
+		}
+		return string(val)
+	default:
+		return val
+	}
 }

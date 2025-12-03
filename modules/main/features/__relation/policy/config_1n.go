@@ -3,7 +3,7 @@ package relation
 type Config1N struct {
 	RefTable    string
 	FKCol       string
-	RefDTO      any
+	RefFields   []string
 	Permissions []string
 	CachePrefix string
 }

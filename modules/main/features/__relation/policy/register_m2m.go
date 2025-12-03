@@ -3,6 +3,7 @@ package relation
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -22,8 +23,8 @@ func RegisterM2M(key string, cfg ConfigM2M) {
 	if cfg.MainTable == "" || cfg.RefTable == "" {
 		panic("relation.Register: missing MainTable or RefTable")
 	}
-	if cfg.GetMainID == nil || cfg.GetIDs == nil {
-		panic("relation.Register: missing GetMainID or GetIDs")
+	if cfg.MainIDProp == "" || cfg.RefIDsProp == "" || cfg.DisplayProp == "" {
+		panic("relation.Register: missing MainIDProp or RefIDsProp or DisplayProp")
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -58,16 +59,16 @@ func UpsertM2M(
 
 	logger.Debug(fmt.Sprintf("[REL] %v", cfg))
 
-	mainID, err := cfg.GetMainID(entity)
+	mainID, err := extractIntField(entity, cfg.MainIDProp)
 	logger.Debug(fmt.Sprintf("[REL] MainID: %d", mainID))
 	if err != nil {
-		return nil, fmt.Errorf("relation.Upsert(%s): GetMainID: %w", key, err)
+		return nil, fmt.Errorf("relation.Upsert(%s): get main id: %w", key, err)
 	}
 
-	ids, err := cfg.GetIDs(input)
+	ids, err := extractIntSlice(input, cfg.RefIDsProp)
 	logger.Debug(fmt.Sprintf("[REL] IDs: %v", ids))
 	if err != nil {
-		return nil, fmt.Errorf("relation.Upsert(%s): GetIDs: %w", key, err)
+		return nil, fmt.Errorf("relation.Upsert(%s): get ids: %w", key, err)
 	}
 
 	if ids == nil {
@@ -201,9 +202,8 @@ func UpsertM2M(
 	}
 
 	// 5) Set result to output
-	err = cfg.SetResult(output, ids, &namesStr, names)
-	if err != nil {
-		return nil, fmt.Errorf("relation.Upsert(%s): SetResult: %w", key, err)
+	if err := setDisplayField(output, cfg.DisplayProp, namesStr); err != nil {
+		return nil, fmt.Errorf("relation.Upsert(%s): set display value: %w", key, err)
 	}
 
 	// 6) Invalidate
@@ -214,4 +214,127 @@ func UpsertM2M(
 	}
 
 	return names, nil
+}
+
+func normalizeStruct(v any) (reflect.Value, error) {
+	val := reflect.ValueOf(v)
+	if !val.IsValid() {
+		return reflect.Value{}, fmt.Errorf("value is nil")
+	}
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return reflect.Value{}, fmt.Errorf("value is nil pointer")
+		}
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return reflect.Value{}, fmt.Errorf("value is not struct")
+	}
+	return val, nil
+}
+
+func extractIntField(obj any, field string) (int, error) {
+	val, err := normalizeStruct(obj)
+	if err != nil {
+		return 0, err
+	}
+
+	f := val.FieldByName(field)
+	if !f.IsValid() {
+		return 0, fmt.Errorf("field %s not found", field)
+	}
+
+	for f.Kind() == reflect.Ptr {
+		if f.IsNil() {
+			return 0, fmt.Errorf("field %s is nil", field)
+		}
+		f = f.Elem()
+	}
+
+	switch f.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(f.Int()), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return int(f.Uint()), nil
+	default:
+		return 0, fmt.Errorf("field %s is not int/uint", field)
+	}
+}
+
+func extractIntSlice(obj any, field string) ([]int, error) {
+	val, err := normalizeStruct(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	f := val.FieldByName(field)
+	if !f.IsValid() {
+		return nil, fmt.Errorf("field %s not found", field)
+	}
+
+	for f.Kind() == reflect.Ptr {
+		if f.IsNil() {
+			return nil, nil
+		}
+		f = f.Elem()
+	}
+
+	if f.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("field %s is not slice", field)
+	}
+
+	if f.IsNil() {
+		return nil, nil
+	}
+
+	n := f.Len()
+	out := make([]int, n)
+	for i := 0; i < n; i++ {
+		el := f.Index(i)
+		for el.Kind() == reflect.Ptr {
+			if el.IsNil() {
+				return nil, fmt.Errorf("field %s slice element is nil pointer", field)
+			}
+			el = el.Elem()
+		}
+		switch el.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			out[i] = int(el.Int())
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			out[i] = int(el.Uint())
+		default:
+			return nil, fmt.Errorf("field %s slice element is not int/uint", field)
+		}
+	}
+
+	return out, nil
+}
+
+func setDisplayField(obj any, field string, val string) error {
+	target, err := normalizeStruct(obj)
+	if err != nil {
+		return err
+	}
+
+	f := target.FieldByName(field)
+	if !f.IsValid() {
+		return fmt.Errorf("field %s not found", field)
+	}
+	if !f.CanSet() {
+		return fmt.Errorf("field %s cannot be set", field)
+	}
+
+	switch f.Kind() {
+	case reflect.String:
+		f.SetString(val)
+		return nil
+	case reflect.Ptr:
+		if f.Type().Elem().Kind() != reflect.String {
+			return fmt.Errorf("field %s is not *string", field)
+		}
+		f.Set(reflect.ValueOf(&val))
+		return nil
+	default:
+		return fmt.Errorf("field %s must be string or *string", field)
+	}
 }

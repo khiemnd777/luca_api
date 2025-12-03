@@ -2,13 +2,13 @@ package relation
 
 type RefListConfig struct {
 	Permissions []string
-	RefDTO      any
+	RefFields   []string
 	CachePrefix string
 }
 
 type RefSearchConfig struct {
 	Permissions []string
-	RefDTO      any
+	RefFields   []string
 	CachePrefix string
 }
 
@@ -17,9 +17,9 @@ type ConfigM2M struct {
 	MainTable string // ví dụ: "materials"
 	RefTable  string // ví dụ: "suppliers"
 
-	GetMainID func(entity any) (int, error)
-	GetIDs    func(input any) ([]int, error)
-	SetResult func(output any, resIDs []int, resAsStr *string, res []string) error
+	MainIDProp  string // e.g. "ID"
+	RefIDsProp  string // e.g. "SupplierIDs"
+	DisplayProp string // e.g. "SupplierNames"
 
 	GetRefList   *RefListConfig
 	GetRefSearch *RefSearchConfig

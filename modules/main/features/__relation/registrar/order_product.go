@@ -1,7 +1,6 @@
 package registrar
 
 import (
-	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	policy "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -18,7 +17,7 @@ func init() {
 		RefTable:   "products",
 		RefIDCol:   "id",
 		RefNameCol: "name",
-		RefDTO:     model.ProductShortDTO{},
+		RefFields:  []string{"id", "name", "code", "custom_fields"},
 
 		UpsertedIDProp:   "ProductID",
 		UpsertedNameProp: utils.Ptr("ProductName"),
@@ -29,8 +28,8 @@ func init() {
 	policy.RegisterRefSearch("order-product", policy.ConfigSearch{
 		RefTable:    "products",
 		NormFields:  []string{"code", "name"},
+		RefFields:   []string{"id", "name", "code"},
 		Permissions: []string{"product.search"},
-		RefDTO:      model.ProductSearchDTO{},
 		CachePrefix: "product:search",
 	})
 }
