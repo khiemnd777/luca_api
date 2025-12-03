@@ -27,6 +27,19 @@ func init() {
 		Permissions: []string{"staff.view"},
 		CachePrefix: "staff",
 	})
+
+	/*
+		SELECT u.id AS id,
+					u.name AS name
+		FROM staffs s
+		JOIN users u ON u.id = s.user_id
+		JOIN user_roles ur ON ur.user_id = u.id
+		JOIN roles ro ON ro.id = ur.role_id
+		WHERE (u.name_norm LIKE $1)      -- keyword, normalized
+			AND ro.role_name = $2          -- extra where
+		ORDER BY name ASC                -- order_by name -> uses column alias
+		LIMIT 21 OFFSET 0;               -- limit+1 for has_more
+	*/
 	policy.RegisterRefSearch("orderitemprocess-assignee", policy.ConfigSearch{
 		RefTable:     "staffs",
 		Alias:        "s",
