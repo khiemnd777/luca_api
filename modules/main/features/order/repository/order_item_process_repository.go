@@ -26,6 +26,7 @@ type OrderItemProcessRepository interface {
 		orderItemID int64,
 		orderID int64,
 		orderCode *string,
+		priority *string,
 		productID int,
 	) ([]*model.OrderItemProcessDTO, error)
 
@@ -40,6 +41,13 @@ type OrderItemProcessRepository interface {
 		tx *generated.Tx,
 		input *model.OrderItemProcessUpsertDTO,
 	) (*model.OrderItemProcessDTO, error)
+
+	UpdateManyWithProps(
+		ctx context.Context,
+		tx *generated.Tx,
+		id int64,
+		propsFn func(prop *model.OrderItemProcessDTO) error,
+	) ([]*model.OrderItemProcessDTO, error)
 
 	UpdateMany(
 		ctx context.Context,
@@ -101,6 +109,7 @@ func (r *orderItemProcessRepository) CreateManyByProductID(
 	orderItemID int64,
 	orderID int64,
 	orderCode *string,
+	priority *string,
 	productID int,
 ) ([]*model.OrderItemProcessDTO, error) {
 	processes, err := r.GetRawProcessesByProductID(ctx, productID)
@@ -124,12 +133,13 @@ func (r *orderItemProcessRepository) CreateManyByProductID(
 			pname = p.Name
 		}
 
-		cf := map[string]any{}
-		for k, v := range p.CustomFields {
-			cf[k] = v
-		}
+		cf := maps.Clone(p.CustomFields)
+
 		if _, ok := cf["status"]; !ok {
 			cf["status"] = "waiting"
+		}
+		if _, ok := cf["priority"]; !ok && priority != nil {
+			cf["priority"] = *priority
 		}
 
 		col := []string{"order-item-process"}
@@ -194,6 +204,7 @@ func (r *orderItemProcessRepository) Create(ctx context.Context, tx *generated.T
 
 	q := tx.OrderItemProcess.Create().
 		SetOrderItemID(dto.OrderItemID).
+		SetNillableOrderID(dto.OrderID).
 		SetNillableProcessName(dto.ProcessName).
 		SetStepNumber(dto.StepNumber).
 		SetNillableAssignedID(dto.AssignedID).
@@ -230,6 +241,39 @@ func (r *orderItemProcessRepository) Create(ctx context.Context, tx *generated.T
 	}
 
 	return dto, nil
+}
+
+func (r *orderItemProcessRepository) UpdateManyWithProps(
+	ctx context.Context,
+	tx *generated.Tx,
+	id int64,
+	propsFn func(prop *model.OrderItemProcessDTO) error,
+) ([]*model.OrderItemProcessDTO, error) {
+	poiList, err := r.GetProcessesByOrderItemID(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	for _, poi := range poiList {
+		if propsFn != nil {
+			err := propsFn(poi)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	col := []string{"order-item-process"}
+	oipDTOs := make([]*model.OrderItemProcessUpsertDTO, 0, len(poiList))
+	for _, poi := range poiList {
+		oipDTOs = append(oipDTOs, &model.OrderItemProcessUpsertDTO{
+			DTO:         *poi,
+			Collections: &col,
+		})
+	}
+	out, err := r.UpdateMany(ctx, tx, oipDTOs)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *orderItemProcessRepository) UpdateMany(
@@ -276,6 +320,7 @@ func (r *orderItemProcessRepository) Update(
 
 	q := tx.OrderItemProcess.
 		UpdateOne(existing).
+		SetNillableOrderID(dto.OrderID).
 		SetNillableAssignedID(dto.AssignedID).
 		SetNillableAssignedName(dto.AssignedName).
 		SetNillableNote(dto.Note).

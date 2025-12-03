@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -237,7 +238,8 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 
 	// processes
 	if entity.ProductID > 0 {
-		r.orderItemProcessRepo.CreateManyByProductID(ctx, tx, entity.ID, entity.OrderID, entity.Code, entity.ProductID)
+		priority := utils.SafeGetString(entity.CustomFields, "priority")
+		r.orderItemProcessRepo.CreateManyByProductID(ctx, tx, entity.ID, entity.OrderID, entity.Code, &priority, entity.ProductID)
 	}
 
 	err = relation.Upsert1(ctx, tx, "orderitem", entity, &input.DTO, dto)
@@ -278,6 +280,25 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 	}
 
 	dto = mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+
+	// processes
+	if entity.ProductID > 0 {
+		priority := utils.SafeGetString(entity.CustomFields, "priority")
+		oipOut, err := r.orderItemProcessRepo.UpdateManyWithProps(ctx, tx, entity.ID, func(prop *model.OrderItemProcessDTO) error {
+			cf := maps.Clone(prop.CustomFields)
+			if cf != nil {
+				if priority != "" {
+					cf["priority"] = priority
+				}
+				prop.CustomFields = cf
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		dto.OrderItemProcesses = oipOut
+	}
 
 	err = relation.Upsert1(ctx, tx, "orderitem", entity, &input.DTO, dto)
 	if err != nil {
