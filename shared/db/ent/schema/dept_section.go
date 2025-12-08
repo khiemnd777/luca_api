@@ -17,6 +17,8 @@ type Section struct {
 // Fields of the Section.
 func (Section) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("department_id"),
+
 		field.String("name").
 			NotEmpty(),
 
@@ -28,6 +30,20 @@ func (Section) Fields() []ent.Field {
 		field.String("description").
 			Optional().
 			MaxLen(300),
+
+		field.String("color").
+			MaxLen(8).
+			Optional().
+			Nillable(),
+
+		field.JSON("custom_fields", map[string]any{}).
+			Optional().
+			Default(map[string]any{}),
+
+		// cache
+		field.String("process_names").
+			Optional().
+			Nillable(),
 
 		field.Bool("active").
 			Default(true),
@@ -48,6 +64,14 @@ func (Section) Fields() []ent.Field {
 
 func (Section) Edges() []ent.Edge {
 	return []ent.Edge{
+		edge.From("department", Department.Type).
+			Ref("sections").
+			Field("department_id").
+			Unique().
+			Required(),
+
+		edge.To("processes", SectionProcess.Type),
+
 		edge.To("staffs", StaffSection.Type),
 	}
 }

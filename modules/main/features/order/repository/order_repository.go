@@ -179,9 +179,6 @@ func (r *orderRepository) createNewOrder(
 	if err := relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
-	if _, err := relation.UpsertM2M(ctx, tx, "order", orderEnt, input.DTO, out); err != nil {
-		return nil, err
-	}
 
 	return out, nil
 }
@@ -267,9 +264,6 @@ func (r *orderRepository) upsertExistingOrder(
 
 	// relations
 	if err := relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
-		return nil, err
-	}
-	if _, err := relation.UpsertM2M(ctx, tx, "order", orderEnt, input.DTO, out); err != nil {
 		return nil, err
 	}
 
@@ -402,11 +396,6 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 
 	// relation
 	err = relation.Upsert1(ctx, tx, "orders_customers", entity, &input.DTO, output)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = relation.UpsertM2M(ctx, tx, "order", entity, input.DTO, output)
 	if err != nil {
 		return nil, err
 	}

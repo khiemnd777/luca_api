@@ -49,6 +49,8 @@ func kProcessAll() []string {
 	return []string{
 		kProcessListAll(),
 		kProcessSearchAll(),
+		kProcessSectionAll(),
+		"product_process:list:*",
 	}
 }
 
@@ -60,12 +62,24 @@ func kProcessSearchAll() string {
 	return "process:search:*"
 }
 
+func kProcessSectionAll() string {
+	return "process:section:*"
+}
+
 func kProcessList(q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("process:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kSectionProcessesList(sectionID int, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("section:id:%d:processes:list:l%d:p%d:o%s:d%s", sectionID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kProcessSearch(q dbutils.SearchQuery) string {
@@ -86,7 +100,7 @@ func (s *processService) Create(ctx context.Context, deptID int, input model.Pro
 		return nil, err
 	}
 
-	if dto != nil && dto.ID > 0 {
+	if dto != nil {
 		cache.InvalidateKeys(kProcessByID(dto.ID))
 	}
 	cache.InvalidateKeys(kProcessAll()...)
@@ -174,6 +188,10 @@ func (s *processService) List(ctx context.Context, q table.TableQuery) (table.Ta
 // ----------------------------------------------------------------------------
 
 func (s *processService) Delete(ctx context.Context, id int) error {
+	_, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}

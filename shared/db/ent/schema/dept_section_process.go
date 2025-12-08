@@ -9,15 +9,24 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// deprecated
-type ProductProcess struct {
+type SectionProcess struct {
 	ent.Schema
 }
 
-func (ProductProcess) Fields() []ent.Field {
+func (SectionProcess) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int("product_id"),
+		field.Int("section_id"),
 		field.Int("process_id"),
+		field.String("section_name").
+			Optional().
+			Nillable(),
+		field.String("process_name").
+			Optional().
+			Nillable(),
+		field.String("color").
+			MaxLen(8).
+			Optional().
+			Nillable(),
 		field.Int("display_order").
 			Max(100).
 			Optional().
@@ -26,26 +35,26 @@ func (ProductProcess) Fields() []ent.Field {
 	}
 }
 
-func (ProductProcess) Edges() []ent.Edge {
+func (SectionProcess) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.From("product", Product.Type).
+		edge.From("section", Section.Type).
 			Ref("processes").
-			Field("product_id").
+			Field("section_id").
 			Unique().
 			Required(),
 
 		edge.From("process", Process.Type).
-			Ref("products").
+			Ref("sections").
 			Field("process_id").
 			Unique().
 			Required(),
 	}
 }
 
-func (ProductProcess) Indexes() []ent.Index {
+func (SectionProcess) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("product_id", "process_id").Unique(),
+		index.Fields("section_id", "process_id").Unique(),
 		index.Fields("process_id"),
-		index.Fields("product_id"),
+		index.Fields("section_id"),
 	}
 }

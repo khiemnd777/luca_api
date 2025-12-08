@@ -6,7 +6,6 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/process"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
@@ -35,7 +34,7 @@ func NewProcessRepository(db *generated.Client, deps *module.ModuleDeps[config.M
 	return &processRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
-func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (*model.ProcessDTO, error) {
+func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (dto *model.ProcessDTO, err error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -48,11 +47,33 @@ func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (*mode
 		}
 	}()
 
+	dto, err = r.createWithTx(ctx, tx, input)
+	return dto, err
+}
+
+func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (dto *model.ProcessDTO, err error) {
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	dto, err = r.updateWithTx(ctx, tx, input)
+	return dto, err
+}
+
+func (r *processRepo) createWithTx(ctx context.Context, tx *generated.Tx, input model.ProcessDTO) (*model.ProcessDTO, error) {
 	q := tx.Process.Create().
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	_, err = customfields.PrepareCustomFields(ctx,
+	_, err := customfields.PrepareCustomFields(ctx,
 		r.cfMgr,
 		[]string{"process"},
 		input.CustomFields,
@@ -69,33 +90,16 @@ func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (*mode
 	}
 
 	dto := mapper.MapAs[*generated.Process, *model.ProcessDTO](entity)
-
-	_, err = relation.UpsertM2M(ctx, tx, "process", entity, input, dto)
-	if err != nil {
-		return nil, err
-	}
 
 	return dto, nil
 }
 
-func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (*model.ProcessDTO, error) {
-	tx, err := r.db.Tx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		} else {
-			_ = tx.Commit()
-		}
-	}()
-
+func (r *processRepo) updateWithTx(ctx context.Context, tx *generated.Tx, input model.ProcessDTO) (*model.ProcessDTO, error) {
 	q := tx.Process.UpdateOneID(input.ID).
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	_, err = customfields.PrepareCustomFields(ctx,
+	_, err := customfields.PrepareCustomFields(ctx,
 		r.cfMgr,
 		[]string{"process"},
 		input.CustomFields,
@@ -112,11 +116,6 @@ func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (*mode
 	}
 
 	dto := mapper.MapAs[*generated.Process, *model.ProcessDTO](entity)
-
-	_, err = relation.UpsertM2M(ctx, tx, "process", entity, input, dto)
-	if err != nil {
-		return nil, err
-	}
 
 	return dto, nil
 }

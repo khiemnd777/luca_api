@@ -30,6 +30,21 @@ func (Process) Fields() []ent.Field {
 			Optional().
 			Default(map[string]any{}),
 
+		// cache
+		field.Int("section_id").
+			Optional().
+			Nillable(),
+
+		field.String("section_name").
+			Optional().
+			Nillable(),
+
+		field.String("color").
+			MaxLen(8).
+			Optional().
+			Nillable(),
+
+		// times
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),
@@ -47,6 +62,7 @@ func (Process) Fields() []ent.Field {
 func (Process) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("products", ProductProcess.Type),
+		edge.To("sections", SectionProcess.Type),
 	}
 }
 

@@ -35,7 +35,8 @@ func (h *SectionHandler) RegisterRoutes(router fiber.Router) {
 
 func (h *SectionHandler) List(c *fiber.Ctx) error {
 	q := table.ParseTableQuery(c, 20)
-	res, err := h.svc.List(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.List(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -54,7 +55,8 @@ func (h *SectionHandler) ListBySectionID(c *fiber.Ctx) error {
 
 func (h *SectionHandler) Search(c *fiber.Ctx) error {
 	q := dbutils.ParseSearchQuery(c, 20)
-	res, err := h.svc.Search(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.Search(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -83,6 +85,9 @@ func (h *SectionHandler) Create(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "name is required")
 	}
 
+	deptID, _ := utils.GetDeptIDInt(c)
+	payload.DepartmentID = deptID
+
 	dto, err := h.svc.Create(c.UserContext(), payload)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
@@ -101,6 +106,8 @@ func (h *SectionHandler) Update(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
 	payload.ID = id
+	deptID, _ := utils.GetDeptIDInt(c)
+	payload.DepartmentID = deptID
 
 	dto, err := h.svc.Update(c.UserContext(), payload)
 	if err != nil {

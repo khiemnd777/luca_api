@@ -2,6 +2,7 @@ package relation
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -15,15 +16,16 @@ import (
 )
 
 var (
-	mu       sync.RWMutex
-	registry = map[string]ConfigM2M{}
+	mu                       sync.RWMutex
+	registry                 = map[string]ConfigM2M{}
+	displayOrderColumnExists sync.Map
 )
 
 func RegisterM2M(key string, cfg ConfigM2M) {
 	if cfg.MainTable == "" || cfg.RefTable == "" {
 		panic("relation.Register: missing MainTable or RefTable")
 	}
-	if cfg.MainIDProp == "" || cfg.RefIDsProp == "" || cfg.DisplayProp == "" {
+	if cfg.EntityPropMainID == "" || cfg.DTOPropRefIDs == "" || cfg.DTOPropDisplayNames == "" {
 		panic("relation.Register: missing MainIDProp or RefIDsProp or DisplayProp")
 	}
 	mu.Lock()
@@ -59,13 +61,13 @@ func UpsertM2M(
 
 	logger.Debug(fmt.Sprintf("[REL] %v", cfg))
 
-	mainID, err := extractIntField(entity, cfg.MainIDProp)
+	mainID, err := extractIntField(entity, cfg.EntityPropMainID)
 	logger.Debug(fmt.Sprintf("[REL] MainID: %d", mainID))
 	if err != nil {
 		return nil, fmt.Errorf("relation.Upsert(%s): get main id: %w", key, err)
 	}
 
-	ids, err := extractIntSlice(input, cfg.RefIDsProp)
+	ids, err := extractIntSlice(input, cfg.DTOPropRefIDs)
 	logger.Debug(fmt.Sprintf("[REL] IDs: %v", ids))
 	if err != nil {
 		return nil, fmt.Errorf("relation.Upsert(%s): get ids: %w", key, err)
@@ -78,6 +80,24 @@ func UpsertM2M(
 	// Dedup + bỏ -1 (ExcludeID mặc định)
 	ids = utils.DedupInt(ids, -1)
 
+	var existingRefIDs []int
+
+	extraCols := make([]string, 0, len(cfg.ExtraFields))
+	extraVals := make([]any, 0, len(cfg.ExtraFields))
+	for _, ef := range cfg.ExtraFields {
+		if ef.Column == "" || ef.EntityProp == "" {
+			return nil, fmt.Errorf("relation.Upsert(%s): missing column or entity prop in extra field", key)
+		}
+
+		val, err := extractFieldInterface(entity, ef.EntityProp)
+		if err != nil {
+			return nil, fmt.Errorf("relation.Upsert(%s): extract extra field %s: %w", key, ef.EntityProp, err)
+		}
+
+		extraCols = append(extraCols, ef.Column)
+		extraVals = append(extraVals, val)
+	}
+
 	mainTable := cfg.MainTable
 	refTable := cfg.RefTable
 	mainIDCol := "id"
@@ -89,9 +109,26 @@ func UpsertM2M(
 
 	mainNamesCol := refSing + "_names"
 
+	hasRefNameColumn := cfg.RefNameColumn != ""
+
+	var refNames map[int]string
+	if hasRefNameColumn && len(ids) > 0 {
+		refNames, err = fetchRefNames(ctx, tx, refTable, refIDCol, refNameCol, ids)
+		if err != nil {
+			return nil, fmt.Errorf("relation.Upsert(%s): fetch ref names: %w", key, err)
+		}
+	}
+
 	m2mTable := fmt.Sprintf("%s_%s", mainSing, refTable) // "material_suppliers"
 	leftCol := mainSing + "_id"                          // "material_id"
 	rightCol := refSing + "_id"                          // "supplier_id"
+
+	if cfg.RefValueCache != nil {
+		existingRefIDs, err = fetchExistingRefIDs(ctx, tx, m2mTable, leftCol, rightCol, mainID)
+		if err != nil {
+			return nil, fmt.Errorf("relation.Upsert(%s): fetch existing refs: %w", key, err)
+		}
+	}
 
 	// 1) Xoá mapping cũ
 	delSQL := fmt.Sprintf(`DELETE FROM %s WHERE %s = $1`, m2mTable, leftCol)
@@ -101,24 +138,59 @@ func UpsertM2M(
 
 	// 2) Insert lại nếu còn id
 	if len(ids) > 0 {
-		vals := make([]string, 0, len(ids))
-		args := make([]any, 0, len(ids)*2)
-
-		for i, id := range ids {
-			p1 := 2*i + 1
-			p2 := 2*i + 2
-
-			// thêm NOW() vào từng row
-			vals = append(vals, fmt.Sprintf("($%d,$%d,NOW())", p1, p2))
-
-			args = append(args, mainID, id)
+		hasDisplayOrder, err := hasDisplayOrderColumn(ctx, tx, m2mTable)
+		if err != nil {
+			return nil, fmt.Errorf("relation.Upsert(%s): check display_order column: %w", key, err)
 		}
 
+		argPerRow := 2 + len(extraVals)
+		if hasDisplayOrder {
+			argPerRow++
+		}
+		if hasRefNameColumn {
+			argPerRow++
+		}
+
+		vals := make([]string, 0, len(ids))
+		args := make([]any, 0, len(ids)*argPerRow)
+
+		for i, id := range ids {
+			start := argPerRow*i + 1
+			placeholders := make([]string, argPerRow)
+			for j := 0; j < argPerRow; j++ {
+				placeholders[j] = fmt.Sprintf("$%d", start+j)
+			}
+
+			vals = append(vals, fmt.Sprintf("(%s,NOW())", strings.Join(placeholders, ",")))
+
+			rowArgs := []any{mainID, id}
+			if hasDisplayOrder {
+				rowArgs = append(rowArgs, i)
+			}
+			rowArgs = append(rowArgs, extraVals...)
+			if hasRefNameColumn {
+				rowArgs = append(rowArgs, refNames[id])
+			}
+
+			args = append(args, rowArgs...)
+		}
+
+		columns := []string{leftCol, rightCol}
+		if hasDisplayOrder {
+			columns = append(columns, "display_order")
+		}
+		if len(extraCols) > 0 {
+			columns = append(columns, extraCols...)
+		}
+		if hasRefNameColumn {
+			columns = append(columns, cfg.RefNameColumn)
+		}
+		columns = append(columns, "created_at")
+
 		insSQL := fmt.Sprintf(
-			`INSERT INTO %s (%s,%s,created_at) VALUES %s`,
+			`INSERT INTO %s (%s) VALUES %s`,
 			m2mTable,
-			leftCol,
-			rightCol,
+			strings.Join(columns, ","),
 			strings.Join(vals, ", "),
 		)
 
@@ -152,8 +224,6 @@ func UpsertM2M(
 			mainIDCol,    // id
 			mainNamesCol, // supplier_names
 		)
-
-		logger.Debug(fmt.Sprintf("[REL] update+names sql: %s", updateSQL))
 
 		rows, err := tx.QueryContext(ctx, updateSQL, mainID, pq.Array(ids))
 		if err != nil {
@@ -202,8 +272,17 @@ func UpsertM2M(
 	}
 
 	// 5) Set result to output
-	if err := setDisplayField(output, cfg.DisplayProp, namesStr); err != nil {
+	if err := setDisplayField(output, cfg.DTOPropDisplayNames, namesStr); err != nil {
 		return nil, fmt.Errorf("relation.Upsert(%s): set display value: %w", key, err)
+	}
+
+	if cfg.RefValueCache != nil {
+		refIDs := utils.DedupInt(append(existingRefIDs, ids...), -1)
+		if len(refIDs) > 0 {
+			if err := updateRefValueCacheColumns(ctx, tx, cfg, m2mTable, rightCol, refIDCol, refTable, refIDs); err != nil {
+				return nil, fmt.Errorf("relation.Upsert(%s): update ref cache columns: %w", key, err)
+			}
+		}
 	}
 
 	// 6) Invalidate
@@ -216,6 +295,147 @@ func UpsertM2M(
 	return names, nil
 }
 
+func fetchRefNames(ctx context.Context, tx *generated.Tx, table, idCol, nameCol string, ids []int) (map[int]string, error) {
+	query := fmt.Sprintf(`SELECT %s, %s FROM %s WHERE %s = ANY($1)`, idCol, nameCol, table, idCol)
+
+	rows, err := tx.QueryContext(ctx, query, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	names := make(map[int]string, len(ids))
+	for rows.Next() {
+		var (
+			id   int
+			name sql.NullString
+		)
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		if name.Valid {
+			names[id] = name.String
+		} else {
+			names[id] = ""
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return names, nil
+}
+
+func hasDisplayOrderColumn(ctx context.Context, tx *generated.Tx, table string) (bool, error) {
+	if val, ok := displayOrderColumnExists.Load(table); ok {
+		return val.(bool), nil
+	}
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_schema = current_schema()
+			AND table_name = $1
+			AND column_name = 'display_order'
+		)
+	`, table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	var exists bool
+	if rows.Next() {
+		if err := rows.Scan(&exists); err != nil {
+			return false, err
+		}
+	} else {
+		return false, fmt.Errorf("no rows returned for table %s", table)
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+
+	displayOrderColumnExists.Store(table, exists)
+	return exists, nil
+}
+
+func fetchExistingRefIDs(ctx context.Context, tx *generated.Tx, table, leftCol, rightCol string, mainID int) ([]int, error) {
+	query := fmt.Sprintf(`SELECT %s FROM %s WHERE %s = $1`, rightCol, table, leftCol)
+
+	rows, err := tx.QueryContext(ctx, query, mainID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ids, nil
+}
+
+func updateRefValueCacheColumns(
+	ctx context.Context,
+	tx *generated.Tx,
+	cfg ConfigM2M,
+	m2mTable string,
+	rightCol string,
+	refIDCol string,
+	refTable string,
+	refIDs []int,
+) error {
+	cacheCfg := cfg.RefValueCache
+	if cacheCfg == nil || len(cacheCfg.Columns) == 0 || len(refIDs) == 0 {
+		return nil
+	}
+
+	setClauses := make([]string, 0, len(cacheCfg.Columns))
+	selectCols := make([]string, 0, len(cacheCfg.Columns))
+	for _, col := range cacheCfg.Columns {
+		if col.RefColumn == "" || col.M2MColumn == "" {
+			return fmt.Errorf("ref cache column mapping is missing ref or m2m column")
+		}
+		setClauses = append(setClauses, fmt.Sprintf("%s = latest.%s", col.RefColumn, col.RefColumn))
+		selectCols = append(selectCols, fmt.Sprintf("m2m.%s AS %s", col.M2MColumn, col.RefColumn))
+	}
+
+	for _, id := range refIDs {
+		updateSQL := fmt.Sprintf(`
+			UPDATE %s r
+			SET %s
+			FROM (
+				SELECT %s
+				FROM %s m2m
+				WHERE m2m.%s = %d
+				ORDER BY m2m.created_at DESC
+				LIMIT 1
+			) latest
+			WHERE r.%s = %d
+		`, refTable, strings.Join(setClauses, ","), strings.Join(selectCols, ","), m2mTable, rightCol, id, refIDCol, id)
+
+		if _, err := tx.ExecContext(ctx, updateSQL); err != nil {
+			return fmt.Errorf("update ref cache id %d: %w", id, err)
+		}
+	}
+
+	return nil
+}
+
+// -- helpers
 func normalizeStruct(v any) (reflect.Value, error) {
 	val := reflect.ValueOf(v)
 	if !val.IsValid() {
@@ -308,6 +528,27 @@ func extractIntSlice(obj any, field string) ([]int, error) {
 	}
 
 	return out, nil
+}
+
+func extractFieldInterface(obj any, field string) (any, error) {
+	val, err := normalizeStruct(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	f := val.FieldByName(field)
+	if !f.IsValid() {
+		return nil, fmt.Errorf("field %s not found", field)
+	}
+
+	for f.Kind() == reflect.Ptr {
+		if f.IsNil() {
+			return nil, nil
+		}
+		f = f.Elem()
+	}
+
+	return f.Interface(), nil
 }
 
 func setDisplayField(obj any, field string, val string) error {

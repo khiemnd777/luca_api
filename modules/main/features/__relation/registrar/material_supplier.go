@@ -9,11 +9,11 @@ func init() {
 	logger.Debug("[RELATION] Register materials - suppliers")
 	policy.RegisterM2M("material",
 		policy.ConfigM2M{
-			MainTable:   "materials",
-			RefTable:    "suppliers",
-			MainIDProp:  "ID",
-			RefIDsProp:  "SupplierIDs",
-			DisplayProp: "SupplierNames",
+			MainTable:           "materials",
+			RefTable:            "suppliers",
+			EntityPropMainID:    "ID",
+			DTOPropRefIDs:       "SupplierIDs",
+			DTOPropDisplayNames: "SupplierNames",
 
 			RefList: &policy.RefListConfig{
 				Permissions: []string{"supplier.view"},

@@ -9,24 +9,24 @@ func init() {
 	logger.Debug("[RELATION] Register products - processes")
 	policy.RegisterM2M("products_processes",
 		policy.ConfigM2M{
-			MainTable:   "products",
-			RefTable:    "processes",
-			MainIDProp:  "ID",
-			RefIDsProp:  "ProcessIDs",
-			DisplayProp: "ProcessNames",
+			MainTable:           "products",
+			RefTable:            "processes",
+			EntityPropMainID:    "ID",
+			DTOPropRefIDs:       "ProcessIDs",
+			DTOPropDisplayNames: "ProcessNames",
 
 			RefList: &policy.RefListConfig{
 				Permissions: []string{"process.view"},
-				RefFields:   []string{"id", "code", "name"},
-				CachePrefix: "process:list",
+				RefFields:   []string{"id", "code", "name", "section_name", "color"},
+				CachePrefix: "product_process:list",
 			},
 		},
 	)
 	policy.RegisterRefSearch("products_processes", policy.ConfigSearch{
 		RefTable:    "processes",
 		NormFields:  []string{"code", "name"},
-		RefFields:   []string{"id", "code", "name"},
+		RefFields:   []string{"id", "code", "name", "section_name", "color"},
 		Permissions: []string{"process.search"},
-		CachePrefix: "process:list",
+		CachePrefix: "product_process:list",
 	})
 }

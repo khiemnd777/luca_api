@@ -6,6 +6,8 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
+	processrepo "github.com/khiemnd777/andy_api/modules/main/features/process/repository"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/section"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/staff"
@@ -13,6 +15,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/user"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
+	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -21,50 +24,102 @@ type SectionRepository interface {
 	Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	GetByID(ctx context.Context, id int) (*model.SectionDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
 	ListByStaffID(ctx context.Context, staffID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
 type sectionRepo struct {
-	db   *generated.Client
-	deps *module.ModuleDeps[config.ModuleConfig]
+	db          *generated.Client
+	deps        *module.ModuleDeps[config.ModuleConfig]
+	processRepo processrepo.ProcessRepository
+	cfMgr       *customfields.Manager
 }
 
-func NewSectionRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig]) SectionRepository {
-	return &sectionRepo{db: db, deps: deps}
+func NewSectionRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) SectionRepository {
+	return &sectionRepo{
+		db:          db,
+		deps:        deps,
+		processRepo: processrepo.NewProcessRepository(db, deps, cfMgr),
+		cfMgr:       cfMgr,
+	}
 }
 
 func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
-	q := r.db.Section.Create().
-		SetActive(input.Active).
-		SetName(input.Name).
-		SetNillableCode(input.Code).
-		SetDescription(input.Description)
+	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
+		q := r.db.Section.Create().
+			SetDepartmentID(input.DepartmentID).
+			SetActive(input.Active).
+			SetName(input.Name).
+			SetNillableCode(input.Code).
+			SetNillableColor(input.Color).
+			SetDescription(input.Description)
 
-	entity, err := q.Save(ctx)
-	if err != nil {
-		return nil, err
-	}
+		// custom fields
+		_, err := customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			[]string{"section"},
+			input.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
 
-	dto := mapper.MapAs[*generated.Section, *model.SectionDTO](entity)
-	return dto, nil
+		entity, err := q.Save(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		dto := mapper.MapAs[*generated.Section, *model.SectionDTO](entity)
+
+		_, err = relation.UpsertM2M(ctx, tx, "sections_processes", entity, input, dto)
+		if err != nil {
+			return nil, err
+		}
+
+		return dto, nil
+	})
 }
 
 func (r *sectionRepo) Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
-	entity, err := r.db.Section.UpdateOneID(input.ID).
-		SetActive(input.Active).
-		SetName(input.Name).
-		SetNillableCode(input.Code).
-		SetDescription(input.Description).
-		Save(ctx)
-	if err != nil {
-		return nil, err
-	}
+	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
+		q := r.db.Section.UpdateOneID(input.ID).
+			SetDepartmentID(input.DepartmentID).
+			SetActive(input.Active).
+			SetName(input.Name).
+			SetNillableCode(input.Code).
+			SetNillableColor(input.Color).
+			SetDescription(input.Description)
 
-	dto := mapper.MapAs[*generated.Section, *model.SectionDTO](entity)
-	return dto, nil
+		// custom fields
+		_, err := customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			[]string{"section"},
+			input.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		entity, err := q.Save(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		dto := mapper.MapAs[*generated.Section, *model.SectionDTO](entity)
+
+		_, err = relation.UpsertM2M(ctx, tx, "sections_processes", entity, input, dto)
+		if err != nil {
+			return nil, err
+		}
+
+		return dto, nil
+	})
 }
 
 func (r *sectionRepo) GetByID(ctx context.Context, id int) (*model.SectionDTO, error) {
@@ -82,11 +137,14 @@ func (r *sectionRepo) GetByID(ctx context.Context, id int) (*model.SectionDTO, e
 	return dto, nil
 }
 
-func (r *sectionRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.SectionDTO], error) {
+func (r *sectionRepo) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Section.Query().
-			Where(section.DeletedAtIsNil()),
+			Where(
+				section.DeletedAtIsNil(),
+				section.DepartmentIDEQ(deptID),
+			),
 		query,
 		section.Table,
 		section.FieldID,
@@ -127,11 +185,14 @@ func (r *sectionRepo) ListByStaffID(ctx context.Context, staffID int, query tabl
 	return list, nil
 }
 
-func (r *sectionRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error) {
+func (r *sectionRepo) Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error) {
 	return dbutils.Search(
 		ctx,
 		r.db.Section.Query().
-			Where(section.DeletedAtIsNil()),
+			Where(
+				section.DeletedAtIsNil(),
+				section.DepartmentIDEQ(deptID),
+			),
 		[]string{
 			dbutils.GetNormField(section.FieldName),
 		},

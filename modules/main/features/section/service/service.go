@@ -17,9 +17,9 @@ type SectionService interface {
 	Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error)
 	GetByID(ctx context.Context, id int) (*model.SectionDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
 	ListByStaffID(ctx context.Context, staffID int, query table.TableQuery) (table.TableListResult[model.SectionDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -37,7 +37,12 @@ func kSectionByID(id int) string {
 }
 
 func kSectionAll() []string {
-	return []string{kSectionListAll(), kSectionSearchAll()}
+	return []string{
+		kSectionListAll(),
+		kSectionSearchAll(),
+		"process:list:*",
+		"product_process:list:*",
+	}
 }
 
 func kSectionListAll() string {
@@ -48,12 +53,12 @@ func kSectionSearchAll() string {
 	return "section:search:*"
 }
 
-func kSectionList(q table.TableQuery) string {
+func kSectionList(deptID int, q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("section:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("section:list:dept:%d:l%d:p%d:o%s:d%s", deptID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kSectionStaffList(staffID int, q table.TableQuery) string {
@@ -64,12 +69,12 @@ func kSectionStaffList(staffID int, q table.TableQuery) string {
 	return fmt.Sprintf("section:staff:%d:list:l%d:p%d:o%s:d%s", staffID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kSectionSearch(q dbutils.SearchQuery) string {
+func kSectionSearch(deptID int, q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("section:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("section:search:dept:%d:k%s:l%d:p%d:o%s:d%s", deptID, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func (s *sectionService) Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
@@ -80,7 +85,7 @@ func (s *sectionService) Create(ctx context.Context, input model.SectionDTO) (*m
 
 	cache.InvalidateKeys(kSectionAll()...)
 	if dto != nil && dto.ID > 0 {
-		cache.InvalidateKeys(kSectionByID(dto.ID))
+		cache.InvalidateKeys(kSectionByID(dto.ID), fmt.Sprintf("section:id:%d:*", dto.ID))
 	}
 	return dto, nil
 }
@@ -92,7 +97,7 @@ func (s *sectionService) Update(ctx context.Context, input model.SectionDTO) (*m
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kSectionByID(dto.ID))
+		cache.InvalidateKeys(kSectionByID(dto.ID), fmt.Sprintf("section:id:%d:*", dto.ID))
 	}
 	cache.InvalidateKeys(kSectionAll()...)
 	return dto, nil
@@ -104,12 +109,12 @@ func (s *sectionService) GetByID(ctx context.Context, id int) (*model.SectionDTO
 	})
 }
 
-func (s *sectionService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.SectionDTO], error) {
+func (s *sectionService) List(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.SectionDTO], error) {
 	type boxed = table.TableListResult[model.SectionDTO]
-	key := kSectionList(q)
+	key := kSectionList(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.List(ctx, q)
+		res, e := s.repo.List(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}
@@ -145,16 +150,16 @@ func (s *sectionService) Delete(ctx context.Context, id int) error {
 		return err
 	}
 	cache.InvalidateKeys(kSectionAll()...)
-	cache.InvalidateKeys(kSectionByID(id))
+	cache.InvalidateKeys(kSectionByID(id), fmt.Sprintf("section:id:%d:*", id))
 	return nil
 }
 
-func (s *sectionService) Search(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error) {
+func (s *sectionService) Search(ctx context.Context, deptID int, q dbutils.SearchQuery) (dbutils.SearchResult[model.SectionDTO], error) {
 	type boxed = dbutils.SearchResult[model.SectionDTO]
-	key := kSectionSearch(q)
+	key := kSectionSearch(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.Search(ctx, q)
+		res, e := s.repo.Search(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}
