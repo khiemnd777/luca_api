@@ -69,6 +69,8 @@ func (Department) Edges() []ent.Edge {
 
 		// O2M thực: Department -> DepartmentMember
 		edge.To("members", DepartmentMember.Type),
+
+		edge.To("sections", Section.Type),
 	}
 }
 

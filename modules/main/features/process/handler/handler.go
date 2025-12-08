@@ -81,7 +81,7 @@ func (h *ProcessHandler) Create(c *fiber.Ctx) error {
 	var payload model.ProcessDTO
 	if err := c.BodyParser(&payload); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
- 	}
+	}
 	// phần validate tuỳ module, tạm giữ nguyên generic.
 
 	deptID, _ := utils.GetDeptIDInt(c)

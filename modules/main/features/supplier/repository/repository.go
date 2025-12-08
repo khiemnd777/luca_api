@@ -6,7 +6,6 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/materialsupplier"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/supplier"
@@ -72,11 +71,6 @@ func (r *supplierRepo) Create(ctx context.Context, input model.SupplierDTO) (*mo
 
 	dto := mapper.MapAs[*generated.Supplier, *model.SupplierDTO](entity)
 
-	_, err = relation.UpsertM2M(ctx, tx, "supplier", entity, input, dto)
-	if err != nil {
-		return nil, err
-	}
-
 	return dto, nil
 }
 
@@ -114,11 +108,6 @@ func (r *supplierRepo) Update(ctx context.Context, input model.SupplierDTO) (*mo
 	}
 
 	dto := mapper.MapAs[*generated.Supplier, *model.SupplierDTO](entity)
-
-	_, err = relation.UpsertM2M(ctx, tx, "supplier", entity, input, dto)
-	if err != nil {
-		return nil, err
-	}
 
 	return dto, nil
 }

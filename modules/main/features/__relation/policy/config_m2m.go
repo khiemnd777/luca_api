@@ -17,9 +17,9 @@ type ConfigM2M struct {
 	MainTable string // ví dụ: "materials"
 	RefTable  string // ví dụ: "suppliers"
 
-	MainIDProp  string // e.g. "ID"
-	RefIDsProp  string // e.g. "SupplierIDs"
-	DisplayProp string // e.g. "SupplierNames"
+	EntityPropMainID    string // e.g. "ID"
+	DTOPropRefIDs       string // e.g. "SupplierIDs"
+	DTOPropDisplayNames string // e.g. "SupplierNames"
 
 	RefList *RefListConfig
 }

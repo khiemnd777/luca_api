@@ -6,10 +6,10 @@ import (
 )
 
 func init() {
-	logger.Debug("[RELATION] Register products - processes")
-	policy.RegisterM2M("products_processes",
+	logger.Debug("[RELATION] Register sections - processes")
+	policy.RegisterM2M("sections_processes",
 		policy.ConfigM2M{
-			MainTable:           "products",
+			MainTable:           "sections",
 			RefTable:            "processes",
 			EntityPropMainID:    "ID",
 			DTOPropRefIDs:       "ProcessIDs",

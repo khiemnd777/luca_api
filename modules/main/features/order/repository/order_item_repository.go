@@ -8,7 +8,6 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
@@ -242,16 +241,6 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		r.orderItemProcessRepo.CreateManyByProductID(ctx, tx, entity.ID, entity.OrderID, entity.Code, &priority, entity.ProductID)
 	}
 
-	err = relation.Upsert1(ctx, tx, "orderitem", entity, &input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = relation.UpsertM2M(ctx, tx, "orderitem", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
 	return dto, nil
 }
 
@@ -298,16 +287,6 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 			return nil, err
 		}
 		dto.OrderItemProcesses = oipOut
-	}
-
-	err = relation.Upsert1(ctx, tx, "orderitem", entity, &input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = relation.UpsertM2M(ctx, tx, "orderitem", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
 	}
 
 	return dto, nil

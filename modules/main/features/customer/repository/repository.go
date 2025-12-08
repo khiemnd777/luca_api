@@ -6,7 +6,6 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/customer"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
@@ -70,11 +69,6 @@ func (r *customerRepo) Create(ctx context.Context, input model.CustomerDTO) (*mo
 
 	dto := mapper.MapAs[*generated.Customer, *model.CustomerDTO](entity)
 
-	_, err = relation.UpsertM2M(ctx, tx, "customer", entity, input, dto)
-	if err != nil {
-		return nil, err
-	}
-
 	return dto, nil
 }
 
@@ -112,11 +106,6 @@ func (r *customerRepo) Update(ctx context.Context, input model.CustomerDTO) (*mo
 	}
 
 	dto := mapper.MapAs[*generated.Customer, *model.CustomerDTO](entity)
-
-	_, err = relation.UpsertM2M(ctx, tx, "customer", entity, input, dto)
-	if err != nil {
-		return nil, err
-	}
 
 	return dto, nil
 }

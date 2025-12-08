@@ -26,6 +26,11 @@ func (Process) Fields() []ent.Field {
 		field.Bool("active").
 			Default(true),
 
+		field.String("color").
+			MaxLen(8).
+			Optional().
+			Nillable(),
+
 		field.JSON("custom_fields", map[string]any{}).
 			Optional().
 			Default(map[string]any{}),
@@ -47,6 +52,7 @@ func (Process) Fields() []ent.Field {
 func (Process) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("products", ProductProcess.Type),
+		edge.To("sections", SectionProcess.Type),
 	}
 }
 

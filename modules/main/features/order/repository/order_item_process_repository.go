@@ -9,7 +9,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/process"
@@ -230,16 +229,6 @@ func (r *orderItemProcessRepository) Create(ctx context.Context, tx *generated.T
 
 	dto = mapper.MapAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](entity)
 
-	err = relation.Upsert1(ctx, tx, "orderitemprocess", entity, &input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = relation.UpsertM2M(ctx, tx, "orderitemprocess", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
 	return dto, nil
 }
 
@@ -347,16 +336,6 @@ func (r *orderItemProcessRepository) Update(
 	}
 
 	out := mapper.MapAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](entity)
-
-	err = relation.Upsert1(ctx, tx, "orderitemprocess", entity, &input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = relation.UpsertM2M(ctx, tx, "orderitemprocess", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
 
 	return out, nil
 }

@@ -9,6 +9,7 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
+// deprecated
 type ProductProcess struct {
 	ent.Schema
 }

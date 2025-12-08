@@ -23,7 +23,7 @@ func RegisterM2M(key string, cfg ConfigM2M) {
 	if cfg.MainTable == "" || cfg.RefTable == "" {
 		panic("relation.Register: missing MainTable or RefTable")
 	}
-	if cfg.MainIDProp == "" || cfg.RefIDsProp == "" || cfg.DisplayProp == "" {
+	if cfg.EntityPropMainID == "" || cfg.DTOPropRefIDs == "" || cfg.DTOPropDisplayNames == "" {
 		panic("relation.Register: missing MainIDProp or RefIDsProp or DisplayProp")
 	}
 	mu.Lock()
@@ -59,13 +59,13 @@ func UpsertM2M(
 
 	logger.Debug(fmt.Sprintf("[REL] %v", cfg))
 
-	mainID, err := extractIntField(entity, cfg.MainIDProp)
+	mainID, err := extractIntField(entity, cfg.EntityPropMainID)
 	logger.Debug(fmt.Sprintf("[REL] MainID: %d", mainID))
 	if err != nil {
 		return nil, fmt.Errorf("relation.Upsert(%s): get main id: %w", key, err)
 	}
 
-	ids, err := extractIntSlice(input, cfg.RefIDsProp)
+	ids, err := extractIntSlice(input, cfg.DTOPropRefIDs)
 	logger.Debug(fmt.Sprintf("[REL] IDs: %v", ids))
 	if err != nil {
 		return nil, fmt.Errorf("relation.Upsert(%s): get ids: %w", key, err)
@@ -202,7 +202,7 @@ func UpsertM2M(
 	}
 
 	// 5) Set result to output
-	if err := setDisplayField(output, cfg.DisplayProp, namesStr); err != nil {
+	if err := setDisplayField(output, cfg.DTOPropDisplayNames, namesStr); err != nil {
 		return nil, fmt.Errorf("relation.Upsert(%s): set display value: %w", key, err)
 	}
 
