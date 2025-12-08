@@ -30,7 +30,7 @@ func init() {
 
 			RefList: &policy.RefListConfig{
 				Permissions: []string{"process.view"},
-				RefFields:   []string{"id", "code", "name"},
+				RefFields:   []string{"id", "code", "name", "section_name", "color"},
 				CachePrefix: "process:list",
 			},
 		},
@@ -39,7 +39,7 @@ func init() {
 	policy.RegisterRefSearch("sections_processes", policy.ConfigSearch{
 		RefTable:    "processes",
 		NormFields:  []string{"code", "name"},
-		RefFields:   []string{"id", "code", "name"},
+		RefFields:   []string{"id", "code", "name", "section_name", "color"},
 		Permissions: []string{"process.search"},
 		CachePrefix: "process:list",
 		ExtraWhere: func(args *[]any) string {

@@ -50,6 +50,7 @@ func kProcessAll() []string {
 		kProcessListAll(),
 		kProcessSearchAll(),
 		kProcessSectionAll(),
+		"product_process:list:*",
 	}
 }
 
