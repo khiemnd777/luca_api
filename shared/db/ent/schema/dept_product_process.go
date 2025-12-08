@@ -18,6 +18,23 @@ func (ProductProcess) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("product_id"),
 		field.Int("process_id"),
+		// field.String("product_name").
+		// 	Optional().
+		// 	Nillable(),
+		// field.String("section_name").
+		// 	Optional().
+		// 	Nillable(),
+		// field.String("process_name").
+		// 	Optional().
+		// 	Nillable(),
+		// field.String("color").
+		// 	MaxLen(8).
+		// 	Optional().
+		// 	Nillable(),
+		// field.Int("display_order").
+		// 	Max(100).
+		// 	Optional().
+		// 	Nillable(),
 		field.Time("created_at").Default(time.Now),
 	}
 }

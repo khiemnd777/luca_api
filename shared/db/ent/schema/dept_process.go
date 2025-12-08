@@ -26,15 +26,25 @@ func (Process) Fields() []ent.Field {
 		field.Bool("active").
 			Default(true),
 
+		field.JSON("custom_fields", map[string]any{}).
+			Optional().
+			Default(map[string]any{}),
+
+		// cache
+		field.Int("section_id").
+			Optional().
+			Nillable(),
+
+		field.String("section_name").
+			Optional().
+			Nillable(),
+
 		field.String("color").
 			MaxLen(8).
 			Optional().
 			Nillable(),
 
-		field.JSON("custom_fields", map[string]any{}).
-			Optional().
-			Default(map[string]any{}),
-
+		// times
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),

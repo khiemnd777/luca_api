@@ -34,6 +34,7 @@ type sectionRepo struct {
 	db          *generated.Client
 	deps        *module.ModuleDeps[config.ModuleConfig]
 	processRepo processrepo.ProcessRepository
+	cfMgr       *customfields.Manager
 }
 
 func NewSectionRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) SectionRepository {
@@ -41,6 +42,7 @@ func NewSectionRepository(db *generated.Client, deps *module.ModuleDeps[config.M
 		db:          db,
 		deps:        deps,
 		processRepo: processrepo.NewProcessRepository(db, deps, cfMgr),
+		cfMgr:       cfMgr,
 	}
 }
 
@@ -51,7 +53,20 @@ func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*mode
 			SetActive(input.Active).
 			SetName(input.Name).
 			SetNillableCode(input.Code).
+			SetNillableColor(input.Color).
 			SetDescription(input.Description)
+
+		// custom fields
+		_, err := customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			[]string{"section"},
+			input.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
 
 		entity, err := q.Save(ctx)
 		if err != nil {
@@ -71,13 +86,27 @@ func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*mode
 
 func (r *sectionRepo) Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
 	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
-		entity, err := r.db.Section.UpdateOneID(input.ID).
+		q := r.db.Section.UpdateOneID(input.ID).
 			SetDepartmentID(input.DepartmentID).
 			SetActive(input.Active).
 			SetName(input.Name).
 			SetNillableCode(input.Code).
-			SetDescription(input.Description).
-			Save(ctx)
+			SetNillableColor(input.Color).
+			SetDescription(input.Description)
+
+		// custom fields
+		_, err := customfields.PrepareCustomFields(ctx,
+			r.cfMgr,
+			[]string{"section"},
+			input.CustomFields,
+			q,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		entity, err := q.Save(ctx)
 		if err != nil {
 			return nil, err
 		}

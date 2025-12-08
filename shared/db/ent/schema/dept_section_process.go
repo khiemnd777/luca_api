@@ -17,13 +17,20 @@ func (SectionProcess) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("section_id"),
 		field.Int("process_id"),
-		field.String("section_name").Optional().Nillable(),
-		field.String("process_name").Optional().Nillable(),
+		field.String("section_name").
+			Optional().
+			Nillable(),
+		field.String("process_name").
+			Optional().
+			Nillable(),
 		field.String("color").
 			MaxLen(8).
 			Optional().
 			Nillable(),
-		field.Int("display_order").Max(100).Optional().Nillable(),
+		field.Int("display_order").
+			Max(100).
+			Optional().
+			Nillable(),
 		field.Time("created_at").Default(time.Now),
 	}
 }

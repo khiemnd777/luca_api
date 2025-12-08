@@ -37,7 +37,7 @@ func kSectionByID(id int) string {
 }
 
 func kSectionAll() []string {
-	return []string{kSectionListAll(), kSectionSearchAll()}
+	return []string{kSectionListAll(), kSectionSearchAll(), "process:list:*"}
 }
 
 func kSectionListAll() string {

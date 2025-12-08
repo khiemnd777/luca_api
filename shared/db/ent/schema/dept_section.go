@@ -36,6 +36,15 @@ func (Section) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.JSON("custom_fields", map[string]any{}).
+			Optional().
+			Default(map[string]any{}),
+
+		// cache
+		field.String("process_names").
+			Optional().
+			Nillable(),
+
 		field.Bool("active").
 			Default(true),
 
