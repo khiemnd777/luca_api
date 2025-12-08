@@ -22,7 +22,7 @@ func init() {
 			},
 		},
 	)
-	policy.RegisterRefSearch("products_processes", policy.ConfigSearch{
+	policy.RegisterRefSearch("sections_processes", policy.ConfigSearch{
 		RefTable:    "processes",
 		NormFields:  []string{"code", "name"},
 		RefFields:   []string{"id", "code", "name"},
