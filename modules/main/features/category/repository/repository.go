@@ -46,12 +46,15 @@ func NewCategoryRepository(db *generated.Client, deps *module.ModuleDeps[config.
 	}
 }
 
-func (r *categoryRepo) upsertCollection(ctx context.Context, tx *generated.Tx, entity *generated.Category) (*generated.Category, error) {
-	showIf := customfields.ShowIfCondition{
-		Field: "categoryId",
-		Op:    "eq",
-		Value: entity.ID,
+func (r *categoryRepo) upsertCollection(ctx context.Context, tx *generated.Tx, entity *generated.Category, conds []customfields.ShowIfCondition) (*generated.Category, error) {
+	if len(conds) == 0 {
+		conds = []customfields.ShowIfCondition{{
+			Field: "categoryId",
+			Op:    "eq",
+			Value: entity.ID,
+		}}
 	}
+	showIf := customfields.ShowIfCondition{Any: conds}
 
 	showIfJSON, err := json.Marshal(showIf)
 	if err != nil {
@@ -86,6 +89,85 @@ func (r *categoryRepo) upsertCollection(ctx context.Context, tx *generated.Tx, e
 		Save(ctx)
 }
 
+func (r *categoryRepo) collectDescendantIDs(ctx context.Context, tx *generated.Tx, parentID int) ([]int, error) {
+	queue := []int{parentID}
+	seen := map[int]struct{}{parentID: {}}
+	var ids []int
+
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+
+		children, err := tx.Category.Query().
+			Where(
+				category.ParentID(id),
+				category.DeletedAtIsNil(),
+			).
+			All(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, child := range children {
+			if _, ok := seen[child.ID]; ok {
+				continue
+			}
+			seen[child.ID] = struct{}{}
+			ids = append(ids, child.ID)
+			queue = append(queue, child.ID)
+		}
+	}
+
+	return ids, nil
+}
+
+func (r *categoryRepo) upsertAncestorCollections(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
+	if entity.ParentID == nil {
+		return nil
+	}
+
+	parentID := entity.ParentID
+	for parentID != nil {
+		parent, err := tx.Category.Query().
+			Where(
+				category.ID(*parentID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return err
+		}
+
+		descendants, err := r.collectDescendantIDs(ctx, tx, parent.ID)
+		if err != nil {
+			return err
+		}
+
+		conds := make([]customfields.ShowIfCondition, 0, len(descendants)+1)
+		conds = append(conds, customfields.ShowIfCondition{
+			Field: "categoryId",
+			Op:    "eq",
+			Value: parent.ID,
+		})
+
+		for _, id := range descendants {
+			conds = append(conds, customfields.ShowIfCondition{
+				Field: "categoryId",
+				Op:    "eq",
+				Value: id,
+			})
+		}
+
+		if _, err = r.upsertCollection(ctx, tx, parent, conds); err != nil {
+			return err
+		}
+
+		parentID = parent.ParentID
+	}
+
+	return nil
+}
+
 func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
@@ -102,7 +184,18 @@ func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDT
 	dto := &input.DTO
 
 	q := tx.Category.Create().
-		SetNillableName(dto.Name)
+		SetNillableName(dto.Name).
+		SetNillableParentID(dto.ParentID).
+		SetNillableCategoryIDLv1(dto.CategoryIDLv1).
+		SetNillableCategoryNameLv1(dto.CategoryNameLv1).
+		SetNillableCategoryIDLv2(dto.CategoryIDLv2).
+		SetNillableCategoryNameLv2(dto.CategoryNameLv2).
+		SetNillableCategoryIDLv3(dto.CategoryIDLv3).
+		SetNillableCategoryNameLv3(dto.CategoryNameLv3)
+
+	if dto.Level > 0 {
+		q.SetLevel(dto.Level)
+	}
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
@@ -122,8 +215,12 @@ func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDT
 		return nil, err
 	}
 
-	entity, err = r.upsertCollection(ctx, tx, entity)
+	entity, err = r.upsertCollection(ctx, tx, entity, nil)
 	if err != nil {
+		return nil, err
+	}
+
+	if err = r.upsertAncestorCollections(ctx, tx, entity); err != nil {
 		return nil, err
 	}
 
@@ -157,8 +254,29 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 
 	dto := &input.DTO
 
+	prevCategory, err := tx.Category.Query().
+		Where(
+			category.ID(dto.ID),
+			category.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	q := tx.Category.UpdateOneID(dto.ID).
-		SetNillableName(dto.Name)
+		SetNillableName(dto.Name).
+		SetNillableParentID(dto.ParentID).
+		SetNillableCategoryIDLv1(dto.CategoryIDLv1).
+		SetNillableCategoryNameLv1(dto.CategoryNameLv1).
+		SetNillableCategoryIDLv2(dto.CategoryIDLv2).
+		SetNillableCategoryNameLv2(dto.CategoryNameLv2).
+		SetNillableCategoryIDLv3(dto.CategoryIDLv3).
+		SetNillableCategoryNameLv3(dto.CategoryNameLv3)
+
+	if dto.Level > 0 {
+		q.SetLevel(dto.Level)
+	}
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(
@@ -179,9 +297,20 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		return nil, err
 	}
 
-	entity, err = r.upsertCollection(ctx, tx, entity)
+	entity, err = r.upsertCollection(ctx, tx, entity, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if err = r.upsertAncestorCollections(ctx, tx, entity); err != nil {
+		return nil, err
+	}
+
+	if prevCategory.Level > 0 && prevCategory.ParentID != nil && (entity.ParentID == nil || *entity.ParentID != *prevCategory.ParentID) {
+		prevParentID := *prevCategory.ParentID
+		if err = r.upsertAncestorCollections(ctx, tx, &generated.Category{ParentID: &prevParentID}); err != nil {
+			return nil, err
+		}
 	}
 
 	dto = mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)

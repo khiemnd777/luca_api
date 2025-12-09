@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/khiemnd777/andy_api/modules/metadata/model"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -243,6 +244,10 @@ func (r *FieldRepository) Update(ctx context.Context, f *model.Field) (*model.Fi
 		return nil, err
 	}
 	return fieldToDTO(f), nil
+}
+
+func (r *FieldRepository) Sort(ctx context.Context, ids []int) error {
+	return dbutils.SortByIDs(ctx, r.DB, "fields", "order_index", ids)
 }
 
 func (r *FieldRepository) Delete(ctx context.Context, id int) error {

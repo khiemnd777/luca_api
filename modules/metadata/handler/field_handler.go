@@ -28,9 +28,10 @@ func NewFieldHandler(s *service.FieldService, deps *module.ModuleDeps[config.Mod
 func (h *FieldHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/fields", h.ListByCollection) // ?collection_id=
 	app.RouterPost(router, "/fields", h.Create)
-	app.RouterGet(router, "/fields/:id", h.Get)
-	app.RouterPut(router, "/fields/:id", h.Update)
-	app.RouterDelete(router, "/fields/:id", h.Delete)
+	app.RouterPut(router, "/fields/sort", h.Sort)
+	app.RouterGet(router, "/fields/:id<int>", h.Get)
+	app.RouterPut(router, "/fields/:id<int>", h.Update)
+	app.RouterDelete(router, "/fields/:id<int>", h.Delete)
 }
 
 func (h *FieldHandler) ListByCollection(c *fiber.Ctx) error {
@@ -110,4 +111,31 @@ func (h *FieldHandler) Delete(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h *FieldHandler) Sort(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	var req struct {
+		CollectionID int   `json:"collection_id"`
+		IDs          []int `json:"ids"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+	}
+	if req.CollectionID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid collection_id")
+	}
+	if len(req.IDs) == 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "ids required")
+	}
+	slug, err := h.svc.Sort(c.UserContext(), req.CollectionID, req.IDs)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(slug)
 }

@@ -23,7 +23,7 @@ func ResponseError(c *fiber.Ctx, statusCode int, err error, extraMessage ...stri
 			message = fmt.Sprintf("%s\n%s", message, err.Error())
 		}
 	}
-	logger.Debug(fmt.Sprintf("[ERROR] %s", message))
+	logger.Error(fmt.Sprintf("[ERROR] %s", message))
 	errResp := ErrorResponse{
 		Code:    statusCode,
 		Message: message,
