@@ -9,17 +9,17 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-type Product struct {
+type Category struct {
 	ent.Schema
 }
 
-func (Product) Fields() []ent.Field {
+func (Category) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("code").
+		field.String("name").
 			Optional().
 			Nillable(),
 
-		field.String("name").
+		field.Int("collection_id").
 			Optional().
 			Nillable(),
 
@@ -30,16 +30,6 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Default(map[string]any{}),
 
-		// cache
-		field.String("process_names").
-			Optional().
-			Nillable(),
-
-		field.String("category_name").
-			Optional().
-			Nillable(),
-
-		// times
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),
@@ -54,18 +44,15 @@ func (Product) Fields() []ent.Field {
 	}
 }
 
-func (Product) Edges() []ent.Edge {
+func (Category) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.To("processes", ProductProcess.Type),
-		edge.To("categories", CategoryProduct.Type),
+		edge.To("products", CategoryProduct.Type),
 	}
 }
 
-func (Product) Indexes() []ent.Index {
+func (Category) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("id", "deleted_at"),
-		index.Fields("code"),
-		index.Fields("code", "deleted_at").Unique(),
 		index.Fields("name", "deleted_at"),
 		index.Fields("deleted_at"),
 	}

@@ -25,12 +25,33 @@ func NewCollectionHandler(s *service.CollectionService, deps *module.ModuleDeps[
 
 // Mount dưới /metadata
 func (h *CollectionHandler) RegisterRoutes(router fiber.Router) {
+	app.RouterGet(router, "/collections/integration/:group", h.ListIntegration)
 	app.RouterGet(router, "/collections", h.List) // collections?query=&limit=&offset=&with_fields=true&table=false&form=false
 	app.RouterPost(router, "/collections", h.Create)
 	app.RouterGet(router, "/collections/:idOrSlug", h.GetOne)
 	app.RouterPost(router, "/collections/available/:idOrSlug", h.GetAvailableOne)
 	app.RouterPut(router, "/collections/:id", h.Update)
 	app.RouterDelete(router, "/collections/:id", h.Delete)
+}
+
+func (h *CollectionHandler) ListIntegration(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "privilege.metadata"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	group := c.Params("group")
+	query := c.Query("query")
+	limit := c.QueryInt("limit", 20)
+	offset := c.QueryInt("offset", 0)
+	withFields := c.QueryBool("with_fields", false)
+	table := c.QueryBool("table", false)
+	form := c.QueryBool("form", false)
+
+	items, total, err := h.svc.ListIntegration(c.UserContext(), group, query, limit, offset, withFields, table, form)
+	if err != nil {
+		logger.Error("collections.listIntegration failed", "err", err)
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"data": items, "total": total})
 }
 
 func (h *CollectionHandler) List(c *fiber.Ctx) error {

@@ -73,14 +73,7 @@ func (Order) Fields() []ent.Field {
 			Nillable().
 			Optional(),
 
-		// field.Int("priority").Default(0),
-
-		// field.String("status").
-		// 	Default("received"), // received | in_progress | qc | completed | issue | remake | partial
-
-		// field.String("patient_name").Optional(),
-		// field.String("note").Optional(),
-
+		// times
 		field.Time("created_at").
 			Default(time.Now),
 		field.Time("updated_at").

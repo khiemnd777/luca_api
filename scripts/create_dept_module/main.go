@@ -116,7 +116,7 @@ func (r *{{moduleSnake}}Repo) Create(ctx context.Context, input *model.{{Module}
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
-			input.Collections,
+			*input.Collections,
 			dto.CustomFields,
 			q,
 			false,
@@ -169,7 +169,7 @@ func (r *{{moduleSnake}}Repo) Update(ctx context.Context, input *model.{{Module}
 		_, err = customfields.PrepareCustomFields(
 			ctx,
 			r.cfMgr,
-			input.Collections,
+			*input.Collections,
 			dto.CustomFields,
 			q,
 			true, // update mode → isPatch = true
@@ -372,7 +372,7 @@ func (s *{{moduleSnake}}Service) Create(ctx context.Context, deptID int, input *
 // Update
 // ----------------------------------------------------------------------------
 
-func (s *{{moduleSnake}}Service) Update(ctx context.Context, deptID int, *input model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error) {
+func (s *{{moduleSnake}}Service) Update(ctx context.Context, deptID int, input *model.{{Module}}UpsertDTO) (*model.{{Module}}DTO, error) {
 	dto, err := s.repo.Update(ctx, input)
 	if err != nil {
 		return nil, err

@@ -54,7 +54,5 @@ func (SectionProcess) Edges() []ent.Edge {
 func (SectionProcess) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("section_id", "process_id").Unique(),
-		index.Fields("process_id"),
-		index.Fields("section_id"),
 	}
 }
