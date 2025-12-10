@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -119,53 +121,6 @@ func (r *categoryRepo) collectDescendantIDs(ctx context.Context, tx *generated.T
 	}
 
 	return ids, nil
-}
-
-func (r *categoryRepo) upsertAncestorCollections(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
-	if entity.ParentID == nil {
-		return nil
-	}
-
-	parentID := entity.ParentID
-	for parentID != nil {
-		parent, err := tx.Category.Query().
-			Where(
-				category.ID(*parentID),
-				category.DeletedAtIsNil(),
-			).
-			Only(ctx)
-		if err != nil {
-			return err
-		}
-
-		descendants, err := r.collectDescendantIDs(ctx, tx, parent.ID)
-		if err != nil {
-			return err
-		}
-
-		conds := make([]customfields.ShowIfCondition, 0, len(descendants)+1)
-		conds = append(conds, customfields.ShowIfCondition{
-			Field: "categoryId",
-			Op:    "eq",
-			Value: parent.ID,
-		})
-
-		for _, id := range descendants {
-			conds = append(conds, customfields.ShowIfCondition{
-				Field: "categoryId",
-				Op:    "eq",
-				Value: id,
-			})
-		}
-
-		if _, err = r.upsertCollection(ctx, tx, parent, conds); err != nil {
-			return err
-		}
-
-		parentID = parent.ParentID
-	}
-
-	return nil
 }
 
 func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
@@ -354,7 +309,8 @@ func (r *categoryRepo) List(ctx context.Context, query table.TableQuery) (table.
 		category.FieldID,
 		category.FieldID,
 		func(src []*generated.Category) []*model.CategoryDTO {
-			return mapper.MapListAs[*generated.Category, *model.CategoryDTO](src)
+			ordered := orderCategoriesTree(src)
+			return mapper.MapListAs[*generated.Category, *model.CategoryDTO](ordered)
 		},
 	)
 	if err != nil {
@@ -378,7 +334,8 @@ func (r *categoryRepo) Search(ctx context.Context, query dbutils.SearchQuery) (d
 		category.FieldID,
 		category.Or,
 		func(src []*generated.Category) []*model.CategoryDTO {
-			return mapper.MapListAs[*generated.Category, *model.CategoryDTO](src)
+			ordered := orderCategoriesTree(src)
+			return mapper.MapListAs[*generated.Category, *model.CategoryDTO](ordered)
 		},
 	)
 }
@@ -387,4 +344,114 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) error {
 	return r.db.Category.UpdateOneID(id).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
+}
+
+// -- helpers
+
+func (r *categoryRepo) upsertAncestorCollections(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
+	if entity.ParentID == nil {
+		return nil
+	}
+
+	visited := map[int]bool{}
+	parentID := entity.ParentID
+
+	for parentID != nil {
+		if visited[*parentID] {
+			return fmt.Errorf("category cycle detected at ID %d", *parentID)
+		}
+		visited[*parentID] = true
+
+		parent, err := tx.Category.Query().
+			Where(
+				category.ID(*parentID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return err
+		}
+
+		descendants, err := r.collectDescendantIDs(ctx, tx, parent.ID)
+		if err != nil {
+			return err
+		}
+
+		conds := make([]customfields.ShowIfCondition, 0, len(descendants)+1)
+		conds = append(conds, customfields.ShowIfCondition{
+			Field: "categoryId",
+			Op:    "eq",
+			Value: parent.ID,
+		})
+		for _, id := range descendants {
+			conds = append(conds, customfields.ShowIfCondition{
+				Field: "categoryId",
+				Op:    "eq",
+				Value: id,
+			})
+		}
+
+		if _, err = r.upsertCollection(ctx, tx, parent, conds); err != nil {
+			return err
+		}
+
+		parentID = parent.ParentID
+	}
+
+	return nil
+}
+
+func orderCategoriesTree(entities []*generated.Category) []*generated.Category {
+	childrenByParent := make(map[int][]*generated.Category, len(entities))
+	var roots []*generated.Category
+
+	for _, entity := range entities {
+		if entity.ParentID == nil {
+			roots = append(roots, entity)
+			continue
+		}
+		parentID := *entity.ParentID
+		childrenByParent[parentID] = append(childrenByParent[parentID], entity)
+	}
+
+	// sort level 0 and each children group
+	sort.Slice(roots, func(i, j int) bool { return roots[i].ID < roots[j].ID })
+	for pid, children := range childrenByParent {
+		sort.Slice(children, func(i, j int) bool { return children[i].ID < children[j].ID })
+		childrenByParent[pid] = children
+	}
+
+	ordered := make([]*generated.Category, 0, len(entities))
+	visited := make(map[int]struct{}, len(entities))
+
+	var walk func(nodes []*generated.Category)
+	walk = func(nodes []*generated.Category) {
+		for _, node := range nodes {
+			if _, ok := visited[node.ID]; ok {
+				continue
+			}
+			visited[node.ID] = struct{}{}
+			ordered = append(ordered, node)
+			if children, ok := childrenByParent[node.ID]; ok {
+				walk(children)
+			}
+		}
+	}
+
+	walk(roots)
+
+	// fallback: in case some nodes have missing parents in the filtered result
+	if len(ordered) < len(entities) {
+		for _, entity := range entities {
+			if _, ok := visited[entity.ID]; ok {
+				continue
+			}
+			ordered = append(ordered, entity)
+			if children, ok := childrenByParent[entity.ID]; ok {
+				walk(children)
+			}
+		}
+	}
+
+	return ordered
 }
