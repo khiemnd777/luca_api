@@ -340,10 +340,60 @@ func (r *categoryRepo) Search(ctx context.Context, query dbutils.SearchQuery) (d
 	)
 }
 
-func (r *categoryRepo) Delete(ctx context.Context, id int) error {
+func (r *categoryRepo) Delete2(ctx context.Context, id int) error {
 	return r.db.Category.UpdateOneID(id).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
+}
+
+func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	entity, err := tx.Category.Query().
+		Where(
+			category.ID(id),
+			category.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return err
+	}
+
+	countChildren, err := tx.Category.Query().
+		Where(
+			category.ParentID(id),
+			category.DeletedAtIsNil(),
+		).
+		Count(ctx)
+	if err != nil {
+		return err
+	}
+	if countChildren > 0 {
+		return fmt.Errorf("cannot delete category %d because it still has child categories", id)
+	}
+
+	if err = tx.Category.UpdateOneID(id).
+		SetDeletedAt(time.Now()).
+		Exec(ctx); err != nil {
+		return err
+	}
+
+	if err = r.upsertAncestorCollections(ctx, tx, entity); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // -- helpers
