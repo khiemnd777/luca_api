@@ -252,7 +252,29 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		return nil, err
 	}
 
-	entity, err = r.upsertCollection(ctx, tx, entity, nil)
+	var conds []customfields.ShowIfCondition
+	if entity.ParentID == nil {
+		descendants, err := r.collectDescendantIDs(ctx, tx, entity.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		conds = make([]customfields.ShowIfCondition, 0, len(descendants)+1)
+		conds = append(conds, customfields.ShowIfCondition{
+			Field: "categoryId",
+			Op:    "eq",
+			Value: entity.ID,
+		})
+		for _, id := range descendants {
+			conds = append(conds, customfields.ShowIfCondition{
+				Field: "categoryId",
+				Op:    "eq",
+				Value: id,
+			})
+		}
+	}
+
+	entity, err = r.upsertCollection(ctx, tx, entity, conds)
 	if err != nil {
 		return nil, err
 	}
