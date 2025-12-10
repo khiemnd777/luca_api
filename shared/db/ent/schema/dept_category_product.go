@@ -10,14 +10,14 @@ import (
 )
 
 // deprecated
-type ProductProcess struct {
+type CategoryProduct struct {
 	ent.Schema
 }
 
-func (ProductProcess) Fields() []ent.Field {
+func (CategoryProduct) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("category_id"),
 		field.Int("product_id"),
-		field.Int("process_id"),
 		field.Int("display_order").
 			Max(100).
 			Optional().
@@ -26,24 +26,24 @@ func (ProductProcess) Fields() []ent.Field {
 	}
 }
 
-func (ProductProcess) Edges() []ent.Edge {
+func (CategoryProduct) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.From("product", Product.Type).
-			Ref("processes").
-			Field("product_id").
+		edge.From("category", Category.Type).
+			Ref("products").
+			Field("category_id").
 			Unique().
 			Required(),
 
-		edge.From("process", Process.Type).
-			Ref("products").
-			Field("process_id").
+		edge.From("product", Product.Type).
+			Ref("categories").
+			Field("product_id").
 			Unique().
 			Required(),
 	}
 }
 
-func (ProductProcess) Indexes() []ent.Index {
+func (CategoryProduct) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("product_id", "process_id").Unique(),
+		index.Fields("product_id", "category_id").Unique(),
 	}
 }

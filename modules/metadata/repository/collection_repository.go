@@ -34,10 +34,12 @@ func colToDTO(c *model.Collection) *model.CollectionDTO {
 	}
 
 	return &model.CollectionDTO{
-		ID:     c.ID,
-		Slug:   c.Slug,
-		Name:   c.Name,
-		ShowIf: sif,
+		ID:          c.ID,
+		Slug:        c.Slug,
+		Name:        c.Name,
+		ShowIf:      sif,
+		Integration: c.Integration,
+		Group:       c.Group,
 	}
 }
 
@@ -56,18 +58,31 @@ func evaluateShowIf(result *CollectionWithFields, entityData *map[string]any) *C
 	return result
 }
 
-func (r *CollectionRepository) List(ctx context.Context, query string, limit, offset int, withFields, table, form bool) ([]CollectionWithFields, int, error) {
+func (r *CollectionRepository) list(ctx context.Context, query string, limit, offset int, withFields, table, form bool, integration bool, group *string) ([]CollectionWithFields, int, error) {
 	list := []CollectionWithFields{}
 	var args []any
-	where := ""
+
+	conditions := []string{fmt.Sprintf("integration = $%d", len(args)+1)}
+	args = append(args, integration)
+
+	if group != nil {
+		conditions = append(conditions, fmt.Sprintf("\"group\" = $%d", len(args)+1))
+		args = append(args, *group)
+	}
+
 	if query != "" {
-		where = "WHERE slug ILIKE $1 OR name ILIKE $1"
+		conditions = append(conditions, fmt.Sprintf("(slug ILIKE $%d OR name ILIKE $%d)", len(args)+1, len(args)+1))
 		args = append(args, "%"+query+"%")
+	}
+
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
 	rows, err := r.DB.QueryContext(ctx,
 		fmt.Sprintf(`
-			SELECT id, slug, name, show_if
+			SELECT id, slug, name, show_if, integration, "group"
 			FROM collections
 			%s
 			ORDER BY slug ASC
@@ -81,7 +96,7 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 
 	for rows.Next() {
 		var c model.Collection
-		if err := rows.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
+		if err := rows.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf, &c.Integration, &c.Group); err != nil {
 			return nil, 0, err
 		}
 		coldto := colToDTO(&c)
@@ -91,8 +106,12 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 
 	// count
 	var total int
-	if err := r.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM collections").Scan(&total); err != nil {
+	if err := r.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM collections %s", where), args...).Scan(&total); err != nil {
 		total = len(list)
+	}
+
+	if len(list) == 0 {
+		return list, total, nil
 	}
 
 	ids := make([]int, len(list))
@@ -120,14 +139,22 @@ func (r *CollectionRepository) List(ctx context.Context, query string, limit, of
 	return list, total, nil
 }
 
+func (r *CollectionRepository) List(ctx context.Context, query string, limit, offset int, withFields, table, form bool) ([]CollectionWithFields, int, error) {
+	return r.list(ctx, query, limit, offset, withFields, table, form, false, nil)
+}
+
+func (r *CollectionRepository) ListIntegration(ctx context.Context, group, query string, limit, offset int, withFields, table, form bool) ([]CollectionWithFields, int, error) {
+	return r.list(ctx, query, limit, offset, withFields, table, form, true, &group)
+}
+
 func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name, show_if FROM collections WHERE slug = $1
+		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE slug = $1
 	`, slug)
 
 	var c model.Collection
 
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf, &c.Integration, &c.Group); err != nil {
 		return nil, err
 	}
 
@@ -146,10 +173,10 @@ func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withF
 
 func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name, show_if FROM collections WHERE id = $1
+		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE id = $1
 	`, id)
 	var c model.Collection
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf, &c.Integration, &c.Group); err != nil {
 		return nil,
 			err
 	}
@@ -167,12 +194,19 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields, 
 	return result, nil
 }
 
-func (r *CollectionRepository) Create(ctx context.Context, slug, name string, showIf *sql.NullString) (*model.CollectionDTO, error) {
+func (r *CollectionRepository) Create(
+	ctx context.Context,
+	slug,
+	name string,
+	showIf *sql.NullString,
+	integration bool,
+	group *string,
+) (*model.CollectionDTO, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		INSERT INTO collections (slug, name, show_if) VALUES ($1, $2, $3) RETURNING id, slug, name, show_if
-	`, slug, name, showIf)
+		INSERT INTO collections (slug, name, show_if, integration, "group") VALUES ($1, $2, $3, $4, $5) RETURNING id, slug, name, show_if, integration, "group"
+	`, slug, name, showIf, integration, group)
 	var c model.Collection
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf, &c.Integration, &c.Group); err != nil {
 		return nil, err
 	}
 	dto := colToDTO(&c)
@@ -182,8 +216,11 @@ func (r *CollectionRepository) Create(ctx context.Context, slug, name string, sh
 func (r *CollectionRepository) Update(
 	ctx context.Context,
 	id int,
-	slug, name *string,
+	slug,
+	name *string,
 	showIf *sql.NullString,
+	integration *bool,
+	group *string,
 ) (*model.CollectionDTO, error) {
 
 	setParts := []string{}
@@ -207,6 +244,18 @@ func (r *CollectionRepository) Update(
 		args = append(args, *showIf)
 	}
 
+	// integration
+	if integration != nil {
+		setParts = append(setParts, fmt.Sprintf("integration=$%d", len(args)+1))
+		args = append(args, *integration)
+	}
+
+	// group
+	if group != nil {
+		setParts = append(setParts, fmt.Sprintf("\"group\"=$%d", len(args)+1))
+		args = append(args, *group)
+	}
+
 	if len(setParts) == 0 {
 		return nil, fmt.Errorf("nothing to update")
 	}
@@ -219,13 +268,13 @@ func (r *CollectionRepository) Update(
 		UPDATE collections
 		SET %s
 		WHERE id=$%d
-		RETURNING id, slug, name, show_if
+		RETURNING id, slug, name, show_if, integration, "group"
 	`, strings.Join(setParts, ", "), wherePos)
 
 	row := r.DB.QueryRowContext(ctx, query, args...)
 
 	var c model.Collection
-	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf); err != nil {
+	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf, &c.Integration, &c.Group); err != nil {
 		return nil, err
 	}
 

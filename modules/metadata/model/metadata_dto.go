@@ -6,17 +6,21 @@ import (
 )
 
 type Collection struct {
-	ID     int             `json:"id"`
-	Slug   string          `json:"slug"`
-	Name   string          `json:"name"`
-	ShowIf *sql.NullString `json:"show_if,omitempty"`
+	ID          int             `json:"id"`
+	Slug        string          `json:"slug"`
+	Name        string          `json:"name"`
+	ShowIf      *sql.NullString `json:"show_if,omitempty"`
+	Integration bool            `json:"integration,omitempty"`
+	Group       *string         `json:"group,omitempty"`
 }
 
 type CollectionDTO struct {
-	ID     int     `json:"id"`
-	Slug   string  `json:"slug"`
-	Name   string  `json:"name"`
-	ShowIf *string `json:"show_if,omitempty"`
+	ID          int     `json:"id"`
+	Slug        string  `json:"slug"`
+	Name        string  `json:"name"`
+	ShowIf      *string `json:"show_if,omitempty"`
+	Integration bool    `json:"integration,omitempty"`
+	Group       *string `json:"group,omitempty"`
 }
 
 type Field struct {

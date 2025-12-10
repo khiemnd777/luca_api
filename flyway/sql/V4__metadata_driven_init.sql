@@ -1,9 +1,11 @@
 -- A) Metadata cho schema động
 CREATE TABLE IF NOT EXISTS collections (
-  id      SERIAL  PRIMARY KEY,
-  slug    TEXT    UNIQUE  NOT NULL,     -- ví dụ: 'products', 'orders'
-  show_if JSONB   NULL,
-  name    TEXT    NOT NULL
+  id          SERIAL  PRIMARY KEY,
+  slug        TEXT    UNIQUE  NOT NULL,     -- ví dụ: 'products', 'orders', Uuid (when integration = TRUE)
+  show_if     JSONB   NULL,
+  integration BOOL    DEFAULT FALSE,        -- integrate directly with specific business e.g. category, product,...
+  "group"       TEXT    NULL,               -- group of integration e.g. category, product,...
+  name        TEXT    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS fields (
@@ -18,11 +20,29 @@ CREATE TABLE IF NOT EXISTS fields (
   form          BOOL    DEFAULT FALSE,
   search        BOOL    DEFAULT FALSE,
   default_value JSONB,
-  options       JSONB,                 -- { "choices":[...], "min":0, "max":999, ... }
+  options       JSONB,                    -- { "choices":[...], "min":0, "max":999, ... }
   order_index   INT     DEFAULT 0,
   visibility    TEXT    DEFAULT 'public', -- public/admin/internal/...
-  relation      JSONB                 -- { "target":"categories", "many":true, "fk":"category_id" }
+  relation      JSONB                     -- { "target":"categories", "many":true, "fk":"category_id" }
 );
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_collections_integration_group_slug
+    ON collections (integration, "group", slug);
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX IF NOT EXISTS idx_collections_slug_trgm
+    ON collections
+    USING gin (slug gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_collections_name_trgm
+    ON collections
+    USING gin (name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_fields_collection_id
+    ON fields (collection_id);
+
 
 -- Lưu ý các bảng có sử dụng cơ chế metadata driven, thì phải tạo một bảng custom_fields.
 -- -- B) Ví dụ bảng nghiệp vụ có cột custom_fields

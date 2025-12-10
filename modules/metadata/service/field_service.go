@@ -242,6 +242,31 @@ func (s *FieldService) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
+func (s *FieldService) Sort(ctx context.Context, collectionID int, ids []int) (*string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	col, err := s.cols.GetByID(ctx, collectionID, false, false, false, true, nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("collection not found")
+	}
+
+	if err := s.fields.Sort(ctx, ids); err != nil {
+		return nil, err
+	}
+
+	cache.InvalidateKeys(
+		keyFieldsByCollection(collectionID),
+		keyCollectionByID(collectionID, true),
+		fmt.Sprintf("metadata:schema:i%d", collectionID),
+	)
+	cache.InvalidateKeys("collections:slug:*")
+
+	return &col.Slug, nil
+}
+
 func toNullString(b json.RawMessage) sql.NullString {
 	s := strings.TrimSpace(string(b))
 	if s == "" || s == "null" || s == "\"\"" {

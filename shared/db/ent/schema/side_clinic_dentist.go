@@ -40,7 +40,5 @@ func (ClinicDentist) Edges() []ent.Edge {
 func (ClinicDentist) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("dentist_id", "clinic_id").Unique(),
-		index.Fields("clinic_id"),
-		index.Fields("dentist_id"),
 	}
 }

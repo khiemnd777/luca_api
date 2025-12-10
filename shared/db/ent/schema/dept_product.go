@@ -23,10 +23,6 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
-		field.String("process_names").
-			Optional().
-			Nillable(),
-
 		field.Bool("active").
 			Default(true),
 
@@ -34,6 +30,16 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Default(map[string]any{}),
 
+		// cache
+		field.String("process_names").
+			Optional().
+			Nillable(),
+
+		field.String("category_name").
+			Optional().
+			Nillable(),
+
+		// times
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable(),
@@ -51,6 +57,7 @@ func (Product) Fields() []ent.Field {
 func (Product) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("processes", ProductProcess.Type),
+		edge.To("categories", CategoryProduct.Type),
 	}
 }
 

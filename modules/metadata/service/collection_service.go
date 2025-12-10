@@ -31,6 +31,10 @@ func cacheKeyList(query string, limit, offset int, withFields, table, form bool)
 	return fmt.Sprintf("collections:list:q=%s:l=%d:o=%d:f=%t:tb:%t:fm:%t", query, limit, offset, withFields, table, form)
 }
 
+func cacheKeyListIntegration(group, query string, limit, offset int, withFields, table, form bool) string {
+	return fmt.Sprintf("collections:list:g=%s:q=%s:l=%d:o=%d:f=%t:tb:%t:fm:%t", group, query, limit, offset, withFields, table, form)
+}
+
 func cacheKeySlug(slug string, withFields, table, form bool) string {
 	return fmt.Sprintf("collections:slug:%s:f=%t:tb:%t:fm:%t", slug, withFields, table, form)
 }
@@ -65,15 +69,19 @@ type ListCollectionsInput struct {
 }
 
 type CreateCollectionInput struct {
-	Slug   string           `json:"slug"`
-	Name   string           `json:"name"`
-	ShowIf *json.RawMessage `json:"show_if"`
+	Slug        string           `json:"slug"`
+	Name        string           `json:"name"`
+	ShowIf      *json.RawMessage `json:"show_if"`
+	Integration bool             `json:"integration"`
+	Group       *string          `json:"group"`
 }
 
 type UpdateCollectionInput struct {
-	Slug   *string          `json:"slug"`
-	Name   *string          `json:"name"`
-	ShowIf *json.RawMessage `json:"show_if"`
+	Slug        *string          `json:"slug"`
+	Name        *string          `json:"name"`
+	ShowIf      *json.RawMessage `json:"show_if"`
+	Integration bool             `json:"integration"`
+	Group       *string          `json:"group"`
 }
 
 var slugRegex = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -83,6 +91,28 @@ func normalizeSlug(s string) string {
 	s = strings.ReplaceAll(s, "_", "-")
 	s = strings.ReplaceAll(s, " ", "-")
 	return strings.Trim(s, "-")
+}
+
+func (s *CollectionService) ListIntegration(ctx context.Context, group, query string, limit, offset int, withFields, table, form bool) ([]repository.CollectionWithFields, int, error) {
+	key := cacheKeyListIntegration(group, query, limit, offset, withFields, table, form)
+
+	type result struct {
+		Items []repository.CollectionWithFields
+		Total int
+	}
+
+	r, err := cache.Get(key, ttlCollectionList, func() (*result, error) {
+		items, total, err := s.repo.ListIntegration(ctx, group, query, limit, offset, withFields, table, form)
+		if err != nil {
+			return nil, err
+		}
+		return &result{Items: items, Total: total}, nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return r.Items, r.Total, nil
 }
 
 func (s *CollectionService) List(ctx context.Context, in ListCollectionsInput) ([]repository.CollectionWithFields, int, error) {
@@ -163,7 +193,7 @@ func (s *CollectionService) Create(ctx context.Context, in CreateCollectionInput
 		showIfVal = &sif
 	}
 
-	c, err := s.repo.Create(ctx, normalizeSlug(in.Slug), in.Name, showIfVal)
+	c, err := s.repo.Create(ctx, normalizeSlug(in.Slug), in.Name, showIfVal, in.Integration, in.Group)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +231,7 @@ func (s *CollectionService) Update(ctx context.Context, id int, in UpdateCollect
 		showIfVal = &sif
 	}
 
-	c, err := s.repo.Update(ctx, id, in.Slug, in.Name, showIfVal)
+	c, err := s.repo.Update(ctx, id, in.Slug, in.Name, showIfVal, &in.Integration, in.Group)
 	if err != nil {
 		return nil, err
 	}

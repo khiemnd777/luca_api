@@ -2,6 +2,7 @@ package features
 
 import (
 	_ "github.com/khiemnd777/andy_api/modules/main/features/__relation"
+	_ "github.com/khiemnd777/andy_api/modules/main/features/category"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/clinic"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/customer"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/dentist"
