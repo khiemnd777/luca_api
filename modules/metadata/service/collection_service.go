@@ -148,11 +148,11 @@ func (s *CollectionService) GetBySlug(ctx context.Context, slug string, withFiel
 // It’s already cached on the client side, so this function doesn’t need to be cached on the server.
 func (s *CollectionService) GetByAvailableSlug(ctx context.Context, slug string, withFields, table, form bool, entityData *map[string]any) (*repository.CollectionWithFields, error) {
 	slug = normalizeSlug(slug)
-	// key := cacheKeyAvailableSlug(slug, withFields, table, form)
+	key := cacheKeyAvailableSlug(slug, withFields, table, form)
 
-	// return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-	return s.repo.GetBySlug(ctx, slug, withFields, table, form, false, entityData)
-	// })
+	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
+		return s.repo.GetBySlug(ctx, slug, withFields, table, form, false, entityData)
+	})
 }
 
 func (s *CollectionService) GetByID(ctx context.Context, id int, withFields, table, form bool) (*repository.CollectionWithFields, error) {

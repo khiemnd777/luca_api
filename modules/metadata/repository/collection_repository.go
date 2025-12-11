@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/khiemnd777/andy_api/modules/metadata/model"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/lib/pq"
@@ -163,10 +164,13 @@ func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withF
 	result := &CollectionWithFields{CollectionDTO: *coldto}
 	if withFields {
 		fields, _ := r.GetFieldsByCollectionID(ctx, c.ID, table, form, showHidden)
+		logger.Debug("fields from slug", "slug", slug, "fields", fields)
 		result.Fields = fields
-	}
 
-	result = evaluateShowIf(result, entityData)
+		if !table && form {
+			result = evaluateShowIf(result, entityData)
+		}
+	}
 
 	return result, nil
 }
