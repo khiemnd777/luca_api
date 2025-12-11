@@ -230,6 +230,33 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		SetNillableCategoryIDLv3(dto.CategoryIDLv3).
 		SetNillableCategoryNameLv3(dto.CategoryNameLv3)
 
+	parentLevel := 0
+	if dto.ParentID != nil {
+		parent, err := tx.Category.Query().
+			Where(
+				category.ID(*dto.ParentID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		parentLevel = parent.Level
+	}
+
+	if parentLevel < 3 {
+		q.ClearCategoryIDLv3().
+			ClearCategoryNameLv3()
+	}
+	if parentLevel < 2 {
+		q.ClearCategoryIDLv2().
+			ClearCategoryNameLv2()
+	}
+	if parentLevel < 1 {
+		q.ClearCategoryIDLv1().
+			ClearCategoryNameLv1()
+	}
+
 	if dto.Level > 0 {
 		q.SetLevel(dto.Level)
 	}
