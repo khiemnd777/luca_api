@@ -10,4 +10,5 @@ type ConfigSearch struct {
 	CachePrefix  string
 	ExtraJoins   func() string
 	ExtraWhere   func(args *[]any) string
+	OrderRows    func([]map[string]any) []map[string]any
 }

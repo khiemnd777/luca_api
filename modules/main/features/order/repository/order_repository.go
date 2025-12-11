@@ -176,7 +176,7 @@ func (r *orderRepository) createNewOrder(
 	out.RemakeCount = &rmkCount
 
 	// relation
-	if err := relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
+	if err = relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
 

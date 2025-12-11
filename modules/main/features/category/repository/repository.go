@@ -19,6 +19,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -252,7 +253,38 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		return nil, err
 	}
 
-	entity, err = r.upsertCollection(ctx, tx, entity, nil)
+	parentChanged := (prevCategory.ParentID == nil && entity.ParentID != nil) ||
+		(prevCategory.ParentID != nil && (entity.ParentID == nil || *entity.ParentID != *prevCategory.ParentID))
+
+	if parentChanged {
+		if err = r.updateDescendantsLineage(ctx, tx, entity); err != nil {
+			return nil, err
+		}
+	}
+
+	var conds []customfields.ShowIfCondition
+	if entity.ParentID == nil {
+		descendants, err := r.collectDescendantIDs(ctx, tx, entity.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		conds = make([]customfields.ShowIfCondition, 0, len(descendants)+1)
+		conds = append(conds, customfields.ShowIfCondition{
+			Field: "categoryId",
+			Op:    "eq",
+			Value: entity.ID,
+		})
+		for _, id := range descendants {
+			conds = append(conds, customfields.ShowIfCondition{
+				Field: "categoryId",
+				Op:    "eq",
+				Value: id,
+			})
+		}
+	}
+
+	entity, err = r.upsertCollection(ctx, tx, entity, conds)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +293,7 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		return nil, err
 	}
 
-	if prevCategory.Level > 0 && prevCategory.ParentID != nil && (entity.ParentID == nil || *entity.ParentID != *prevCategory.ParentID) {
+	if parentChanged && prevCategory.Level > 0 && prevCategory.ParentID != nil {
 		prevParentID := *prevCategory.ParentID
 		if err = r.upsertAncestorCollections(ctx, tx, &generated.Category{ParentID: &prevParentID}); err != nil {
 			return nil, err
@@ -397,6 +429,161 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
 }
 
 // -- helpers
+
+type categoryLineage struct {
+	level   int
+	lv1ID   *int
+	lv1Name *string
+	lv2ID   *int
+	lv2Name *string
+	lv3ID   *int
+	lv3Name *string
+}
+
+func (r *categoryRepo) updateDescendantsLineage(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
+	ids, err := r.collectDescendantIDs(ctx, tx, entity.ID)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	descendants, err := tx.Category.Query().
+		Where(
+			category.IDIn(ids...),
+			category.DeletedAtIsNil(),
+		).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+
+	childrenByParent := make(map[int][]*generated.Category, len(descendants))
+	for _, child := range descendants {
+		if child.ParentID == nil {
+			continue
+		}
+		childrenByParent[*child.ParentID] = append(childrenByParent[*child.ParentID], child)
+	}
+
+	baseLineage, err := r.buildCategoryLineage(ctx, tx, entity)
+	if err != nil {
+		return err
+	}
+
+	queue := []struct {
+		parent  *generated.Category
+		lineage categoryLineage
+	}{{
+		parent:  entity,
+		lineage: baseLineage,
+	}}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		children := childrenByParent[current.parent.ID]
+		for _, child := range children {
+			childLineage := deriveChildLineage(current.parent, current.lineage, child)
+			_, err = tx.Category.UpdateOneID(child.ID).
+				SetLevel(childLineage.level).
+				SetNillableCategoryIDLv1(childLineage.lv1ID).
+				SetNillableCategoryNameLv1(childLineage.lv1Name).
+				SetNillableCategoryIDLv2(childLineage.lv2ID).
+				SetNillableCategoryNameLv2(childLineage.lv2Name).
+				SetNillableCategoryIDLv3(childLineage.lv3ID).
+				SetNillableCategoryNameLv3(childLineage.lv3Name).
+				Save(ctx)
+			if err != nil {
+				return err
+			}
+
+			queue = append(queue, struct {
+				parent  *generated.Category
+				lineage categoryLineage
+			}{
+				parent:  child,
+				lineage: childLineage,
+			})
+		}
+	}
+
+	return nil
+}
+
+func (r *categoryRepo) buildCategoryLineage(ctx context.Context, tx *generated.Tx, entity *generated.Category) (categoryLineage, error) {
+	if entity.ParentID == nil {
+		return categoryLineage{
+			level: 1,
+		}, nil
+	}
+
+	parent, err := tx.Category.Query().
+		Where(
+			category.ID(*entity.ParentID),
+			category.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return categoryLineage{}, err
+	}
+
+	parentLineage, err := r.buildCategoryLineage(ctx, tx, parent)
+	if err != nil {
+		return categoryLineage{}, err
+	}
+
+	return deriveChildLineage(parent, parentLineage, entity), nil
+}
+
+func deriveChildLineage(parent *generated.Category, parentLineage categoryLineage, child *generated.Category) categoryLineage {
+	childLevel := parentLineage.level + 1
+
+	type ancestor struct {
+		id   *int
+		name *string
+	}
+
+	ancestors := make([]ancestor, 0, 3)
+	if parentLineage.lv1ID != nil {
+		ancestors = append(ancestors, ancestor{parentLineage.lv1ID, parentLineage.lv1Name})
+	}
+	if parentLineage.lv2ID != nil {
+		ancestors = append(ancestors, ancestor{parentLineage.lv2ID, parentLineage.lv2Name})
+	}
+	if parentLineage.lv3ID != nil {
+		ancestors = append(ancestors, ancestor{parentLineage.lv3ID, parentLineage.lv3Name})
+	}
+	ancestors = append(ancestors, ancestor{utils.Ptr(parent.ID), parent.Name})
+
+	var lv1ID, lv2ID, lv3ID *int
+	var lv1Name, lv2Name, lv3Name *string
+
+	if len(ancestors) > 0 {
+		lv1ID = ancestors[0].id
+		lv1Name = ancestors[0].name
+	}
+	if len(ancestors) > 1 {
+		lv2ID = ancestors[1].id
+		lv2Name = ancestors[1].name
+	}
+	if len(ancestors) > 2 {
+		lv3ID = ancestors[2].id
+		lv3Name = ancestors[2].name
+	}
+
+	return categoryLineage{
+		level:   childLevel,
+		lv1ID:   lv1ID,
+		lv1Name: lv1Name,
+		lv2ID:   lv2ID,
+		lv2Name: lv2Name,
+		lv3ID:   lv3ID,
+		lv3Name: lv3Name,
+	}
+}
 
 func (r *categoryRepo) upsertAncestorCollections(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
 	if entity.ParentID == nil {

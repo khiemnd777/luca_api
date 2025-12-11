@@ -30,12 +30,17 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Default(map[string]any{}),
 
-		// cache
-		field.String("process_names").
+		// category
+		field.Int("category_id").
 			Optional().
 			Nillable(),
 
 		field.String("category_name").
+			Optional().
+			Nillable(),
+
+		// cache
+		field.String("process_names").
 			Optional().
 			Nillable(),
 

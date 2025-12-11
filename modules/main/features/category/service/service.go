@@ -49,6 +49,7 @@ func kCategoryAll() []string {
 	return []string{
 		kCategoryListAll(),
 		kCategorySearchAll(),
+		"collections:list:g=category:*",
 	}
 }
 
@@ -107,7 +108,9 @@ func (s *categoryService) Update(ctx context.Context, deptID int, input *model.C
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kCategoryByID(dto.ID))
+		cache.InvalidateKeys(
+			kCategoryByID(dto.ID),
+		)
 	}
 	cache.InvalidateKeys(kCategoryAll()...)
 

@@ -364,6 +364,10 @@ func (r *RelationRepository) Search(
 		items = items[:limit]
 	}
 
+	if cfg.OrderRows != nil {
+		items = cfg.OrderRows(items)
+	}
+
 	// =============================
 	// COUNT SQL
 	// =============================

@@ -35,7 +35,7 @@ func (h *CategoryHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *CategoryHandler) List(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "category.view"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
@@ -47,7 +47,7 @@ func (h *CategoryHandler) List(c *fiber.Ctx) error {
 }
 
 func (h *CategoryHandler) Search(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "category.view"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := dbutils.ParseSearchQuery(c, 20)
@@ -59,7 +59,7 @@ func (h *CategoryHandler) Search(c *fiber.Ctx) error {
 }
 
 func (h *CategoryHandler) GetByID(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "category.view"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
@@ -75,7 +75,7 @@ func (h *CategoryHandler) GetByID(c *fiber.Ctx) error {
 }
 
 func (h *CategoryHandler) Create(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "category.create"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.create"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 
@@ -95,7 +95,7 @@ func (h *CategoryHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *CategoryHandler) Update(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "category.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.update"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 
@@ -122,7 +122,7 @@ func (h *CategoryHandler) Update(c *fiber.Ctx) error {
 }
 
 func (h *CategoryHandler) Delete(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "category.delete"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.delete"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	id, _ := utils.GetParamAsInt(c, "id")

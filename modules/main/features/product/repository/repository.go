@@ -48,17 +48,19 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 		}
 	}()
 
-	dto := &input.DTO
+	in := &input.DTO
 
 	q := tx.Product.Create().
-		SetNillableCode(dto.Code).
-		SetNillableName(dto.Name)
+		SetNillableCode(in.Code).
+		SetNillableName(in.Name).
+		SetNillableCategoryID(in.CategoryID).
+		SetNillableCategoryName(in.CategoryName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
 			*input.Collections,
-			dto.CustomFields,
+			in.CustomFields,
 			q,
 			false,
 		)
@@ -72,14 +74,13 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
+	out := mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
-	_, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, dto)
-	if err != nil {
+	if _, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 
-	return dto, nil
+	return out, nil
 }
 
 func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
@@ -95,18 +96,20 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 		}
 	}()
 
-	dto := &input.DTO
+	in := &input.DTO
 
-	q := tx.Product.UpdateOneID(dto.ID).
-		SetNillableCode(dto.Code).
-		SetNillableName(dto.Name)
+	q := tx.Product.UpdateOneID(in.ID).
+		SetNillableCode(in.Code).
+		SetNillableName(in.Name).
+		SetNillableCategoryID(in.CategoryID).
+		SetNillableCategoryName(in.CategoryName)
 
 	// custom fields
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
 			*input.Collections,
-			dto.CustomFields,
+			in.CustomFields,
 			q,
 			false,
 		)
@@ -120,14 +123,13 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
+	out := mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
-	_, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, dto)
-	if err != nil {
+	if _, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 
-	return dto, nil
+	return out, nil
 }
 
 func (r *productRepo) GetByID(ctx context.Context, id int) (*model.ProductDTO, error) {
