@@ -76,10 +76,6 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 
 	out := mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
-	// if err = relation.Upsert1(ctx, tx, "product_category", entity, input.DTO, out); err != nil {
-	// 	return nil, err
-	// }
-
 	if _, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
@@ -128,10 +124,6 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 	}
 
 	out := mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
-
-	// if err = relation.Upsert1(ctx, tx, "product_category", entity, &input.DTO, out); err != nil {
-	// 	return nil, err
-	// }
 
 	if _, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, out); err != nil {
 		return nil, err
