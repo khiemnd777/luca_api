@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS fields (
   required      BOOL    DEFAULT FALSE,
   "unique"      BOOL    DEFAULT FALSE,
   "table"       BOOL    DEFAULT FALSE,
+  tag           TEXT    NULL,
   form          BOOL    DEFAULT FALSE,
   search        BOOL    DEFAULT FALSE,
   default_value JSONB,

@@ -43,10 +43,16 @@ func (h *CollectionHandler) ListIntegration(c *fiber.Ctx) error {
 	limit := c.QueryInt("limit", 20)
 	offset := c.QueryInt("offset", 0)
 	withFields := c.QueryBool("with_fields", false)
+
+	var tag *string
+	if t := c.Query("tag"); t != "" {
+		tag = &t
+	}
+
 	table := c.QueryBool("table", false)
 	form := c.QueryBool("form", false)
 
-	items, total, err := h.svc.ListIntegration(c.UserContext(), group, query, limit, offset, withFields, table, form)
+	items, total, err := h.svc.ListIntegration(c.UserContext(), group, query, limit, offset, withFields, tag, table, form)
 	if err != nil {
 		logger.Error("collections.listIntegration failed", "err", err)
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
@@ -65,6 +71,9 @@ func (h *CollectionHandler) List(c *fiber.Ctx) error {
 		WithFields: c.QueryBool("with_fields", false),
 		Table:      c.QueryBool("table", false),
 		Form:       c.QueryBool("form", false),
+	}
+	if t := c.Query("tag"); t != "" {
+		in.Tag = &t
 	}
 	items, total, err := h.svc.List(c.UserContext(), in)
 	if err != nil {
@@ -94,19 +103,25 @@ func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	withFields := c.QueryBool("withFields", false)
+
+	var tag *string
+	if t := c.Query("tag"); t != "" {
+		tag = &t
+	}
+
 	table := c.QueryBool("table", false)
 	form := c.QueryBool("form", false)
 	idOrSlug := c.Params("idOrSlug")
 	// ID
 	if id, err := strconv.Atoi(idOrSlug); err == nil {
-		out, err := h.svc.GetByID(c.UserContext(), id, withFields, table, form)
+		out, err := h.svc.GetByID(c.UserContext(), id, withFields, tag, table, form)
 		if err != nil {
 			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 		}
 		return c.JSON(out)
 	}
 	// slug
-	out, err := h.svc.GetBySlug(c.UserContext(), idOrSlug, withFields, table, form)
+	out, err := h.svc.GetBySlug(c.UserContext(), idOrSlug, withFields, tag, table, form)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -115,6 +130,12 @@ func (h *CollectionHandler) GetOne(c *fiber.Ctx) error {
 
 func (h *CollectionHandler) GetAvailableOne(c *fiber.Ctx) error {
 	withFields := c.QueryBool("withFields", false)
+
+	var tag *string
+	if t := c.Query("tag"); t != "" {
+		tag = &t
+	}
+
 	table := c.QueryBool("table", false)
 	form := c.QueryBool("form", false)
 	idOrSlug := c.Params("idOrSlug")
@@ -138,14 +159,14 @@ func (h *CollectionHandler) GetAvailableOne(c *fiber.Ctx) error {
 
 	// ID
 	if id, err := strconv.Atoi(idOrSlug); err == nil {
-		out, err := h.svc.GetAvailableByID(c.UserContext(), id, withFields, table, form, entityPtr)
+		out, err := h.svc.GetAvailableByID(c.UserContext(), id, withFields, tag, table, form, entityPtr)
 		if err != nil {
 			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 		}
 		return c.JSON(out)
 	}
 	// slug
-	out, err := h.svc.GetByAvailableSlug(c.UserContext(), idOrSlug, withFields, table, form, entityPtr)
+	out, err := h.svc.GetByAvailableSlug(c.UserContext(), idOrSlug, withFields, tag, table, form, entityPtr)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
