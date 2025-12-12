@@ -26,6 +26,7 @@ type OrderRepository interface {
 	ExistsByCode(ctx context.Context, code string) (bool, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
+	SyncPrice(ctx context.Context, orderID int64) (float64, error)
 	// -- general functions
 	Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
@@ -91,6 +92,10 @@ func (r *orderRepository) GetByOrderIDAndOrderItemID(ctx context.Context, orderI
 	return dto, nil
 }
 
+func (r *orderRepository) SyncPrice(ctx context.Context, orderID int64) (float64, error) {
+	return r.orderItemRepo.GetTotalPriceByOrderID(ctx, orderID)
+}
+
 // -- helpers
 
 func (r *orderRepository) createNewOrder(
@@ -137,10 +142,8 @@ func (r *orderRepository) createNewOrder(
 	// reassign latest order item -> order as cache to appear them on the table
 	lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
 	lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
-	prdId := utils.SafeGetIntPtr(latest.CustomFields, "product_id")
-	prdName := utils.SafeGetStringPtr(latest.CustomFields, "product_name")
 	prdQty := utils.SafeGetIntPtr(latest.CustomFields, "quantity")
-	prdTotalPrice := utils.SafeGetFloatPtr(latest.CustomFields, "total_price")
+	prdTotalPrice := latest.TotalPrice
 	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 	rmkCount := latest.RemakeCount
@@ -150,8 +153,6 @@ func (r *orderRepository) createNewOrder(
 		SetNillableCodeLatest(latest.Code).
 		SetNillableStatusLatest(lstStatus).
 		SetNillablePriorityLatest(lstPriority).
-		SetNillableProductID(prdId).
-		SetNillableProductName(prdName).
 		SetNillableQuantity(prdQty).
 		SetNillableTotalPrice(prdTotalPrice).
 		SetNillableDeliveryDate(dlrDate).
@@ -167,8 +168,6 @@ func (r *orderRepository) createNewOrder(
 	out.CodeLatest = latest.Code
 	out.StatusLatest = lstStatus
 	out.PriorityLatest = lstPriority
-	out.ProductID = *prdId
-	out.ProductName = prdName
 	out.Quantity = prdQty
 	out.TotalPrice = prdTotalPrice
 	out.DeliveryDate = dlrDate
@@ -233,7 +232,7 @@ func (r *orderRepository) upsertExistingOrder(
 	// reassign latest order item -> order as cache to appear them on the table
 	lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
 	lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
-	prdTotalPrice := utils.SafeGetFloatPtr(latest.CustomFields, "total_price")
+	prdTotalPrice := latest.TotalPrice
 	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 	rmkCount := latest.RemakeCount
@@ -362,7 +361,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	if isLatest {
 		lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
 		lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
-		prdTotalPrice := utils.SafeGetFloatPtr(latest.CustomFields, "total_price")
+		prdTotalPrice := latest.TotalPrice
 		dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 		rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 		rmkCount := latest.RemakeCount
@@ -523,6 +522,7 @@ func (r *orderRepository) recalculateOrderStatusByProcesses(
 	}
 
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](updated)
+	dto.TotalPrice = updated.TotalPrice
 
 	tx.Order.UpdateOneID(orderID).
 		SetNillableStatusLatest(&orderStatus).
@@ -550,7 +550,6 @@ func (r *orderRepository) GetByID(ctx context.Context, id int64) (*model.OrderDT
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug(fmt.Sprintf("[GET] ProductID: %d", latest.ProductID))
 	dto.LatestOrderItem = latest
 	return dto, nil
 }

@@ -27,6 +27,7 @@ type OrderService interface {
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
+	SyncPrice(ctx context.Context, orderID int64) (float64, error)
 }
 
 type orderService struct {
@@ -180,6 +181,10 @@ func (s *orderService) GetByOrderIDAndOrderItemID(ctx context.Context, orderID, 
 	// return cache.Get(kOrderByOrderIDAndOrderItemID(orderID, orderItemID), cache.TTLMedium, func() (*model.OrderDTO, error) {
 	// 	return s.repo.GetByOrderIDAndOrderItemID(ctx, orderID, orderItemID)
 	// })
+}
+
+func (s *orderService) SyncPrice(ctx context.Context, orderID int64) (float64, error) {
+	return s.repo.SyncPrice(ctx, orderID)
 }
 
 // ----------------------------------------------------------------------------

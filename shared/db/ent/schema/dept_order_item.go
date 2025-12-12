@@ -43,6 +43,10 @@ func (OrderItem) Fields() []ent.Field {
 		field.Int("remake_count").
 			Default(0),
 
+		field.Float("total_price").
+			Optional().
+			Nillable(),
+
 		// product info
 		field.Int("product_id").Optional(),
 		field.String("product_name").
@@ -75,6 +79,8 @@ func (OrderItem) Edges() []ent.Edge {
 			Unique(),
 
 		edge.To("processes", OrderItemProcess.Type),
+
+		edge.To("order_item_products", OrderItemProduct.Type),
 
 		edge.To("files", OrderItemFile.Type),
 

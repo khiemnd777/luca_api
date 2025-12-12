@@ -82,5 +82,4 @@ func generateEntSchema(schema string) {
 
 func runSeeder() {
 	fmt.Println("🌱 Running seed logic (TODO: implement your seeder here)...")
-	// TODO: Implement your seed logic here
 }
