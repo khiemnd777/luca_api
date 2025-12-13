@@ -69,7 +69,7 @@ func (h *OrderHandler) GetByID(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
 	dto, err := h.svc.GetByID(c.UserContext(), int64(id))
@@ -143,7 +143,7 @@ func (h *OrderHandler) Update(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
 	payload, err := app.ParseBody[model.OrderUpsertDTO](c)
@@ -189,7 +189,7 @@ func (h *OrderHandler) Delete(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 	if err := h.svc.Delete(c.UserContext(), int64(id)); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())

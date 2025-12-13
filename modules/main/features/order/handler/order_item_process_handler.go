@@ -60,7 +60,7 @@ func (h *OrderItemProcessHandler) Update(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "order_item_process_id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
 	payload, err := app.ParseBody[model.OrderItemProcessUpsertDTO](c)

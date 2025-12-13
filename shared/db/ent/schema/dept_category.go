@@ -79,6 +79,7 @@ func (Category) Fields() []ent.Field {
 func (Category) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("products", CategoryProduct.Type),
+		edge.To("processes", CategoryProcess.Type),
 		edge.To("children", Category.Type).
 			From("parent").
 			Unique().

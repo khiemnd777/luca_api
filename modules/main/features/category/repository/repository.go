@@ -180,19 +180,13 @@ func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDT
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
+	out := mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
 
-	err = relation.Upsert1(ctx, tx, "category", entity, &input.DTO, dto)
-	if err != nil {
+	if _, err = relation.UpsertM2M(ctx, tx, "categories_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 
-	_, err = relation.UpsertM2M(ctx, tx, "category", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	return dto, nil
+	return out, nil
 }
 
 func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
@@ -327,19 +321,13 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		}
 	}
 
-	dto = mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
+	out := mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
 
-	err = relation.Upsert1(ctx, tx, "category", entity, &input.DTO, dto)
-	if err != nil {
+	if _, err = relation.UpsertM2M(ctx, tx, "categories_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 
-	_, err = relation.UpsertM2M(ctx, tx, "category", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	return dto, nil
+	return out, nil
 }
 
 func (r *categoryRepo) GetByID(ctx context.Context, id int) (*model.CategoryDTO, error) {

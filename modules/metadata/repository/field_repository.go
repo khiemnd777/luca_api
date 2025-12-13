@@ -189,7 +189,7 @@ func (r *FieldRepository) Create(ctx context.Context, f *model.Field) (*model.Fi
 			visibility,
 			relation
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 		RETURNING id
 	`,
 		f.CollectionID,
