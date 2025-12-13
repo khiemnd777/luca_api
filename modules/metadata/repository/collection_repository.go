@@ -63,7 +63,7 @@ func (r *CollectionRepository) list(ctx context.Context, query string, limit, of
 	list := []CollectionWithFields{}
 	var args []any
 
-	conditions := []string{fmt.Sprintf("integration = $%d", len(args)+1)}
+	conditions := []string{"deleted_at IS NULL", fmt.Sprintf("integration = $%d", len(args)+1)}
 	args = append(args, integration)
 
 	if group != nil {
@@ -150,7 +150,7 @@ func (r *CollectionRepository) ListIntegration(ctx context.Context, group, query
 
 func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields bool, tag *string, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE slug = $1
+		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE slug = $1 AND deleted_at IS NULL
 	`, slug)
 
 	var c model.Collection
@@ -177,7 +177,7 @@ func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withF
 
 func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields bool, tag *string, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE id = $1
+		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE id = $1 AND deleted_at IS NULL
 	`, id)
 	var c model.Collection
 	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf, &c.Integration, &c.Group); err != nil {
@@ -271,7 +271,7 @@ func (r *CollectionRepository) Update(
 	query := fmt.Sprintf(`
 		UPDATE collections
 		SET %s
-		WHERE id=$%d
+		WHERE id=$%d AND deleted_at IS NULL
 		RETURNING id, slug, name, show_if, integration, "group"
 	`, strings.Join(setParts, ", "), wherePos)
 
@@ -286,12 +286,12 @@ func (r *CollectionRepository) Update(
 }
 
 func (r *CollectionRepository) Delete(ctx context.Context, id int) error {
-	_, err := r.DB.ExecContext(ctx, `DELETE FROM collections WHERE id=$1`, id)
+	_, err := r.DB.ExecContext(ctx, `UPDATE collections SET deleted_at = NOW() WHERE id=$1 AND deleted_at IS NULL`, id)
 	return err
 }
 
 func (r *CollectionRepository) SlugExists(ctx context.Context, slug string, excludeID *int) (bool, error) {
-	q := "SELECT COUNT(*) FROM collections WHERE slug=$1"
+	q := "SELECT COUNT(*) FROM collections WHERE slug=$1 AND deleted_at IS NULL"
 	args := []any{slug}
 	if excludeID != nil {
 		q += fmt.Sprintf(" AND id <> $%d", len(args)+1)

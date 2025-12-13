@@ -1,11 +1,12 @@
 -- A) Metadata cho schema động
 CREATE TABLE IF NOT EXISTS collections (
-  id          SERIAL  PRIMARY KEY,
-  slug        TEXT    UNIQUE  NOT NULL,     -- ví dụ: 'products', 'orders', Uuid (when integration = TRUE)
-  show_if     JSONB   NULL,
-  integration BOOL    DEFAULT FALSE,        -- integrate directly with specific business e.g. category, product,...
-  "group"       TEXT    NULL,               -- group of integration e.g. category, product,...
-  name        TEXT    NOT NULL
+  id          SERIAL      PRIMARY KEY,
+  slug        TEXT        UNIQUE  NOT NULL,     -- ví dụ: 'products', 'orders', Uuid (when integration = TRUE)
+  show_if     JSONB       NULL,
+  integration BOOL        DEFAULT FALSE,        -- integrate directly with specific business e.g. category, product,...
+  "group"     TEXT        NULL,                 -- group of integration e.g. category, product,...
+  name        TEXT        NOT NULL,
+  deleted_at  TIMESTAMPTZ NULL
 );
 
 CREATE TABLE IF NOT EXISTS fields (
@@ -29,17 +30,20 @@ CREATE TABLE IF NOT EXISTS fields (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_collections_integration_group_slug
-    ON collections (integration, "group", slug);
+    ON collections (integration, "group", slug)
+    WHERE deleted_at IS NULL;;
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE INDEX IF NOT EXISTS idx_collections_slug_trgm
     ON collections
-    USING gin (slug gin_trgm_ops);
+    USING gin (slug gin_trgm_ops)
+    WHERE deleted_at IS NULL;;
 
 CREATE INDEX IF NOT EXISTS idx_collections_name_trgm
     ON collections
-    USING gin (name gin_trgm_ops);
+    USING gin (name gin_trgm_ops)
+    WHERE deleted_at IS NULL;;
 
 CREATE INDEX IF NOT EXISTS idx_fields_collection_id
     ON fields (collection_id);
