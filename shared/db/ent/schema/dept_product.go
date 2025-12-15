@@ -23,9 +23,18 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		// base product
+		field.Int("template_id").
+			Optional().
+			Nillable(),
+
+		field.Bool("is_template").Default(false),
+
+		// activated
 		field.Bool("active").
 			Default(true),
 
+		// custom fields
 		field.JSON("custom_fields", map[string]any{}).
 			Optional().
 			Default(map[string]any{}),
