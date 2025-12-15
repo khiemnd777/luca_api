@@ -23,15 +23,12 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
-		// base product
-		field.Bool("is_default").
-			Default(true),
+		// base product/template
+		field.Bool("is_template").Default(true),
 
 		field.Int("template_id").
 			Optional().
 			Nillable(),
-
-		field.Bool("is_template").Default(false),
 
 		field.Int("collection_id").
 			Optional().

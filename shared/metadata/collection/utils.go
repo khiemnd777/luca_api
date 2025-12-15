@@ -98,10 +98,10 @@ func UpsertCollectionForNode(
 	conds []customfields.ShowIfCondition,
 ) error {
 
-	// ===== Fallback logic (BIT-EXACT) =====
+	// ===== Fallback logic (BIT-EXACT với code cũ) =====
 	if len(conds) == 0 {
 
-		// ROOT node → self + descendants (same as old Update)
+		// ROOT node → self + descendants (giống Update cũ)
 		if node.ParentID == nil {
 			descendants, err := CollectDescendantIDs(ctx, tx, cfg, node.ID)
 			if err != nil {
@@ -124,7 +124,7 @@ func UpsertCollectionForNode(
 			}
 
 		} else {
-			// NON-root → self only (same as old Create + Update)
+			// NON-root → self only (giống Create + Update cũ)
 			conds = []customfields.ShowIfCondition{{
 				Field: cfg.ShowIfFieldName,
 				Op:    "eq",
@@ -133,8 +133,7 @@ func UpsertCollectionForNode(
 		}
 	}
 
-	// ===== Persist collection =====
-
+	// ===== Build show_if =====
 	showIf := customfields.ShowIfCondition{Any: conds}
 	showIfJSON, err := json.Marshal(showIf)
 	if err != nil {
@@ -148,7 +147,7 @@ func UpsertCollectionForNode(
 		name = *node.Name
 	}
 
-	// UPDATE existing collection
+	// ===== UPDATE existing collection =====
 	if node.CollectionID != nil {
 		_, err = tx.ExecContext(ctx, `
 			UPDATE collections
@@ -158,37 +157,43 @@ func UpsertCollectionForNode(
 			    integration = true,
 			    "group" = $4
 			WHERE id = $5
-		`, slug, name, string(showIfJSON), cfg.CollectionGroup, *node.CollectionID)
+		`,
+			slug,
+			name,
+			string(showIfJSON),
+			cfg.CollectionGroup,
+			*node.CollectionID,
+		)
 		return err
 	}
 
-	// INSERT new collection
-	rows, err := tx.QueryContext(ctx, `
-		INSERT INTO collections (slug, name, show_if, integration, "group")
-		VALUES ($1, $2, $3, true, $4)
-		RETURNING id
-	`, slug, name, string(showIfJSON), cfg.CollectionGroup)
+	// ===== INSERT new collection + UPDATE node.collection_id (CTE, 1 statement) =====
+	sqlStmt := fmt.Sprintf(`
+		WITH ins AS (
+			INSERT INTO collections (slug, name, show_if, integration, "group")
+			VALUES ($1, $2, $3, true, $4)
+			RETURNING id
+		)
+		UPDATE %s
+		SET collection_id = (SELECT id FROM ins)
+		WHERE id = $5
+	`, cfg.TableName)
+
+	_, err = tx.ExecContext(
+		ctx,
+		sqlStmt,
+		slug,
+		name,
+		string(showIfJSON),
+		cfg.CollectionGroup,
+		node.ID,
+	)
+
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
-	if !rows.Next() {
-		return fmt.Errorf("failed to insert collection for node %d", node.ID)
-	}
-
-	var collectionID int
-	if err := rows.Scan(&collectionID); err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(`
-		UPDATE %s
-		SET collection_id = $1
-		WHERE id = $2
-	`, cfg.TableName), collectionID, node.ID)
-
-	return err
+	return nil
 }
 
 func CollectDescendantIDs(
@@ -243,10 +248,10 @@ func fetchTreeNode(
 ) (*TreeNode, error) {
 
 	query := fmt.Sprintf(`
-		SELECT id, parent_id, name, collection_id
+		SELECT id, %s, name, collection_id
 		FROM %s
 		WHERE id = $1 AND deleted_at IS NULL
-	`, cfg.TableName)
+	`, cfg.ParentIDColumn, cfg.TableName)
 
 	rows, err := tx.QueryContext(ctx, query, id)
 	if err != nil {
