@@ -11,8 +11,14 @@ type ProductDTO struct {
 	ProcessNames *string        `json:"process_names,omitempty"`
 	CategoryID   *int           `json:"category_id,omitempty"`
 	CategoryName *string        `json:"category_name,omitempty"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	// template
+	IsDefault    bool `json:"is_default,omitempty"`
+	CollectionID *int `json:"collection_id,omitempty"`
+	TemplateID   *int `json:"template_id,omitempty"`
+	IsTemplate   bool `json:"is_template,omitempty`
+	// time
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type ProductUpsertDTO struct {
