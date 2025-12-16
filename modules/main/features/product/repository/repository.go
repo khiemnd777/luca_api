@@ -290,7 +290,7 @@ func (r *productRepo) Search(ctx context.Context, query dbutils.SearchQuery) (db
 	return dbutils.Search(
 		ctx,
 		r.db.Product.Query().
-			Where(product.DeletedAtIsNil(), product.IsTemplate(true)),
+			Where(product.DeletedAtIsNil()),
 		[]string{
 			dbutils.GetNormField(product.FieldCode),
 			dbutils.GetNormField(product.FieldName),

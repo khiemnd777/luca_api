@@ -2,15 +2,6 @@ package model
 
 import "time"
 
-type OrderItemProductDTO struct {
-	ID          int      `json:"id,omitempty"`
-	ProductID   int      `json:"product_id,omitempty"`
-	OrderItemID int64    `json:"order_item_id,omitempty"`
-	OrderID     int64    `json:"order_id,omitempty"`
-	Quantity    int      `json:"quantity,omitempty"`
-	RetailPrice *float64 `json:"retail_price,omitempty"`
-}
-
 type OrderItemDTO struct {
 	// general
 	ID           int64          `json:"id,omitempty"`

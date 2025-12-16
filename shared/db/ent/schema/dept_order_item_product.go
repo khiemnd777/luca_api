@@ -13,6 +13,9 @@ type OrderItemProduct struct {
 
 func (OrderItemProduct) Fields() []ent.Field {
 	return []ent.Field{
+		field.String("product_code").
+			Optional().
+			Nillable(),
 		field.Int("product_id"),
 		field.Int64("order_item_id"),
 		field.Int64("order_id"),

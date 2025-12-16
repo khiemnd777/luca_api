@@ -10,7 +10,6 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
-	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemproduct"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
@@ -40,15 +39,18 @@ type orderItemRepository struct {
 	deps                 *module.ModuleDeps[config.ModuleConfig]
 	cfMgr                *customfields.Manager
 	orderItemProcessRepo OrderItemProcessRepository
+	orderItemProductRepo OrderItemProductRepository
 }
 
 func NewOrderItemRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) OrderItemRepository {
 	orderItemProcessRepo := NewOrderItemProcessRepository(db, deps, cfMgr)
+	orderItemProductRepo := NewOrderItemProductRepository(db)
 	return &orderItemRepository{
 		db:                   db,
 		deps:                 deps,
 		cfMgr:                cfMgr,
 		orderItemProcessRepo: orderItemProcessRepo,
+		orderItemProductRepo: orderItemProductRepo,
 	}
 }
 
@@ -109,7 +111,7 @@ func (r *orderItemRepository) GetLatestByOrderID(ctx context.Context, orderID in
 	}
 
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](itemEnt)
-	if err := r.loadProducts(ctx, dto); err != nil {
+	if err := r.orderItemProductRepo.Load(ctx, dto); err != nil {
 		return nil, err
 	}
 	return dto, nil
@@ -164,50 +166,11 @@ func (r *orderItemRepository) GetHistoricalByOrderIDAndOrderItemID(
 }
 
 func (r *orderItemRepository) GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error) {
-	products, err := r.db.OrderItemProduct.
-		Query().
-		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
-		Select(orderitemproduct.FieldQuantity, orderitemproduct.FieldRetailPrice).
-		All(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	var total float64
-	for _, product := range products {
-		if product == nil || product.RetailPrice == nil {
-			continue
-		}
-		qty := normalizeQuantity(product.Quantity)
-		total += *product.RetailPrice * float64(qty)
-	}
-
-	return total, nil
+	return r.orderItemProductRepo.GetTotalPriceByOrderItemID(ctx, orderItemID)
 }
 
 func (r *orderItemRepository) GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error) {
-	products, err := r.db.OrderItemProduct.
-		Query().
-		Where(
-			orderitemproduct.OrderIDEQ(orderID),
-			orderitemproduct.HasOrderItemWith(orderitem.DeletedAtIsNil()),
-		).
-		Select(orderitemproduct.FieldQuantity, orderitemproduct.FieldRetailPrice).
-		All(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	var total float64
-	for _, product := range products {
-		if product == nil || product.RetailPrice == nil {
-			continue
-		}
-		qty := normalizeQuantity(product.Quantity)
-		total += *product.RetailPrice * float64(qty)
-	}
-
-	return total, nil
+	return r.orderItemProductRepo.GetTotalPriceByOrderID(ctx, orderID)
 }
 
 // -- helpers
@@ -225,64 +188,6 @@ func (r *orderItemRepository) getNextItemSeq(ctx context.Context, orderID int64)
 	return count + 1, nil
 }
 
-func (r *orderItemRepository) collectProducts(dto *model.OrderItemDTO) []*model.OrderItemProductDTO {
-	if dto == nil || len(dto.Products) == 0 {
-		return nil
-	}
-
-	out := make([]*model.OrderItemProductDTO, 0, len(dto.Products))
-	seen := make(map[int]struct{}, len(dto.Products))
-
-	for _, product := range dto.Products {
-		if product == nil || product.ProductID == 0 {
-			continue
-		}
-		if _, ok := seen[product.ProductID]; ok {
-			continue
-		}
-		seen[product.ProductID] = struct{}{}
-
-		qty := normalizeQuantity(product.Quantity)
-		out = append(out, &model.OrderItemProductDTO{
-			ID:          product.ID,
-			ProductID:   product.ProductID,
-			OrderItemID: product.OrderItemID,
-			OrderID:     product.OrderID,
-			Quantity:    qty,
-			RetailPrice: product.RetailPrice,
-		})
-	}
-
-	return out
-}
-
-func normalizeQuantity(quantity int) int {
-	if quantity <= 0 {
-		return 1
-	}
-	return quantity
-}
-
-func calculateTotalPrice(products []*model.OrderItemProductDTO) *float64 {
-	var total float64
-	hasPrice := false
-
-	for _, product := range products {
-		if product == nil || product.RetailPrice == nil {
-			continue
-		}
-		qty := normalizeQuantity(product.Quantity)
-		total += *product.RetailPrice * float64(qty)
-		hasPrice = true
-	}
-
-	if !hasPrice {
-		return nil
-	}
-
-	return &total
-}
-
 func (r *orderItemRepository) applyTotalPrice(dto *model.OrderItemDTO, totalPrice *float64) {
 	if dto == nil {
 		return
@@ -291,101 +196,11 @@ func (r *orderItemRepository) applyTotalPrice(dto *model.OrderItemDTO, totalPric
 	dto.TotalPrice = totalPrice
 }
 
-func (r *orderItemRepository) syncOrderItemProducts(
-	ctx context.Context,
-	tx *generated.Tx,
-	orderID,
-	orderItemID int64,
-	products []*model.OrderItemProductDTO,
-) ([]*model.OrderItemProductDTO, error) {
-	_, err := tx.OrderItemProduct.Delete().
-		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
-		Exec(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(products) == 0 {
-		return nil, nil
-	}
-
-	bulk := make([]*generated.OrderItemProductCreate, 0, len(products))
-	for _, product := range products {
-		if product == nil || product.ProductID == 0 {
-			continue
-		}
-
-		qty := normalizeQuantity(product.Quantity)
-		create := tx.OrderItemProduct.Create().
-			SetOrderID(orderID).
-			SetOrderItemID(orderItemID).
-			SetProductID(product.ProductID).
-			SetQuantity(qty)
-
-		if product.RetailPrice != nil {
-			create.SetRetailPrice(*product.RetailPrice)
-		}
-
-		bulk = append(bulk, create)
-	}
-
-	if len(bulk) == 0 {
-		return nil, nil
-	}
-
-	created, err := tx.OrderItemProduct.CreateBulk(bulk...).Save(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]*model.OrderItemProductDTO, 0, len(created))
-	for _, it := range created {
-		out = append(out, mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](it))
-	}
-
-	return out, nil
-}
-
-func (r *orderItemRepository) loadProducts(ctx context.Context, items ...*model.OrderItemDTO) error {
-	if len(items) == 0 {
-		return nil
-	}
-
-	itemIndex := make(map[int64]*model.OrderItemDTO, len(items))
-	itemIDs := make([]int64, 0, len(items))
-	for _, it := range items {
-		if it == nil {
-			continue
-		}
-		itemIDs = append(itemIDs, it.ID)
-		itemIndex[it.ID] = it
-	}
-
-	if len(itemIDs) == 0 {
-		return nil
-	}
-
-	relations, err := r.db.OrderItemProduct.Query().
-		Where(orderitemproduct.OrderItemIDIn(itemIDs...)).
-		All(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, rel := range relations {
-		if dto, ok := itemIndex[rel.OrderItemID]; ok {
-			dto.Products = append(dto.Products, mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](rel))
-		}
-	}
-
-	return nil
-}
-
 // -- general functions
 func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	dto := &input.DTO
-	products := r.collectProducts(dto)
-	totalPrice := calculateTotalPrice(products)
+	products := r.orderItemProductRepo.CollectProducts(dto)
+	totalPrice := r.orderItemProductRepo.CalculateTotalPrice(products)
 	r.applyTotalPrice(dto, totalPrice)
 
 	// order item - ParentItemID + RemakeCount
@@ -443,7 +258,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		return nil, err
 	}
 
-	createdProducts, err := r.syncOrderItemProducts(ctx, tx, entity.OrderID, entity.ID, products)
+	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
 	if err != nil {
 		return nil, err
 	}
@@ -469,8 +284,8 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 
 func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	dto := &input.DTO
-	products := r.collectProducts(dto)
-	totalPrice := calculateTotalPrice(products)
+	products := r.orderItemProductRepo.CollectProducts(dto)
+	totalPrice := r.orderItemProductRepo.CalculateTotalPrice(products)
 	r.applyTotalPrice(dto, totalPrice)
 
 	var primaryProductID int
@@ -500,7 +315,7 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 		return nil, err
 	}
 
-	createdProducts, err := r.syncOrderItemProducts(ctx, tx, entity.OrderID, entity.ID, products)
+	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +358,7 @@ func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.Ord
 	}
 
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
-	if err := r.loadProducts(ctx, dto); err != nil {
+	if err := r.orderItemProductRepo.Load(ctx, dto); err != nil {
 		return nil, err
 	}
 
@@ -574,7 +389,7 @@ func (r *orderItemRepository) List(ctx context.Context, query table.TableQuery) 
 		var zero table.TableListResult[model.OrderItemDTO]
 		return zero, err
 	}
-	if err := r.loadProducts(ctx, list.Items...); err != nil {
+	if err := r.orderItemProductRepo.Load(ctx, list.Items...); err != nil {
 		return list, err
 	}
 	return list, nil
@@ -601,7 +416,7 @@ func (r *orderItemRepository) Search(ctx context.Context, query dbutils.SearchQu
 		var zero dbutils.SearchResult[model.OrderItemDTO]
 		return zero, err
 	}
-	if err := r.loadProducts(ctx, res.Items...); err != nil {
+	if err := r.orderItemProductRepo.Load(ctx, res.Items...); err != nil {
 		return res, err
 	}
 	return res, nil

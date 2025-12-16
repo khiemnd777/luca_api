@@ -48,6 +48,7 @@ func (Order) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		// deprecated
 		field.Int("product_id").Optional(),
 		field.String("product_name").
 			Nillable().
