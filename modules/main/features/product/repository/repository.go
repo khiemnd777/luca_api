@@ -87,6 +87,7 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 			SetNillableTemplateID(in.TemplateID)
 	}
 
+	// metadata
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
@@ -105,7 +106,7 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 		return nil, err
 	}
 
-	// collections
+	// template
 	if entity.IsTemplate {
 		// Upsert collection for node
 		if err = collectionutils.UpsertCollectionForNode(

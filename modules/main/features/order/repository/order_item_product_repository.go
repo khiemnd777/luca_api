@@ -50,7 +50,7 @@ func (r *orderItemProductRepository) CollectProducts(dto *model.OrderItemDTO) []
 		}
 		seen[product.ProductID] = struct{}{}
 
-		qty := normalizeQuantity(product.Quantity)
+		qty := r.normalizeQuantity(product.Quantity)
 		out = append(out, &model.OrderItemProductDTO{
 			ID:          product.ID,
 			ProductID:   product.ProductID,
@@ -72,7 +72,7 @@ func (r *orderItemProductRepository) CalculateTotalPrice(products []*model.Order
 		if product == nil || product.RetailPrice == nil {
 			continue
 		}
-		qty := normalizeQuantity(product.Quantity)
+		qty := r.normalizeQuantity(product.Quantity)
 		total += *product.RetailPrice * float64(qty)
 		hasPrice = true
 	}
@@ -108,7 +108,7 @@ func (r *orderItemProductRepository) Sync(
 			continue
 		}
 
-		qty := normalizeQuantity(product.Quantity)
+		qty := r.normalizeQuantity(product.Quantity)
 		create := tx.OrderItemProduct.Create().
 			SetOrderID(orderID).
 			SetOrderItemID(orderItemID).
@@ -189,7 +189,7 @@ func (r *orderItemProductRepository) GetTotalPriceByOrderItemID(ctx context.Cont
 		if product == nil || product.RetailPrice == nil {
 			continue
 		}
-		qty := normalizeQuantity(product.Quantity)
+		qty := r.normalizeQuantity(product.Quantity)
 		total += *product.RetailPrice * float64(qty)
 	}
 
@@ -214,14 +214,14 @@ func (r *orderItemProductRepository) GetTotalPriceByOrderID(ctx context.Context,
 		if product == nil || product.RetailPrice == nil {
 			continue
 		}
-		qty := normalizeQuantity(product.Quantity)
+		qty := r.normalizeQuantity(product.Quantity)
 		total += *product.RetailPrice * float64(qty)
 	}
 
 	return total, nil
 }
 
-func normalizeQuantity(quantity int) int {
+func (r *orderItemProductRepository) normalizeQuantity(quantity int) int {
 	if quantity <= 0 {
 		return 1
 	}

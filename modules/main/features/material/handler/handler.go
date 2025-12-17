@@ -51,7 +51,8 @@ func (h *MaterialHandler) Search(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := dbutils.ParseSearchQuery(c, 20)
-	res, err := h.svc.Search(c.UserContext(), q)
+	mtype := utils.GetQueryAsString(c, "type")
+	res, err := h.svc.Search(c.UserContext(), &mtype, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

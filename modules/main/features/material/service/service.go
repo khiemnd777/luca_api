@@ -23,7 +23,7 @@ type MaterialService interface {
 	Update(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error)
 	GetByID(ctx context.Context, id int) (*model.MaterialDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
+	Search(ctx context.Context, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -186,12 +186,12 @@ func (s *materialService) Delete(ctx context.Context, id int) error {
 // Search
 // ----------------------------------------------------------------------------
 
-func (s *materialService) Search(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
+func (s *materialService) Search(ctx context.Context, materialType *string, q dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
 	type boxed = dbutils.SearchResult[model.MaterialDTO]
 	key := kMaterialSearch(q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.Search(ctx, q)
+		res, e := s.repo.Search(ctx, materialType, q)
 		if e != nil {
 			return nil, e
 		}

@@ -27,6 +27,12 @@ func (Material) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		// type: consumable, asset, loaner
+		field.String("type").
+			MaxLen(16).
+			Optional().
+			Nillable(),
+
 		field.Bool("active").
 			Default(true),
 
@@ -51,6 +57,7 @@ func (Material) Fields() []ent.Field {
 func (Material) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("suppliers", MaterialSupplier.Type),
+		edge.To("order_item_materials", OrderItemMaterial.Type),
 	}
 }
 

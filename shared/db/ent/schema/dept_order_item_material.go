@@ -7,28 +7,41 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-type OrderItemProduct struct {
+type OrderItemMaterial struct {
 	ent.Schema
 }
 
-func (OrderItemProduct) Fields() []ent.Field {
+func (OrderItemMaterial) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("product_code").
+		field.String("material_code").
 			Optional().
 			Nillable(),
-		field.Int("product_id"),
+		field.Int("material_id"),
 		field.Int64("order_item_id"),
 		field.Int64("order_id"),
 		field.Int("quantity").
 			Default(1),
 
+		// type: consumable, loaner
+		field.String("type").
+			MaxLen(16).
+			Optional().
+			Nillable(),
+
+		// type: returned, on_loan
+		field.String("status").
+			MaxLen(16).
+			Optional().
+			Nillable(),
+
+		// type: used for consumable
 		field.Float("retail_price").
 			Optional().
 			Nillable(),
 	}
 }
 
-func (OrderItemProduct) Edges() []ent.Edge {
+func (OrderItemMaterial) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("order_item", OrderItem.Type).
 			Required().
@@ -38,17 +51,17 @@ func (OrderItemProduct) Edges() []ent.Edge {
 			Required().
 			StorageKey(edge.Column("order_id")),
 
-		edge.To("product", Product.Type).
+		edge.To("material", Material.Type).
 			Required().
-			StorageKey(edge.Column("product_id")),
+			StorageKey(edge.Column("material_id")),
 	}
 }
 
-func (OrderItemProduct) Indexes() []ent.Index {
+func (OrderItemMaterial) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("order_item_id", "product_id").
+		index.Fields("order_item_id", "material_id").
 			Unique(),
 		index.Fields("order_id"),
-		index.Fields("product_id"),
+		index.Fields("material_id"),
 	}
 }
