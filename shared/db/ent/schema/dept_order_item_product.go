@@ -30,17 +30,17 @@ func (OrderItemProduct) Fields() []ent.Field {
 
 func (OrderItemProduct) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.To("order_item", OrderItem.Type).
-			Required().
-			StorageKey(edge.Column("order_item_id")),
+		edge.From("order_item", OrderItem.Type).
+			Ref("products").
+			Field("order_item_id").
+			Unique().
+			Required(),
 
-		edge.To("order", Order.Type).
-			Required().
-			StorageKey(edge.Column("order_id")),
-
-		edge.To("product", Product.Type).
-			Required().
-			StorageKey(edge.Column("product_id")),
+		edge.From("product", Product.Type).
+			Ref("order_items").
+			Field("product_id").
+			Unique().
+			Required(),
 	}
 }
 

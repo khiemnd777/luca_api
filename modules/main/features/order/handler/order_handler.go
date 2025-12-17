@@ -128,6 +128,7 @@ func (h *OrderHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
+
 	deptID, _ := utils.GetDeptIDInt(c)
 
 	dto, err := h.svc.Create(c.UserContext(), deptID, payload)

@@ -80,8 +80,8 @@ func (OrderItem) Edges() []ent.Edge {
 
 		edge.To("processes", OrderItemProcess.Type),
 
-		edge.To("order_item_products", OrderItemProduct.Type),
-		edge.To("order_item_materials", OrderItemMaterial.Type),
+		edge.To("products", OrderItemProduct.Type),
+		edge.To("materials", OrderItemMaterial.Type),
 
 		edge.To("files", OrderItemFile.Type),
 

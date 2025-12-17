@@ -113,11 +113,9 @@ func (r *orderItemProductRepository) Sync(
 			SetOrderID(orderID).
 			SetOrderItemID(orderItemID).
 			SetProductID(product.ProductID).
-			SetQuantity(qty)
-
-		if product.RetailPrice != nil {
-			create.SetRetailPrice(*product.RetailPrice)
-		}
+			SetQuantity(qty).
+			SetNillableProductCode(product.ProductCode).
+			SetNillableRetailPrice(product.RetailPrice)
 
 		bulk = append(bulk, create)
 	}

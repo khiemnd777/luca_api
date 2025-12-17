@@ -57,7 +57,7 @@ func (Material) Fields() []ent.Field {
 func (Material) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("suppliers", MaterialSupplier.Type),
-		edge.To("order_item_materials", OrderItemMaterial.Type),
+		edge.To("order_items", OrderItemMaterial.Type),
 	}
 }
 

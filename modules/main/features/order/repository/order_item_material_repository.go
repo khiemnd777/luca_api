@@ -7,6 +7,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemmaterial"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
@@ -23,7 +24,15 @@ type OrderItemMaterialRepository interface {
 	CollectLoanerMaterials(dto *model.OrderItemDTO) []*model.OrderItemMaterialDTO
 	LoadLoaner(ctx context.Context, items ...*model.OrderItemDTO) error
 
-	Sync(
+	SyncConsumable(
+		ctx context.Context,
+		tx *generated.Tx,
+		orderID,
+		orderItemID int64,
+		materials []*model.OrderItemMaterialDTO,
+	) ([]*model.OrderItemMaterialDTO, error)
+
+	SyncLoaner(
 		ctx context.Context,
 		tx *generated.Tx,
 		orderID,
@@ -41,18 +50,26 @@ func NewOrderItemMaterialRepository(db *generated.Client) OrderItemMaterialRepos
 }
 
 func (r *orderItemMaterialRepository) CollectConsumableMaterials(dto *model.OrderItemDTO) []*model.OrderItemMaterialDTO {
-	if dto == nil || len(dto.ConsumableMaterials) == 0 {
+	if dto == nil {
+		return nil
+	}
+
+	if len(dto.ConsumableMaterials) == 0 {
 		return nil
 	}
 
 	out := make([]*model.OrderItemMaterialDTO, 0, len(dto.ConsumableMaterials))
 	seen := make(map[int]struct{}, len(dto.ConsumableMaterials))
+	invalidCount := 0
+	duplicateCount := 0
 
 	for _, material := range dto.ConsumableMaterials {
 		if material == nil || material.MaterialID == 0 {
+			invalidCount++
 			continue
 		}
 		if _, ok := seen[material.MaterialID]; ok {
+			duplicateCount++
 			continue
 		}
 		seen[material.MaterialID] = struct{}{}
@@ -64,6 +81,7 @@ func (r *orderItemMaterialRepository) CollectConsumableMaterials(dto *model.Orde
 			OrderItemID: material.OrderItemID,
 			OrderID:     material.OrderID,
 			Quantity:    qty,
+			RetailPrice: material.RetailPrice,
 			Type:        utils.Ptr("consumable"),
 		})
 	}
@@ -174,7 +192,7 @@ func (r *orderItemMaterialRepository) CollectLoanerMaterials(dto *model.OrderIte
 	return out
 }
 
-func (r *orderItemMaterialRepository) Sync(
+func (r *orderItemMaterialRepository) SyncConsumable(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID,
@@ -182,13 +200,18 @@ func (r *orderItemMaterialRepository) Sync(
 	materials []*model.OrderItemMaterialDTO,
 ) ([]*model.OrderItemMaterialDTO, error) {
 	_, err := tx.OrderItemMaterial.Delete().
-		Where(orderitemmaterial.OrderItemIDEQ(orderItemID)).
+		Where(
+			orderitemmaterial.OrderItemIDEQ(orderItemID),
+			orderitemmaterial.TypeEQ("consumable"),
+		).
 		Exec(ctx)
 	if err != nil {
+		logger.Debug("Sync order item material delete failed", "err", err, "orderItemID", orderItemID, "orderID", orderID)
 		return nil, err
 	}
 
 	if len(materials) == 0 {
+		logger.Debug("Sync order item material skipped, no materials", "orderItemID", orderItemID, "orderID", orderID)
 		return nil, nil
 	}
 
@@ -204,18 +227,113 @@ func (r *orderItemMaterialRepository) Sync(
 			SetOrderItemID(orderItemID).
 			SetMaterialID(material.MaterialID).
 			SetQuantity(qty).
-			SetNillableType(material.Type).
+			SetType("consumable").
+			SetNillableRetailPrice(material.RetailPrice)
+
+		bulk = append(bulk, create)
+	}
+
+	if len(bulk) == 0 {
+		logger.Debug("Sync order item material skipped, no valid materials", "orderItemID", orderItemID, "orderID", orderID, "materialsLen", len(materials))
+		return nil, nil
+	}
+
+	created, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx)
+	if err != nil {
+		logger.Debug("Sync order item material create failed", "err", err, "orderItemID", orderItemID, "orderID", orderID, "bulkLen", len(bulk))
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemMaterialDTO, 0, len(created))
+	for _, it := range created {
+		out = append(out, mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](it))
+	}
+
+	return out, nil
+}
+
+func (r *orderItemMaterialRepository) SyncLoaner(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID,
+	orderItemID int64,
+	materials []*model.OrderItemMaterialDTO,
+) ([]*model.OrderItemMaterialDTO, error) {
+	logger.Debug(
+		"SyncLoaner - BEGIN",
+		"orderItemID", orderItemID,
+		"orderID", orderID,
+		"materialsLen", len(materials),
+	)
+
+	for i, m := range materials {
+		if m == nil {
+			logger.Debug(
+				"SyncLoaner - material is nil",
+				"index", i,
+			)
+			continue
+		}
+
+		var retailPrice interface{}
+		if m.RetailPrice != nil {
+			retailPrice = *m.RetailPrice
+		}
+
+		logger.Debug(
+			"SyncLoaner - material",
+			"index", i,
+			"id", m.ID,
+			"materialID", m.MaterialID,
+			"quantity", m.Quantity,
+			"type", m.Type,
+			"status", m.Status,
+			"retailPrice", retailPrice,
+		)
+	}
+
+	_, err := tx.OrderItemMaterial.Delete().
+		Where(
+			orderitemmaterial.OrderItemIDEQ(orderItemID),
+			orderitemmaterial.TypeEQ("loaner"),
+		).
+		Exec(ctx)
+	if err != nil {
+		logger.Debug("Sync order item material delete failed", "err", err, "orderItemID", orderItemID, "orderID", orderID)
+		return nil, err
+	}
+
+	if len(materials) == 0 {
+		logger.Debug("Sync order item material skipped, no materials", "orderItemID", orderItemID, "orderID", orderID)
+		return nil, nil
+	}
+
+	bulk := make([]*generated.OrderItemMaterialCreate, 0, len(materials))
+	for _, material := range materials {
+		if material == nil || material.MaterialID == 0 {
+			continue
+		}
+
+		qty := r.normalizeQuantity(material.Quantity)
+		create := tx.OrderItemMaterial.Create().
+			SetOrderID(orderID).
+			SetOrderItemID(orderItemID).
+			SetMaterialID(material.MaterialID).
+			SetQuantity(qty).
+			SetType("loaner").
 			SetNillableStatus(material.Status)
 
 		bulk = append(bulk, create)
 	}
 
 	if len(bulk) == 0 {
+		logger.Debug("Sync order item material skipped, no valid materials", "orderItemID", orderItemID, "orderID", orderID, "materialsLen", len(materials))
 		return nil, nil
 	}
 
 	created, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx)
 	if err != nil {
+		logger.Debug("Sync order item material create failed", "err", err, "orderItemID", orderItemID, "orderID", orderID, "bulkLen", len(bulk))
 		return nil, err
 	}
 

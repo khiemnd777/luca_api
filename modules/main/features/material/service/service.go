@@ -68,12 +68,16 @@ func kMaterialList(q table.TableQuery) string {
 	return fmt.Sprintf("material:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kMaterialSearch(q dbutils.SearchQuery) string {
+func kMaterialSearch(materialType *string, q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("material:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	mtype := ""
+	if materialType != nil {
+		mtype = *materialType
+	}
+	return fmt.Sprintf("material:search:t%s:k%s:l%d:p%d:o%s:d%s", mtype, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 // ----------------------------------------------------------------------------
@@ -188,7 +192,7 @@ func (s *materialService) Delete(ctx context.Context, id int) error {
 
 func (s *materialService) Search(ctx context.Context, materialType *string, q dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
 	type boxed = dbutils.SearchResult[model.MaterialDTO]
-	key := kMaterialSearch(q)
+	key := kMaterialSearch(materialType, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
 		res, e := s.repo.Search(ctx, materialType, q)

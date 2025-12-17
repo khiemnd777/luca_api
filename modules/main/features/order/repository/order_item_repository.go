@@ -245,55 +245,63 @@ func (r *orderItemRepository) applyTotalPrice(dto *model.OrderItemDTO, totalPric
 
 // -- general functions
 func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
-	dto := &input.DTO
-	products := r.orderItemProductRepo.CollectProducts(dto)
+	in := &input.DTO
+
+	products := r.orderItemProductRepo.CollectProducts(in)
 	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
-	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(dto)
+	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(in)
 	totalPriceConsumableMaterial := r.orderItemMaterialRepo.CalculateConsumableTotalPrice(consumableMaterials)
-	r.applyTotalPrice(dto, totalPriceProduct, totalPriceConsumableMaterial)
+	r.applyTotalPrice(in, totalPriceProduct, totalPriceConsumableMaterial)
 
 	// order item - ParentItemID + RemakeCount
-	prev, errLatest := r.GetLatestByOrderID(ctx, dto.OrderID)
+	prev, errLatest := r.GetLatestByOrderID(ctx, in.OrderID)
 	if errLatest == nil && prev != nil {
-		dto.ParentItemID = &prev.ID
-		dto.RemakeCount = prev.RemakeCount + 1
+		in.ParentItemID = &prev.ID
+		in.RemakeCount = prev.RemakeCount + 1
 	} else {
-		dto.ParentItemID = nil
-		dto.RemakeCount = 0
+		in.ParentItemID = nil
+		in.RemakeCount = 0
 	}
 
 	// order item - code
-	if dto.Code == nil || *dto.Code == "" {
-		if dto.RemakeCount > 0 {
-			seq, errSeq := r.getNextItemSeq(ctx, dto.OrderID)
+	if in.Code == nil || *in.Code == "" {
+		if in.RemakeCount > 0 {
+			seq, errSeq := r.getNextItemSeq(ctx, in.OrderID)
 			if errSeq != nil {
 				return nil, errSeq
 			}
 
 			alpha := utils.AlphabetSeq(seq)
 
-			code := fmt.Sprintf("%s%s", alpha, *dto.CodeOriginal)
-			dto.Code = &code
+			code := fmt.Sprintf("%s%s", alpha, *in.CodeOriginal)
+			in.Code = &code
 		} else {
-			dto.Code = dto.CodeOriginal
+			in.Code = in.CodeOriginal
 		}
 	}
 
 	q := tx.OrderItem.Create().
-		SetCode(*dto.Code)
-	if dto.ParentItemID != nil {
-		q.SetParentItemID(*dto.ParentItemID)
+		SetCode(*in.Code)
+	if in.ParentItemID != nil {
+		q.SetParentItemID(*in.ParentItemID)
 	}
-	q.SetRemakeCount(dto.RemakeCount).
-		SetOrderID(dto.OrderID).
-		SetNillableCodeOriginal(dto.CodeOriginal).
-		SetNillableTotalPrice(dto.TotalPrice)
+	q.SetRemakeCount(in.RemakeCount).
+		SetOrderID(in.OrderID).
+		SetNillableCodeOriginal(in.CodeOriginal).
+		SetNillableTotalPrice(in.TotalPrice)
+
+	// metadata
+
+	// new order is as `received`
+	cf := maps.Clone(in.CustomFields)
+	cf["status"] = "received"
+	in.CustomFields = cf
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err := customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
 			*input.Collections,
-			dto.CustomFields,
+			in.CustomFields,
 			q,
 			false,
 		)
@@ -307,29 +315,29 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	out := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
 
 	// Products
 	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
 	if err != nil {
 		return nil, err
 	}
-	dto.Products = createdProducts
+	out.Products = createdProducts
 
 	// Consumable Materials
-	createdConsumableMaterials, err := r.orderItemMaterialRepo.Sync(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
+	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumable(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
 	if err != nil {
 		return nil, err
 	}
-	dto.ConsumableMaterials = createdConsumableMaterials
+	out.ConsumableMaterials = createdConsumableMaterials
 
 	// Loaner Materials
-	loanerMaterials := r.orderItemMaterialRepo.CollectLoanerMaterials(dto)
-	createdLoanerMaterials, err := r.orderItemMaterialRepo.Sync(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
+	loanerMaterials := r.orderItemMaterialRepo.CollectLoanerMaterials(in)
+	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
 		return nil, err
 	}
-	dto.LoanerMaterials = createdLoanerMaterials
+	out.LoanerMaterials = createdLoanerMaterials
 
 	// processes
 	if len(products) > 0 {
@@ -344,7 +352,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		}
 	}
 
-	return dto, nil
+	return out, nil
 }
 
 func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
@@ -382,29 +390,29 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	out := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
 
 	// Products
 	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
 	if err != nil {
 		return nil, err
 	}
-	dto.Products = createdProducts
+	out.Products = createdProducts
 
 	// Consumable Materials
-	createdConsumableMaterials, err := r.orderItemMaterialRepo.Sync(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
+	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumable(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
 	if err != nil {
 		return nil, err
 	}
-	dto.ConsumableMaterials = createdConsumableMaterials
+	out.ConsumableMaterials = createdConsumableMaterials
 
 	// Loaner Materials
 	loanerMaterials := r.orderItemMaterialRepo.CollectLoanerMaterials(dto)
-	createdLoanerMaterials, err := r.orderItemMaterialRepo.Sync(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
+	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
 		return nil, err
 	}
-	dto.LoanerMaterials = createdLoanerMaterials
+	out.LoanerMaterials = createdLoanerMaterials
 
 	// processes
 	if primaryProductID > 0 {
@@ -422,10 +430,10 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 		if err != nil {
 			return nil, err
 		}
-		dto.OrderItemProcesses = oipOut
+		out.OrderItemProcesses = oipOut
 	}
 
-	return dto, nil
+	return out, nil
 }
 
 func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.OrderItemDTO, error) {
