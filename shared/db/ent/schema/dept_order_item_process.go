@@ -47,6 +47,15 @@ func (OrderItemProcess) Fields() []ent.Field {
 		field.String("status").
 			Default("pending"), // pending | in_progress | paused | qc | completed | rework | issue
 
+		field.String("color").
+			MaxLen(8).
+			Optional().
+			Nillable(),
+
+		field.String("section_name").
+			Optional().
+			Nillable(),
+
 		field.JSON("custom_fields", map[string]any{}).
 			Optional().
 			Default(map[string]any{}),

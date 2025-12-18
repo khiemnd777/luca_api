@@ -17,6 +17,8 @@ type OrderItemService interface {
 
 	SyncPrice(ctx context.Context, orderItemID int64) (float64, error)
 
+	GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error)
+
 	GetHistoricalByOrderIDAndOrderItemID(
 		ctx context.Context,
 		orderID, orderItemID int64,
@@ -56,6 +58,10 @@ func (s *orderItemService) CalculateTotalPrice(prices []float64, quantities []in
 
 func (s *orderItemService) SyncPrice(ctx context.Context, orderItemID int64) (float64, error) {
 	return s.repo.GetTotalPriceByOrderItemID(ctx, orderItemID)
+}
+
+func (s *orderItemService) GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error) {
+	return s.repo.GetAllProductsAndMaterialsByOrderID(ctx, orderID)
 }
 
 func (s *orderItemService) GetHistoricalByOrderIDAndOrderItemID(

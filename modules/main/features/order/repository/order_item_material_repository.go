@@ -32,6 +32,8 @@ type OrderItemMaterialRepository interface {
 		materials []*model.OrderItemMaterialDTO,
 	) ([]*model.OrderItemMaterialDTO, error)
 
+	PrepareLoanerForCreate(materials []*model.OrderItemMaterialDTO) []*model.OrderItemMaterialDTO
+
 	SyncLoaner(
 		ctx context.Context,
 		tx *generated.Tx,
@@ -192,6 +194,22 @@ func (r *orderItemMaterialRepository) CollectLoanerMaterials(dto *model.OrderIte
 	return out
 }
 
+func (r *orderItemMaterialRepository) PrepareLoanerForCreate(materials []*model.OrderItemMaterialDTO) []*model.OrderItemMaterialDTO {
+	if len(materials) == 0 {
+		return materials
+	}
+
+	status := utils.Ptr("on_loan")
+	for _, material := range materials {
+		if material == nil {
+			continue
+		}
+		material.Status = status
+	}
+
+	return materials
+}
+
 func (r *orderItemMaterialRepository) SyncConsumable(
 	ctx context.Context,
 	tx *generated.Tx,
@@ -259,39 +277,6 @@ func (r *orderItemMaterialRepository) SyncLoaner(
 	orderItemID int64,
 	materials []*model.OrderItemMaterialDTO,
 ) ([]*model.OrderItemMaterialDTO, error) {
-	logger.Debug(
-		"SyncLoaner - BEGIN",
-		"orderItemID", orderItemID,
-		"orderID", orderID,
-		"materialsLen", len(materials),
-	)
-
-	for i, m := range materials {
-		if m == nil {
-			logger.Debug(
-				"SyncLoaner - material is nil",
-				"index", i,
-			)
-			continue
-		}
-
-		var retailPrice interface{}
-		if m.RetailPrice != nil {
-			retailPrice = *m.RetailPrice
-		}
-
-		logger.Debug(
-			"SyncLoaner - material",
-			"index", i,
-			"id", m.ID,
-			"materialID", m.MaterialID,
-			"quantity", m.Quantity,
-			"type", m.Type,
-			"status", m.Status,
-			"retailPrice", retailPrice,
-		)
-	}
-
 	_, err := tx.OrderItemMaterial.Delete().
 		Where(
 			orderitemmaterial.OrderItemIDEQ(orderItemID),
@@ -365,7 +350,10 @@ func (r *orderItemMaterialRepository) LoadConsumable(ctx context.Context, items 
 	}
 
 	relations, err := r.db.OrderItemMaterial.Query().
-		Where(orderitemmaterial.OrderItemIDIn(itemIDs...)).
+		Where(
+			orderitemmaterial.OrderItemIDIn(itemIDs...),
+			orderitemmaterial.TypeEQ("consumable"),
+		).
 		All(ctx)
 	if err != nil {
 		return err
@@ -400,7 +388,10 @@ func (r *orderItemMaterialRepository) LoadLoaner(ctx context.Context, items ...*
 	}
 
 	relations, err := r.db.OrderItemMaterial.Query().
-		Where(orderitemmaterial.OrderItemIDIn(itemIDs...)).
+		Where(
+			orderitemmaterial.OrderItemIDIn(itemIDs...),
+			orderitemmaterial.TypeEQ("loaner"),
+		).
 		All(ctx)
 	if err != nil {
 		return err
