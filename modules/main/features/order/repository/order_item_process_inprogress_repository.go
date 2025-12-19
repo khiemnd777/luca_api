@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocessinprogress"
 	"github.com/khiemnd777/andy_api/shared/mapper"
@@ -15,10 +16,13 @@ import (
 
 type OrderItemProcessInProgressRepository interface {
 	PrepareCheckInOrOut(ctx context.Context, orderItemID int64, orderID *int64) (*model.OrderItemProcessInProgressDTO, error)
+	PrepareCheckInOrOutByCode(ctx context.Context, code string) (*model.OrderItemProcessInProgressDTO, error)
 	CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO, note *string) (*model.OrderItemProcessInProgressDTO, error)
 	CheckIn(ctx context.Context, tx *generated.Tx, orderItemID int64, orderID *int64, note *string) (*model.OrderItemProcessInProgressDTO, error)
 	CheckOut(ctx context.Context, tx *generated.Tx, orderItemID int64, note *string) (*model.OrderItemProcessInProgressDTO, error)
 	GetLatest(ctx context.Context, tx *generated.Tx, orderItemID int64) (*model.OrderItemProcessInProgressDTO, error)
+	GetProcessesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
+	GetProcessByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error)
 }
 
 type orderItemProcessInProgressRepository struct {
@@ -28,6 +32,128 @@ type orderItemProcessInProgressRepository struct {
 
 func NewOrderItemProcessInProgressRepository(db *generated.Client, orderItemProcessRepo OrderItemProcessRepository) OrderItemProcessInProgressRepository {
 	return &orderItemProcessInProgressRepository{db: db, orderItemProcessRepo: orderItemProcessRepo}
+}
+
+func (r *orderItemProcessInProgressRepository) GetProcessesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	items, err := r.inprogressClient(tx).
+		Query().
+		Where(orderitemprocessinprogress.ProcessID(processID)).
+		Order(orderitemprocessinprogress.ByCreatedAt(sql.OrderDesc())).
+		Select(
+			orderitemprocessinprogress.FieldID,
+			orderitemprocessinprogress.FieldNote,
+			orderitemprocessinprogress.FieldAssignedID,
+			orderitemprocessinprogress.FieldAssignedName,
+			orderitemprocessinprogress.FieldStartedAt,
+			orderitemprocessinprogress.FieldCompletedAt,
+		).
+		WithProcess(func(q *generated.OrderItemProcessQuery) {
+			q.Select(
+				orderitemprocess.FieldID,
+				orderitemprocess.FieldProcessName,
+				orderitemprocess.FieldSectionName,
+				orderitemprocess.FieldColor,
+			)
+		}).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemProcessInProgressAndProcessDTO, 0, len(items))
+	for _, item := range items {
+		proc, err := item.Edges.ProcessOrErr()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &model.OrderItemProcessInProgressAndProcessDTO{
+			ID:           item.ID,
+			Note:         item.Note,
+			AssignedID:   item.AssignedID,
+			AssignedName: item.AssignedName,
+			StartedAt:    item.StartedAt,
+			CompletedAt:  item.CompletedAt,
+			ProcessName:  proc.ProcessName,
+			SectionName:  proc.SectionName,
+			Color:        proc.Color,
+		})
+	}
+
+	return out, nil
+}
+
+func (r *orderItemProcessInProgressRepository) GetProcessByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	entity, err := r.inprogressClient(tx).
+		Query().
+		Where(orderitemprocessinprogress.ID(inProgressID)).
+		WithProcess(func(q *generated.OrderItemProcessQuery) {
+			q.Select(
+				orderitemprocess.FieldID,
+				orderitemprocess.FieldProcessName,
+				orderitemprocess.FieldSectionName,
+				orderitemprocess.FieldColor,
+			)
+		}).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	proc, err := entity.Edges.ProcessOrErr()
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.OrderItemProcessInProgressAndProcessDTO{
+		ID:           entity.ID,
+		Note:         entity.Note,
+		AssignedID:   entity.AssignedID,
+		AssignedName: entity.AssignedName,
+		StartedAt:    entity.StartedAt,
+		CompletedAt:  entity.CompletedAt,
+		ProcessName:  proc.ProcessName,
+		SectionName:  proc.SectionName,
+		Color:        proc.Color,
+	}, nil
+}
+
+func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOutByCode(ctx context.Context, code string) (*model.OrderItemProcessInProgressDTO, error) {
+	if code == "" {
+		return nil, fmt.Errorf("code is required")
+	}
+
+	var err error
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	orderItemEntity, err := tx.OrderItem.
+		Query().
+		Where(
+			orderitem.CodeEQ(code),
+			orderitem.DeletedAtIsNil(),
+		).
+		Select(
+			orderitem.FieldID,
+			orderitem.FieldOrderID,
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	orderItemID := orderItemEntity.ID
+	orderID := orderItemEntity.OrderID
+
+	return r.PrepareCheckInOrOut(ctx, orderItemID, &orderID)
 }
 
 func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOut(ctx context.Context, orderItemID int64, orderID *int64) (*model.OrderItemProcessInProgressDTO, error) {
@@ -191,7 +317,14 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 	if rework {
 		status = "rework"
 	}
-	if err := r.updateProcessStatus(ctx, tx, *checkInOrOutData.ProcessID, status); err != nil {
+	if err := r.updateProcessStatusAndAssign(
+		ctx,
+		tx,
+		*checkInOrOutData.ProcessID,
+		status,
+		checkInOrOutData.AssignedID,
+		checkInOrOutData.AssignedName,
+	); err != nil {
 		return nil, err
 	}
 
@@ -299,12 +432,45 @@ func (r *orderItemProcessInProgressRepository) hasCompletedProcess(ctx context.C
 		Exist(ctx)
 }
 
-func (r *orderItemProcessInProgressRepository) updateProcessStatus(ctx context.Context, tx *generated.Tx, processID int64, status string) error {
+func (r *orderItemProcessInProgressRepository) updateProcessStatus(
+	ctx context.Context,
+	tx *generated.Tx,
+	processID int64,
+	status string,
+) error {
 	if r.orderItemProcessRepo == nil {
 		return fmt.Errorf("order item process repository is required")
 	}
 
-	_, err := r.orderItemProcessRepo.UpdateStatus(ctx, tx, processID, status)
+	_, err := r.orderItemProcessRepo.UpdateStatus(
+		ctx,
+		tx,
+		processID,
+		status,
+	)
+	return err
+}
+
+func (r *orderItemProcessInProgressRepository) updateProcessStatusAndAssign(
+	ctx context.Context,
+	tx *generated.Tx,
+	processID int64,
+	status string,
+	assignedID *int64,
+	assignedName *string,
+) error {
+	if r.orderItemProcessRepo == nil {
+		return fmt.Errorf("order item process repository is required")
+	}
+
+	_, err := r.orderItemProcessRepo.UpdateStatusAndAssign(
+		ctx,
+		tx,
+		processID,
+		status,
+		assignedID,
+		assignedName,
+	)
 	return err
 }
 

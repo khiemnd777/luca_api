@@ -27,10 +27,25 @@ type OrderItemProcessService interface {
 		assignedID int64,
 	) ([]*model.OrderItemProcessDTO, error)
 
+	GetProcessByID(
+		ctx context.Context,
+		inProgressID int64,
+	) (*model.OrderItemProcessInProgressAndProcessDTO, error)
+
+	GetProcessesByProcessID(
+		ctx context.Context,
+		processID int64,
+	) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
+
 	PrepareCheckInOrOut(
 		ctx context.Context,
 		orderID int64,
 		orderItemID int64,
+	) (*model.OrderItemProcessInProgressDTO, error)
+
+	PrepareCheckInOrOutByCode(
+		ctx context.Context,
+		code string,
 	) (*model.OrderItemProcessInProgressDTO, error)
 
 	CheckInOrOut(
@@ -92,8 +107,24 @@ func (s *orderItemProcessService) GetProcessesByAssignedID(
 	})
 }
 
+func (s *orderItemProcessService) GetProcessByID(ctx context.Context, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	return cache.Get(fmt.Sprintf("order:process:inprogress:id%d", inProgressID), cache.TTLMedium, func() (*model.OrderItemProcessInProgressAndProcessDTO, error) {
+		return s.inprogressRepo.GetProcessByID(ctx, nil, inProgressID)
+	})
+}
+
+func (s *orderItemProcessService) GetProcessesByProcessID(ctx context.Context, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	return cache.GetList(fmt.Sprintf("order:process:id%d:inprogresses", processID), cache.TTLMedium, func() ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+		return s.inprogressRepo.GetProcessesByProcessID(ctx, nil, processID)
+	})
+}
+
 func (s *orderItemProcessService) PrepareCheckInOrOut(ctx context.Context, orderID int64, orderItemID int64) (*model.OrderItemProcessInProgressDTO, error) {
-	return s.prepareCheckInOrOut(ctx, orderID, orderItemID)
+	return s.inprogressRepo.PrepareCheckInOrOut(ctx, orderItemID, &orderID)
+}
+
+func (s *orderItemProcessService) PrepareCheckInOrOutByCode(ctx context.Context, code string) (*model.OrderItemProcessInProgressDTO, error) {
+	return s.inprogressRepo.PrepareCheckInOrOutByCode(ctx, code)
 }
 
 // TODO: remove all orderID, orderItemID
@@ -120,14 +151,22 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOut
 			keys = append(keys, fmt.Sprintf("order:id:%d:oid:%d:processes", *orderID, orderItemID))
 		}
 	}
+
+	keys = append(keys, fmt.Sprintf("order:process:inprogress:id%d", dto.ID))
+	if dto.ProcessID != nil {
+		keys = append(keys, fmt.Sprintf("order:process:id%d:inprogresses", *dto.ProcessID))
+	}
+	if dto.PrevProcessID != nil {
+		keys = append(keys, fmt.Sprintf("order:process:id%d:inprogresses", *dto.PrevProcessID))
+	}
+	if dto.NextProcessID != nil {
+		keys = append(keys, fmt.Sprintf("order:process:id%d:inprogresses", *dto.NextProcessID))
+	}
+
 	cache.InvalidateKeys(keys...)
 	cache.InvalidateKeys(kOrderAll()...)
 
 	return dto, nil
-}
-
-func (s *orderItemProcessService) prepareCheckInOrOut(ctx context.Context, orderID int64, orderItemID int64) (*model.OrderItemProcessInProgressDTO, error) {
-	return s.inprogressRepo.PrepareCheckInOrOut(ctx, orderItemID, &orderID)
 }
 
 func (s *orderItemProcessService) Update(ctx context.Context, deptID int, input *model.OrderItemProcessUpsertDTO) (*model.OrderItemProcessDTO, error) {

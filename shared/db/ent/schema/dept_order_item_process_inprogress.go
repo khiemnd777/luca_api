@@ -65,5 +65,6 @@ func (OrderItemProcessInProgress) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("order_item_id", "created_at"),
 		index.Fields("process_id", "completed_at"),
+		index.Fields("process_id"),
 	}
 }

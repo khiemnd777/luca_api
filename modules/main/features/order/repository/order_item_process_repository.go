@@ -80,6 +80,15 @@ type OrderItemProcessRepository interface {
 		status string,
 	) (*model.OrderItemProcessDTO, error)
 
+	UpdateStatusAndAssign(
+		ctx context.Context,
+		tx *generated.Tx,
+		id int64,
+		status string,
+		assignedId *int64,
+		assignedName *string,
+	) (*model.OrderItemProcessDTO, error)
+
 	GetProcessesByOrderItemID(
 		ctx context.Context,
 		tx *generated.Tx,
@@ -438,6 +447,41 @@ func (r *orderItemProcessRepository) UpdateStatus(
 	entity, err := tx.OrderItemProcess.
 		UpdateOneID(id).
 		SetCustomFields(cf).
+		Save(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+	out := mapper.MapAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](entity)
+
+	return out, nil
+}
+
+func (r *orderItemProcessRepository) UpdateStatusAndAssign(
+	ctx context.Context,
+	tx *generated.Tx,
+	id int64,
+	status string,
+	assignedId *int64,
+	assignedName *string,
+) (*model.OrderItemProcessDTO, error) {
+
+	oip, err := tx.OrderItemProcess.
+		Query().
+		Where(orderitemprocess.IDEQ(id)).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cf := maps.Clone(oip.CustomFields)
+	cf["status"] = status
+
+	entity, err := tx.OrderItemProcess.
+		UpdateOneID(id).
+		SetCustomFields(cf).
+		SetNillableAssignedID(assignedId).
+		SetNillableAssignedName(assignedName).
 		Save(ctx)
 
 	if err != nil {
