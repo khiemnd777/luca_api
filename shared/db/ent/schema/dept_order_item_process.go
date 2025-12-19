@@ -81,6 +81,7 @@ func (OrderItemProcess) Edges() []ent.Edge {
 			Field("order_item_id").
 			Required().
 			Unique(),
+		edge.To("in_progresses", OrderItemProcessInProgress.Type),
 	}
 }
 

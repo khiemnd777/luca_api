@@ -45,5 +45,10 @@ func (CategoryProcess) Edges() []ent.Edge {
 func (CategoryProcess) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("category_id", "process_id").Unique(),
+		index.Fields(
+			"category_id",
+			"display_order",
+			"process_id",
+		),
 	}
 }

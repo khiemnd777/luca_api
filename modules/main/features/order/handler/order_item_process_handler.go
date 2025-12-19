@@ -26,6 +26,8 @@ func NewOrderItemProcessHandler(svc service.OrderItemProcessService, deps *modul
 func (h *OrderItemProcessHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes", h.ProcessesForStaff)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes", h.Processes)
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/check-in-out/prepare", h.PrepareCheckInOrOut)
+	app.RouterPost(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/check-in-out", h.CheckInOrOut)
 	app.RouterPut(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/:order_item_process_id<int>", h.Update)
 }
 
@@ -40,6 +42,71 @@ func (h *OrderItemProcessHandler) Processes(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemProcessHandler) PrepareCheckInOrOut(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, orderItemID, err := h.parseOrderParams(c)
+	if err != nil {
+		return err
+	}
+
+	dto, svcErr := h.svc.PrepareCheckInOrOut(c.UserContext(), int64(orderID), int64(orderItemID))
+	if svcErr != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, svcErr, svcErr.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *OrderItemProcessHandler) CheckInOrOut(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, orderItemID, err := h.parseOrderParams(c)
+	if err != nil {
+		return err
+	}
+
+	var (
+		checkInOrOutData *model.OrderItemProcessInProgressDTO
+		note             *string
+	)
+	if len(c.Body()) > 0 {
+		payload, err := app.ParseBody[struct {
+			CheckInOrOutData *model.OrderItemProcessInProgressDTO `json:"check_in_or_out_data"`
+			Note             *string                              `json:"note"`
+		}](c)
+		if err != nil {
+			return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+		}
+		checkInOrOutData = payload.CheckInOrOutData
+		note = payload.Note
+	}
+
+	if checkInOrOutData == nil {
+		checkInOrOutData, err = h.svc.PrepareCheckInOrOut(c.UserContext(), int64(orderID), int64(orderItemID))
+		if err != nil {
+			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+		}
+	} else {
+		if checkInOrOutData.OrderItemID == 0 {
+			checkInOrOutData.OrderItemID = int64(orderItemID)
+		}
+		if checkInOrOutData.OrderID == nil {
+			oid := int64(orderID)
+			checkInOrOutData.OrderID = &oid
+		}
+	}
+
+	dto, err := h.svc.CheckInOrOut(c.UserContext(), checkInOrOutData, note)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(dto)
 }
 
 func (h *OrderItemProcessHandler) ProcessesForStaff(c *fiber.Ctx) error {
@@ -76,4 +143,18 @@ func (h *OrderItemProcessHandler) Update(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *OrderItemProcessHandler) parseOrderParams(c *fiber.Ctx) (int, int, error) {
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return 0, 0, client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	orderItemID, _ := utils.GetParamAsInt(c, "order_item_id")
+	if orderItemID <= 0 {
+		return 0, 0, client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order item id")
+	}
+
+	return orderID, orderItemID, nil
 }
