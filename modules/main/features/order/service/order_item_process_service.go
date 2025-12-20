@@ -154,13 +154,13 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOut
 
 	keys = append(keys, fmt.Sprintf("order:process:inprogress:id%d", dto.ID))
 	if dto.ProcessID != nil {
-		keys = append(keys, fmt.Sprintf("order:process:id%d:inprogresses", *dto.ProcessID))
+		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.ProcessID))
 	}
 	if dto.PrevProcessID != nil {
-		keys = append(keys, fmt.Sprintf("order:process:id%d:inprogresses", *dto.PrevProcessID))
+		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.PrevProcessID))
 	}
 	if dto.NextProcessID != nil {
-		keys = append(keys, fmt.Sprintf("order:process:id%d:inprogresses", *dto.NextProcessID))
+		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.NextProcessID))
 	}
 
 	cache.InvalidateKeys(keys...)

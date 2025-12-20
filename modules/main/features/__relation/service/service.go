@@ -158,7 +158,12 @@ func (s *RelationService) Search(ctx context.Context, key string, q dbutils.Sear
 		orderBy = *q.OrderBy
 	}
 
-	cKey := fmt.Sprintf(cfg.CachePrefix+":%s:k%s:l%d:p%d:o%s:d%s", key, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	extendWhereKey := ""
+	if len(q.ExtendWhere) > 0 {
+		extendWhereKey = fmt.Sprint(q.ExtendWhere)
+	}
+
+	cKey := fmt.Sprintf(cfg.CachePrefix+":%s:k%s:w%s:l%d:p%d:o%s:d%s", key, q.Keyword, extendWhereKey, q.Limit, q.Page, orderBy, q.Direction)
 
 	return cache.Get(cKey, cache.TTLShort, func() (*any, error) {
 		tx, err := s.deps.Ent.(*generated.Client).Tx(ctx)

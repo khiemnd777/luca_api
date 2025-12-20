@@ -40,6 +40,9 @@ func (OrderItemProcessInProgress) Fields() []ent.Field {
 		field.String("assigned_name").
 			Optional().Nillable(),
 
+		field.String("section_name").
+			Optional().Nillable(),
+
 		// timing
 		field.Time("created_at").
 			Default(time.Now),

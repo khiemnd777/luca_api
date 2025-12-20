@@ -10,6 +10,7 @@ type OrderItemProcessInProgressDTO struct {
 	Note          *string    `json:"note,omitempty"`
 	OrderItemID   int64      `json:"order_item_id,omitempty"`
 	OrderID       *int64     `json:"order_id,omitempty"`
+	SectionName   *string    `json:"section_name,omitempty"`
 	AssignedID    *int64     `json:"assigned_id,omitempty"`
 	AssignedName  *string    `json:"assigned_name,omitempty"`
 	StartedAt     *time.Time `json:"started_at,omitempty"`

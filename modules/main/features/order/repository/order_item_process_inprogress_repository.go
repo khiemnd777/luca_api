@@ -205,6 +205,7 @@ func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOut(ctx context.C
 			OrderID:       r.pickOrderID(latest.OrderID, targetProcess),
 			AssignedID:    targetProcess.AssignedID,
 			AssignedName:  targetProcess.AssignedName,
+			SectionName:   targetProcess.SectionName,
 			Note:          latest.Note,
 			StartedAt:     latest.StartedAt,
 			CompletedAt:   latest.CompletedAt,
@@ -239,6 +240,7 @@ func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOut(ctx context.C
 		OrderID:       r.pickOrderID(orderID, targetProcess),
 		AssignedID:    targetProcess.AssignedID,
 		AssignedName:  targetProcess.AssignedName,
+		SectionName:   targetProcess.SectionName,
 	}, nil
 }
 
@@ -301,6 +303,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		SetNillableOrderID(checkInOrOutData.OrderID).
 		SetNillableAssignedID(checkInOrOutData.AssignedID).
 		SetNillableAssignedName(checkInOrOutData.AssignedName).
+		SetNillableSectionName(checkInOrOutData.SectionName).
 		SetNillableNote(note).
 		SetStartedAt(startedAt).
 		Save(ctx)
