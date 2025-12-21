@@ -23,8 +23,9 @@ type OrderItemProcessInProgressRepository interface {
 	CheckOut(ctx context.Context, tx *generated.Tx, orderItemID int64, note *string) (*model.OrderItemProcessInProgressDTO, error)
 	GetLatest(ctx context.Context, tx *generated.Tx, orderItemID int64) (*model.OrderItemProcessInProgressDTO, error)
 	GetCheckoutLatest(ctx context.Context, tx *generated.Tx, orderItemID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error)
-	GetProcessesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
-	GetProcessByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error)
+	GetInProgressesByOrderItemID(ctx context.Context, tx *generated.Tx, orderItemID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
+	GetInProgressesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
+	GetInProgressByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error)
 }
 
 type orderItemProcessInProgressRepository struct {
@@ -36,7 +37,7 @@ func NewOrderItemProcessInProgressRepository(db *generated.Client, orderItemProc
 	return &orderItemProcessInProgressRepository{db: db, orderItemProcessRepo: orderItemProcessRepo}
 }
 
-func (r *orderItemProcessInProgressRepository) GetProcessesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+func (r *orderItemProcessInProgressRepository) GetInProgressesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
 	items, err := r.inprogressClient(tx).
 		Query().
 		Where(orderitemprocessinprogress.ProcessID(processID)).
@@ -84,7 +85,55 @@ func (r *orderItemProcessInProgressRepository) GetProcessesByProcessID(ctx conte
 	return out, nil
 }
 
-func (r *orderItemProcessInProgressRepository) GetProcessByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
+func (r *orderItemProcessInProgressRepository) GetInProgressesByOrderItemID(ctx context.Context, tx *generated.Tx, orderItemID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	items, err := r.inprogressClient(tx).
+		Query().
+		Where(orderitemprocessinprogress.OrderItemID(orderItemID)).
+		Order(orderitemprocessinprogress.ByCreatedAt(sql.OrderDesc())).
+		Select(
+			orderitemprocessinprogress.FieldID,
+			orderitemprocessinprogress.FieldNote,
+			orderitemprocessinprogress.FieldAssignedID,
+			orderitemprocessinprogress.FieldAssignedName,
+			orderitemprocessinprogress.FieldStartedAt,
+			orderitemprocessinprogress.FieldCompletedAt,
+		).
+		WithProcess(func(q *generated.OrderItemProcessQuery) {
+			q.Select(
+				orderitemprocess.FieldID,
+				orderitemprocess.FieldProcessName,
+				orderitemprocess.FieldSectionName,
+				orderitemprocess.FieldColor,
+			)
+		}).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemProcessInProgressAndProcessDTO, 0, len(items))
+	for _, item := range items {
+		proc, err := item.Edges.ProcessOrErr()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &model.OrderItemProcessInProgressAndProcessDTO{
+			ID:           item.ID,
+			Note:         item.Note,
+			AssignedID:   item.AssignedID,
+			AssignedName: item.AssignedName,
+			StartedAt:    item.StartedAt,
+			CompletedAt:  item.CompletedAt,
+			ProcessName:  proc.ProcessName,
+			SectionName:  proc.SectionName,
+			Color:        proc.Color,
+		})
+	}
+
+	return out, nil
+}
+
+func (r *orderItemProcessInProgressRepository) GetInProgressByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
 	entity, err := r.inprogressClient(tx).
 		Query().
 		Where(orderitemprocessinprogress.ID(inProgressID)).

@@ -26,8 +26,9 @@ func NewOrderItemProcessHandler(svc service.OrderItemProcessService, deps *modul
 func (h *OrderItemProcessHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes", h.ProcessesForStaff)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes", h.Processes)
-	app.RouterGet(router, "/:dept_id<int>/order/processes/in-progress/:in_progress_id<int>", h.GetProcessByID)
-	app.RouterGet(router, "/:dept_id<int>/order/processes/in-progress/process/:process_id<int>", h.GetProcessesByProcessID)
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/in-progresses", h.GetInProgressesByOrderItemID)
+	app.RouterGet(router, "/:dept_id<int>/order/processes/in-progress/:in_progress_id<int>", h.GetInProgressByID)
+	app.RouterGet(router, "/:dept_id<int>/order/processes/:process_id<int>/in-progresses", h.GetInProgressesByProcessID)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/check-out/latest", h.GetCheckoutLatest)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/check-in-out/prepare", h.PrepareCheckInOrOut)
 	app.RouterGet(router, "/:dept_id<int>/order/processes/check-in-out/prepare-by-code", h.PrepareCheckInOrOutByCode)
@@ -49,7 +50,7 @@ func (h *OrderItemProcessHandler) Processes(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
-func (h *OrderItemProcessHandler) GetProcessByID(c *fiber.Ctx) error {
+func (h *OrderItemProcessHandler) GetInProgressByID(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
@@ -58,14 +59,14 @@ func (h *OrderItemProcessHandler) GetProcessByID(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
-	dto, err := h.svc.GetProcessByID(c.UserContext(), int64(inProgressID))
+	dto, err := h.svc.GetInProgressByID(c.UserContext(), int64(inProgressID))
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(dto)
 }
 
-func (h *OrderItemProcessHandler) GetProcessesByProcessID(c *fiber.Ctx) error {
+func (h *OrderItemProcessHandler) GetInProgressesByProcessID(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
@@ -74,7 +75,24 @@ func (h *OrderItemProcessHandler) GetProcessesByProcessID(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
-	res, err := h.svc.GetProcessesByProcessID(c.UserContext(), int64(processID))
+	res, err := h.svc.GetInProgressesByProcessID(c.UserContext(), int64(processID))
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemProcessHandler) GetInProgressesByOrderItemID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, orderItemID, err := h.parseOrderParams(c)
+	if err != nil {
+		return err
+	}
+
+	res, err := h.svc.GetInProgressesByOrderItemID(c.UserContext(), int64(orderID), int64(orderItemID))
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

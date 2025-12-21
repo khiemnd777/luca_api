@@ -27,14 +27,20 @@ type OrderItemProcessService interface {
 		assignedID int64,
 	) ([]*model.OrderItemProcessDTO, error)
 
-	GetProcessByID(
+	GetInProgressByID(
 		ctx context.Context,
 		inProgressID int64,
 	) (*model.OrderItemProcessInProgressAndProcessDTO, error)
 
-	GetProcessesByProcessID(
+	GetInProgressesByProcessID(
 		ctx context.Context,
 		processID int64,
+	) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
+
+	GetInProgressesByOrderItemID(
+		ctx context.Context,
+		orderID int64,
+		orderItemID int64,
 	) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetCheckoutLatest(
 		ctx context.Context,
@@ -118,15 +124,25 @@ func (s *orderItemProcessService) GetProcessesByAssignedID(
 	})
 }
 
-func (s *orderItemProcessService) GetProcessByID(ctx context.Context, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
+func (s *orderItemProcessService) GetInProgressByID(ctx context.Context, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
 	return cache.Get(fmt.Sprintf("order:process:inprogress:id%d", inProgressID), cache.TTLMedium, func() (*model.OrderItemProcessInProgressAndProcessDTO, error) {
-		return s.inprogressRepo.GetProcessByID(ctx, nil, inProgressID)
+		return s.inprogressRepo.GetInProgressByID(ctx, nil, inProgressID)
 	})
 }
 
-func (s *orderItemProcessService) GetProcessesByProcessID(ctx context.Context, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+func (s *orderItemProcessService) GetInProgressesByProcessID(ctx context.Context, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
 	return cache.GetList(fmt.Sprintf("order:process:id%d:inprogresses", processID), cache.TTLMedium, func() ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
-		return s.inprogressRepo.GetProcessesByProcessID(ctx, nil, processID)
+		return s.inprogressRepo.GetInProgressesByProcessID(ctx, nil, processID)
+	})
+}
+
+func (s *orderItemProcessService) GetInProgressesByOrderItemID(
+	ctx context.Context,
+	orderID int64,
+	orderItemID int64,
+) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	return cache.GetList(fmt.Sprintf("order:id:%d:oid:%d:inprogresses", orderID, orderItemID), cache.TTLShort, func() ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+		return s.inprogressRepo.GetInProgressesByOrderItemID(ctx, nil, orderItemID)
 	})
 }
 
@@ -166,6 +182,7 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOut
 		keys = append(keys, kOrderByID(*orderID), kOrderByIDAll(*orderID))
 		if orderItemID > 0 {
 			keys = append(keys, fmt.Sprintf("order:id:%d:oid:%d:processes", *orderID, orderItemID))
+			keys = append(keys, fmt.Sprintf("order:id:%d:oid:%d:inprogresses", *orderID, orderItemID))
 		}
 	}
 
@@ -201,6 +218,7 @@ func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64
 		keys = append(keys, kOrderByID(*dto.OrderID), kOrderByIDAll(*dto.OrderID))
 		if dto.OrderItemID > 0 {
 			keys = append(keys, fmt.Sprintf("order:id:%d:oid:%d:processes", *dto.OrderID, dto.OrderItemID))
+			keys = append(keys, fmt.Sprintf("order:id:%d:oid:%d:inprogresses", *dto.OrderID, dto.OrderItemID))
 		}
 	}
 
