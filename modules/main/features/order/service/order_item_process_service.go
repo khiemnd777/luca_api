@@ -36,6 +36,10 @@ type OrderItemProcessService interface {
 		ctx context.Context,
 		processID int64,
 	) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
+	GetCheckoutLatest(
+		ctx context.Context,
+		orderItemID int64,
+	) (*model.OrderItemProcessInProgressAndProcessDTO, error)
 
 	PrepareCheckInOrOut(
 		ctx context.Context,
@@ -51,6 +55,13 @@ type OrderItemProcessService interface {
 	CheckInOrOut(
 		ctx context.Context,
 		checkInOrOutData *model.OrderItemProcessInProgressDTO,
+		note *string,
+	) (*model.OrderItemProcessInProgressDTO, error)
+	Assign(
+		ctx context.Context,
+		inprogressID int64,
+		assignedID *int64,
+		assignedName *string,
 		note *string,
 	) (*model.OrderItemProcessInProgressDTO, error)
 
@@ -119,6 +130,12 @@ func (s *orderItemProcessService) GetProcessesByProcessID(ctx context.Context, p
 	})
 }
 
+func (s *orderItemProcessService) GetCheckoutLatest(ctx context.Context, orderItemID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	return cache.Get(fmt.Sprintf("order:process:checkout:latest:oid:%d", orderItemID), cache.TTLShort, func() (*model.OrderItemProcessInProgressAndProcessDTO, error) {
+		return s.inprogressRepo.GetCheckoutLatest(ctx, nil, orderItemID)
+	})
+}
+
 func (s *orderItemProcessService) PrepareCheckInOrOut(ctx context.Context, orderID int64, orderItemID int64) (*model.OrderItemProcessInProgressDTO, error) {
 	return s.inprogressRepo.PrepareCheckInOrOut(ctx, orderItemID, &orderID)
 }
@@ -150,6 +167,45 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOut
 		if orderItemID > 0 {
 			keys = append(keys, fmt.Sprintf("order:id:%d:oid:%d:processes", *orderID, orderItemID))
 		}
+	}
+
+	if orderItemID > 0 {
+		keys = append(keys, fmt.Sprintf("order:process:checkout:latest:oid:%d", orderItemID))
+	}
+
+	keys = append(keys, fmt.Sprintf("order:process:inprogress:id%d", dto.ID))
+	if dto.ProcessID != nil {
+		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.ProcessID))
+	}
+	if dto.PrevProcessID != nil {
+		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.PrevProcessID))
+	}
+	if dto.NextProcessID != nil {
+		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.NextProcessID))
+	}
+
+	cache.InvalidateKeys(keys...)
+	cache.InvalidateKeys(kOrderAll()...)
+
+	return dto, nil
+}
+
+func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
+	dto, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
+	if err != nil {
+		return nil, err
+	}
+
+	var keys []string
+	if dto.OrderID != nil {
+		keys = append(keys, kOrderByID(*dto.OrderID), kOrderByIDAll(*dto.OrderID))
+		if dto.OrderItemID > 0 {
+			keys = append(keys, fmt.Sprintf("order:id:%d:oid:%d:processes", *dto.OrderID, dto.OrderItemID))
+		}
+	}
+
+	if dto.OrderItemID > 0 {
+		keys = append(keys, fmt.Sprintf("order:process:checkout:latest:oid:%d", dto.OrderItemID))
 	}
 
 	keys = append(keys, fmt.Sprintf("order:process:inprogress:id%d", dto.ID))
