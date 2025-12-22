@@ -156,3 +156,10 @@ func AlphabetSeq(n int) string {
 	}
 	return result
 }
+
+func SafeString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

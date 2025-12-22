@@ -61,7 +61,6 @@ type OrderItemProcessService interface {
 	CheckInOrOut(
 		ctx context.Context,
 		checkInOrOutData *model.OrderItemProcessInProgressDTO,
-		note *string,
 	) (*model.OrderItemProcessInProgressDTO, error)
 	Assign(
 		ctx context.Context,
@@ -161,9 +160,9 @@ func (s *orderItemProcessService) PrepareCheckInOrOutByCode(ctx context.Context,
 }
 
 // TODO: remove all orderID, orderItemID
-func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO, note *string) (*model.OrderItemProcessInProgressDTO, error) {
+func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, error) {
 	var err error
-	dto, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData, note)
+	dto, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
 	if err != nil {
 		return nil, err
 	}

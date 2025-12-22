@@ -4,7 +4,10 @@ import "time"
 
 type OrderItemProcessInProgressAndProcessDTO struct {
 	ID           int64      `json:"id,omitempty"`
-	Note         *string    `json:"note,omitempty"`
+	OrderID      *int64     `json:"order_id,omitempty"`
+	OrderItemID  int64      `json:"order_item_id,omitempty"`
+	CheckInNote  *string    `json:"check_in_note,omitempty"`
+	CheckOutNote *string    `json:"check_out_note,omitempty"`
 	AssignedID   *int64     `json:"assigned_id,omitempty"`
 	AssignedName *string    `json:"assigned_name,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`

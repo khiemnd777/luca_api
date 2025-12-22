@@ -162,18 +162,13 @@ func (h *OrderItemProcessHandler) CheckInOrOut(c *fiber.Ctx) error {
 
 	var (
 		checkInOrOutData *model.OrderItemProcessInProgressDTO
-		note             *string
 	)
 	if len(c.Body()) > 0 {
-		payload, err := app.ParseBody[struct {
-			CheckInOrOutData *model.OrderItemProcessInProgressDTO `json:"check_in_or_out_data"`
-			Note             *string                              `json:"note"`
-		}](c)
+		payload, err := app.ParseBody[model.OrderItemProcessInProgressDTO](c)
 		if err != nil {
 			return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 		}
-		checkInOrOutData = payload.CheckInOrOutData
-		note = payload.Note
+		checkInOrOutData = payload
 	}
 
 	if checkInOrOutData == nil {
@@ -191,7 +186,7 @@ func (h *OrderItemProcessHandler) CheckInOrOut(c *fiber.Ctx) error {
 		}
 	}
 
-	dto, err := h.svc.CheckInOrOut(c.UserContext(), checkInOrOutData, note)
+	dto, err := h.svc.CheckInOrOut(c.UserContext(), checkInOrOutData)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

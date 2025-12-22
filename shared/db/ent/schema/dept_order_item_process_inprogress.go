@@ -25,7 +25,10 @@ func (OrderItemProcessInProgress) Fields() []ent.Field {
 		field.Int64("prev_process_id").Optional().Nillable(),
 		field.Int64("next_process_id").Optional().Nillable(),
 
-		field.String("note").
+		field.String("check_in_note").
+			Optional().Nillable(),
+
+		field.String("check_out_note").
 			Optional().Nillable(),
 
 		// cache

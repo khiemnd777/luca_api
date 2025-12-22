@@ -10,7 +10,7 @@ func init() {
 	policy.Register1("orderitem_process", policy.Config1{
 		RefTable:  "order_item_processes",
 		RefIDCol:  "id",
-		RefFields: []string{"id", "process_name"},
+		RefFields: []string{"id", "process_name", "section_name", "color"},
 
 		Permissions: []string{"order.view"},
 		CachePrefix: "order:process",

@@ -301,9 +301,6 @@ func (r *RelationRepository) Search(
 		whereSQL = "WHERE " + strings.Join(whereParts, " AND ")
 	}
 
-	logger.Debug(fmt.Sprintf("[BBB] %v", whereParts))
-	logger.Debug(fmt.Sprintf("[BBB-1] %s", whereSQL))
-
 	// BUILD JOINS
 	joins := ""
 	if cfg.ExtraJoins != nil {

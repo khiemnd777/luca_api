@@ -14,7 +14,6 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -87,7 +86,6 @@ func (r *orderRepository) GetByOrderIDAndOrderItemID(ctx context.Context, orderI
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug(fmt.Sprintf("[GET] %v", latest))
 	dto.LatestOrderItem = latest
 	return dto, nil
 }
