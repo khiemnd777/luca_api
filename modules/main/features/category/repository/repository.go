@@ -2,11 +2,8 @@ package repository
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -17,6 +14,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/category"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
+	collectionutils "github.com/khiemnd777/andy_api/shared/metadata/collection"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -49,79 +47,22 @@ func NewCategoryRepository(db *generated.Client, deps *module.ModuleDeps[config.
 	}
 }
 
-func (r *categoryRepo) upsertCollection(ctx context.Context, tx *generated.Tx, entity *generated.Category, conds []customfields.ShowIfCondition) (*generated.Category, error) {
-	if len(conds) == 0 {
-		conds = []customfields.ShowIfCondition{{
-			Field: "categoryId",
-			Op:    "eq",
-			Value: entity.ID,
-		}}
-	}
-	showIf := customfields.ShowIfCondition{Any: conds}
-
-	showIfJSON, err := json.Marshal(showIf)
-	if err != nil {
-		return nil, err
-	}
-
-	collectionSlug := "category-" + strconv.Itoa(entity.ID)
-	collectionName := "Category"
-	if entity.Name != nil && *entity.Name != "" {
-		collectionName = *entity.Name
-	}
-
-	collectionGroup := "category"
-	showIfValue := sql.NullString{String: string(showIfJSON), Valid: true}
-
-	if entity.CollectionID != nil {
-		integration := true
-		_, err = r.collectionRepo.Update(ctx, *entity.CollectionID, &collectionSlug, &collectionName, &showIfValue, &integration, &collectionGroup)
-		if err != nil {
-			return nil, err
-		}
-		return entity, nil
-	}
-
-	collection, err := r.collectionRepo.Create(ctx, collectionSlug, collectionName, &showIfValue, true, &collectionGroup)
-	if err != nil {
-		return nil, err
-	}
-
-	return tx.Category.UpdateOneID(entity.ID).
-		SetCollectionID(collection.ID).
-		Save(ctx)
+var categoryTreeCfg = collectionutils.TreeConfig{
+	TableName:        "categories",
+	IDColumn:         "id",
+	ParentIDColumn:   "parent_id",
+	ShowIfFieldName:  "categoryId",
+	CollectionGroup:  "category",
+	CollectionPrefix: "category",
 }
 
-func (r *categoryRepo) collectDescendantIDs(ctx context.Context, tx *generated.Tx, parentID int) ([]int, error) {
-	queue := []int{parentID}
-	seen := map[int]struct{}{parentID: {}}
-	var ids []int
-
-	for len(queue) > 0 {
-		id := queue[0]
-		queue = queue[1:]
-
-		children, err := tx.Category.Query().
-			Where(
-				category.ParentID(id),
-				category.DeletedAtIsNil(),
-			).
-			All(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, child := range children {
-			if _, ok := seen[child.ID]; ok {
-				continue
-			}
-			seen[child.ID] = struct{}{}
-			ids = append(ids, child.ID)
-			queue = append(queue, child.ID)
-		}
+func toTreeNode(e *generated.Category) *collectionutils.TreeNode {
+	return &collectionutils.TreeNode{
+		ID:           e.ID,
+		ParentID:     e.ParentID,
+		Name:         e.Name,
+		CollectionID: e.CollectionID,
 	}
-
-	return ids, nil
 }
 
 func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
@@ -171,28 +112,35 @@ func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDT
 		return nil, err
 	}
 
-	entity, err = r.upsertCollection(ctx, tx, entity, nil)
-	if err != nil {
+	// collections
+	// Upsert collection for node
+	if err = collectionutils.UpsertCollectionForNode(
+		ctx,
+		tx,
+		categoryTreeCfg,
+		toTreeNode(entity),
+		nil,
+	); err != nil {
 		return nil, err
 	}
 
-	if err = r.upsertAncestorCollections(ctx, tx, entity); err != nil {
+	// Upsert collections for ANCESTORS
+	if err = collectionutils.UpsertAncestorCollections(
+		ctx,
+		tx,
+		categoryTreeCfg,
+		entity.ID,
+	); err != nil {
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
+	out := mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
 
-	err = relation.Upsert1(ctx, tx, "category", entity, &input.DTO, dto)
-	if err != nil {
+	if _, err = relation.UpsertM2M(ctx, tx, "categories_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 
-	_, err = relation.UpsertM2M(ctx, tx, "category", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	return dto, nil
+	return out, nil
 }
 
 func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
@@ -289,57 +237,47 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		}
 	}
 
-	var conds []customfields.ShowIfCondition
-	if entity.ParentID == nil {
-		descendants, err := r.collectDescendantIDs(ctx, tx, entity.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		conds = make([]customfields.ShowIfCondition, 0, len(descendants)+1)
-		conds = append(conds, customfields.ShowIfCondition{
-			Field: "categoryId",
-			Op:    "eq",
-			Value: entity.ID,
-		})
-		for _, id := range descendants {
-			conds = append(conds, customfields.ShowIfCondition{
-				Field: "categoryId",
-				Op:    "eq",
-				Value: id,
-			})
-		}
-	}
-
-	entity, err = r.upsertCollection(ctx, tx, entity, conds)
-	if err != nil {
+	// collections
+	// upsert collection for THIS NODE
+	if err = collectionutils.UpsertCollectionForNode(
+		ctx,
+		tx,
+		categoryTreeCfg,
+		toTreeNode(entity),
+		nil,
+	); err != nil {
 		return nil, err
 	}
 
-	if err = r.upsertAncestorCollections(ctx, tx, entity); err != nil {
+	// upsert collections for ANCESTORS (current branch)
+	if err = collectionutils.UpsertAncestorCollections(
+		ctx,
+		tx,
+		categoryTreeCfg,
+		entity.ID,
+	); err != nil {
 		return nil, err
 	}
 
+	// if parent changed → upsert ancestors of OLD branch
 	if parentChanged && prevCategory.Level > 0 && prevCategory.ParentID != nil {
-		prevParentID := *prevCategory.ParentID
-		if err = r.upsertAncestorCollections(ctx, tx, &generated.Category{ParentID: &prevParentID}); err != nil {
+		if err = collectionutils.UpsertAncestorCollections(
+			ctx,
+			tx,
+			categoryTreeCfg,
+			*prevCategory.ParentID,
+		); err != nil {
 			return nil, err
 		}
 	}
 
-	dto = mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
+	out := mapper.MapAs[*generated.Category, *model.CategoryDTO](entity)
 
-	err = relation.Upsert1(ctx, tx, "category", entity, &input.DTO, dto)
-	if err != nil {
+	if _, err = relation.UpsertM2M(ctx, tx, "categories_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 
-	_, err = relation.UpsertM2M(ctx, tx, "category", entity, input.DTO, dto)
-	if err != nil {
-		return nil, err
-	}
-
-	return dto, nil
+	return out, nil
 }
 
 func (r *categoryRepo) GetByID(ctx context.Context, id int) (*model.CategoryDTO, error) {
@@ -448,7 +386,12 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
 		return err
 	}
 
-	if err = r.upsertAncestorCollections(ctx, tx, entity); err != nil {
+	if err = collectionutils.UpsertAncestorCollections(
+		ctx,
+		tx,
+		categoryTreeCfg,
+		entity.ID,
+	); err != nil {
 		return err
 	}
 
@@ -468,7 +411,12 @@ type categoryLineage struct {
 }
 
 func (r *categoryRepo) updateDescendantsLineage(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
-	ids, err := r.collectDescendantIDs(ctx, tx, entity.ID)
+	ids, err := collectionutils.CollectDescendantIDs(
+		ctx,
+		tx,
+		categoryTreeCfg,
+		entity.ID,
+	)
 	if err != nil {
 		return err
 	}
@@ -610,59 +558,6 @@ func deriveChildLineage(parent *generated.Category, parentLineage categoryLineag
 		lv3ID:   lv3ID,
 		lv3Name: lv3Name,
 	}
-}
-
-func (r *categoryRepo) upsertAncestorCollections(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
-	if entity.ParentID == nil {
-		return nil
-	}
-
-	visited := map[int]bool{}
-	parentID := entity.ParentID
-
-	for parentID != nil {
-		if visited[*parentID] {
-			return fmt.Errorf("category cycle detected at ID %d", *parentID)
-		}
-		visited[*parentID] = true
-
-		parent, err := tx.Category.Query().
-			Where(
-				category.ID(*parentID),
-				category.DeletedAtIsNil(),
-			).
-			Only(ctx)
-		if err != nil {
-			return err
-		}
-
-		descendants, err := r.collectDescendantIDs(ctx, tx, parent.ID)
-		if err != nil {
-			return err
-		}
-
-		conds := make([]customfields.ShowIfCondition, 0, len(descendants)+1)
-		conds = append(conds, customfields.ShowIfCondition{
-			Field: "categoryId",
-			Op:    "eq",
-			Value: parent.ID,
-		})
-		for _, id := range descendants {
-			conds = append(conds, customfields.ShowIfCondition{
-				Field: "categoryId",
-				Op:    "eq",
-				Value: id,
-			})
-		}
-
-		if _, err = r.upsertCollection(ctx, tx, parent, conds); err != nil {
-			return err
-		}
-
-		parentID = parent.ParentID
-	}
-
-	return nil
 }
 
 func orderCategoriesTree(entities []*generated.Category) []*generated.Category {

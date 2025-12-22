@@ -23,7 +23,73 @@ func NewOrderItemHandler(svc service.OrderItemService, deps *module.ModuleDeps[c
 }
 
 func (h *OrderItemHandler) RegisterRoutes(router fiber.Router) {
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/products-materials", h.ProductsAndMaterials)
+	app.RouterPost(router, "/:dept_id<int>/order/item/calculate-total-price", h.CalculateTotalPrice)
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/sync-price", h.SyncPrice)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/list", h.Historical)
+}
+
+func (h *OrderItemHandler) ProductsAndMaterials(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	res, err := h.svc.GetAllProductsAndMaterialsByOrderID(c.UserContext(), int64(orderID))
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemHandler) CalculateTotalPrice(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	type payload struct {
+		Prices     []float64 `json:"prices"`
+		Quantities []int     `json:"quantities"`
+	}
+
+	req, err := app.ParseBody[payload](c)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+	}
+
+	total := h.svc.CalculateTotalPrice(req.Prices, req.Quantities)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"total_price": total,
+	})
+}
+
+func (h *OrderItemHandler) SyncPrice(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	orderItemID, _ := utils.GetParamAsInt(c, "order_item_id")
+	if orderItemID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order item id")
+	}
+
+	total, err := h.svc.SyncPrice(c.UserContext(), int64(orderItemID))
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"total_price": total,
+	})
 }
 
 func (h *OrderItemHandler) Historical(c *fiber.Ctx) error {

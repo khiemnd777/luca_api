@@ -11,12 +11,16 @@ type OrderItemDTO struct {
 	CreatedAt    time.Time      `json:"created_at,omitempty"`
 	UpdatedAt    time.Time      `json:"updated_at,omitempty"`
 	// order
-	Code         *string `json:"code,omitempty"`
-	CodeOriginal *string `json:"code_original,omitempty"`
-	RemakeCount  int     `json:"remake_count,omitempty"`
-	// product
-	ProductID   int     `json:"product_id,omitempty"`
-	ProductName *string `json:"product_name,omitempty"`
+	Code         *string  `json:"code,omitempty"`
+	CodeOriginal *string  `json:"code_original,omitempty"`
+	QrCode       *string  `json:"qr_code,omitempty"`
+	RemakeCount  int      `json:"remake_count,omitempty"`
+	TotalPrice   *float64 `json:"total_price,omitempty"`
+	// products
+	Products []*OrderItemProductDTO `json:"products,omitempty"`
+	// materials
+	ConsumableMaterials []*OrderItemMaterialDTO `json:"consumable_materials,omitempty"`
+	LoanerMaterials     []*OrderItemMaterialDTO `json:"loaner_materials,omitempty"`
 	// processes
 	OrderItemProcesses []*OrderItemProcessDTO `json:"order_item_processes,omitempty"`
 }

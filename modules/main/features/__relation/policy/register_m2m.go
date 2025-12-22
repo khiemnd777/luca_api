@@ -19,6 +19,7 @@ var (
 	mu                       sync.RWMutex
 	registry                 = map[string]ConfigM2M{}
 	displayOrderColumnExists sync.Map
+	columnExists             sync.Map
 )
 
 func RegisterM2M(key string, cfg ConfigM2M) {
@@ -108,6 +109,10 @@ func UpsertM2M(
 	refSing := utils.Singular(refTable)
 
 	mainNamesCol := refSing + "_names"
+	hasMainNamesCol, err := hasColumn(ctx, tx, mainTable, mainNamesCol)
+	if err != nil {
+		return nil, fmt.Errorf("relation.Upsert(%s): check main names column: %w", key, err)
+	}
 
 	hasRefNameColumn := cfg.RefNameColumn != ""
 
@@ -203,67 +208,78 @@ func UpsertM2M(
 	var namesStr string
 	names := []string{}
 
-	if len(ids) > 0 {
-		updateSQL := fmt.Sprintf(`
-			UPDATE %s m
-			SET %s = COALESCE((
-				SELECT string_agg(r.%s, '|' ORDER BY t.ord)
-				FROM unnest($2::int[]) WITH ORDINALITY AS t(%s,ord)
-				JOIN %s r ON r.%s = t.%s
-			), '')
-			WHERE m.%s = $1
-			RETURNING %s
-		`,
-			mainTable,    // materials
-			mainNamesCol, // supplier_names
-			refNameCol,   // name
-			refIDCol,     // id
-			refTable,     // suppliers
-			refIDCol,     // id
-			refIDCol,     // id
-			mainIDCol,    // id
-			mainNamesCol, // supplier_names
-		)
+	needNames := hasMainNamesCol || cfg.DTOPropDisplayNames != ""
 
-		rows, err := tx.QueryContext(ctx, updateSQL, mainID, pq.Array(ids))
-		if err != nil {
-			return nil, fmt.Errorf("relation.Upsert(%s): update+return names: %w", key, err)
-		}
-		defer rows.Close()
+	if needNames {
+		if len(ids) > 0 {
+			if hasMainNamesCol {
+				updateSQL := fmt.Sprintf(`
+					UPDATE %s m
+					SET %s = COALESCE((
+						SELECT string_agg(r.%s, '|' ORDER BY t.ord)
+						FROM unnest($2::int[]) WITH ORDINALITY AS t(%s,ord)
+						JOIN %s r ON r.%s = t.%s
+					), '')
+					WHERE m.%s = $1
+					RETURNING %s
+				`,
+					mainTable,    // materials
+					mainNamesCol, // supplier_names
+					refNameCol,   // name
+					refIDCol,     // id
+					refTable,     // suppliers
+					refIDCol,     // id
+					refIDCol,     // id
+					mainIDCol,    // id
+					mainNamesCol, // supplier_names
+				)
 
-		if rows.Next() {
-			if err := rows.Scan(&namesStr); err != nil {
-				return nil, fmt.Errorf("relation.Upsert(%s): scan namesStr: %w", key, err)
+				rows, err := tx.QueryContext(ctx, updateSQL, mainID, pq.Array(ids))
+				if err != nil {
+					return nil, fmt.Errorf("relation.Upsert(%s): update+return names: %w", key, err)
+				}
+				defer rows.Close()
+
+				if rows.Next() {
+					if err := rows.Scan(&namesStr); err != nil {
+						return nil, fmt.Errorf("relation.Upsert(%s): scan namesStr: %w", key, err)
+					}
+				}
+				if err := rows.Err(); err != nil {
+					return nil, fmt.Errorf("relation.Upsert(%s): rows error: %w", key, err)
+				}
+			} else {
+				namesStr, err = fetchOrderedNames(ctx, tx, refTable, refIDCol, refNameCol, ids)
+				if err != nil {
+					return nil, fmt.Errorf("relation.Upsert(%s): fetch ordered names: %w", key, err)
+				}
 			}
-		}
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("relation.Upsert(%s): rows error: %w", key, err)
-		}
-	} else {
-		// Không có ids -> set rỗng
-		updateSQL := fmt.Sprintf(
-			`UPDATE %s SET %s = '' WHERE %s = $1 RETURNING %s`,
-			mainTable,
-			mainNamesCol,
-			mainIDCol,
-			mainNamesCol,
-		)
+		} else if hasMainNamesCol {
+			// Không có ids -> set rỗng
+			updateSQL := fmt.Sprintf(
+				`UPDATE %s SET %s = '' WHERE %s = $1 RETURNING %s`,
+				mainTable,
+				mainNamesCol,
+				mainIDCol,
+				mainNamesCol,
+			)
 
-		logger.Debug(fmt.Sprintf("[REL] update empty names sql: %s", updateSQL))
+			logger.Debug(fmt.Sprintf("[REL] update empty names sql: %s", updateSQL))
 
-		rows, err := tx.QueryContext(ctx, updateSQL, mainID)
-		if err != nil {
-			return nil, fmt.Errorf("relation.Upsert(%s): update empty names: %w", key, err)
-		}
-		defer rows.Close()
-
-		if rows.Next() {
-			if err := rows.Scan(&namesStr); err != nil {
-				return nil, fmt.Errorf("relation.Upsert(%s): scan empty namesStr: %w", key, err)
+			rows, err := tx.QueryContext(ctx, updateSQL, mainID)
+			if err != nil {
+				return nil, fmt.Errorf("relation.Upsert(%s): update empty names: %w", key, err)
 			}
-		}
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("relation.Upsert(%s): rows error (empty): %w", key, err)
+			defer rows.Close()
+
+			if rows.Next() {
+				if err := rows.Scan(&namesStr); err != nil {
+					return nil, fmt.Errorf("relation.Upsert(%s): scan empty namesStr: %w", key, err)
+				}
+			}
+			if err := rows.Err(); err != nil {
+				return nil, fmt.Errorf("relation.Upsert(%s): rows error (empty): %w", key, err)
+			}
 		}
 	}
 
@@ -365,6 +381,43 @@ func hasDisplayOrderColumn(ctx context.Context, tx *generated.Tx, table string) 
 	return exists, nil
 }
 
+func hasColumn(ctx context.Context, tx *generated.Tx, table, column string) (bool, error) {
+	key := table + ":" + column
+	if val, ok := columnExists.Load(key); ok {
+		return val.(bool), nil
+	}
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_schema = current_schema()
+			AND table_name = $1
+			AND column_name = $2
+		)
+	`, table, column)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	var exists bool
+	if rows.Next() {
+		if err := rows.Scan(&exists); err != nil {
+			return false, err
+		}
+	} else {
+		return false, fmt.Errorf("no rows returned for table %s.%s", table, column)
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+
+	columnExists.Store(key, exists)
+	return exists, nil
+}
+
 func fetchExistingRefIDs(ctx context.Context, tx *generated.Tx, table, leftCol, rightCol string, mainID int) ([]int, error) {
 	query := fmt.Sprintf(`SELECT %s FROM %s WHERE %s = $1`, rightCol, table, leftCol)
 
@@ -435,6 +488,41 @@ func updateRefValueCacheColumns(
 	}
 
 	return nil
+}
+
+func fetchOrderedNames(ctx context.Context, tx *generated.Tx, refTable, refIDCol, refNameCol string, ids []int) (string, error) {
+	if len(ids) == 0 {
+		return "", nil
+	}
+
+	query := fmt.Sprintf(`
+		SELECT COALESCE(string_agg(r.%s, '|' ORDER BY t.ord), '')
+		FROM unnest($1::int[]) WITH ORDINALITY AS t(%s,ord)
+		JOIN %s r ON r.%s = t.%s
+	`, refNameCol, refIDCol, refTable, refIDCol, refIDCol)
+
+	var namesStr string
+	rows, err := tx.QueryContext(ctx, query, pq.Array(ids))
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return "", err
+		}
+		return "", sql.ErrNoRows
+	}
+
+	if err := rows.Scan(&namesStr); err != nil {
+		return "", err
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+
+	return namesStr, nil
 }
 
 // -- helpers

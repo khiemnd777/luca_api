@@ -27,6 +27,7 @@ func NewProductHandler(svc service.ProductService, deps *module.ModuleDeps[confi
 
 func (h *ProductHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/product/list", h.List)
+	app.RouterGet(router, "/:dept_id<int>/product/:product_id<int>/variant", h.VariantList)
 	app.RouterGet(router, "/:dept_id<int>/product/search", h.Search)
 	app.RouterGet(router, "/:dept_id<int>/product/:id<int>", h.GetByID)
 	app.RouterPost(router, "/:dept_id<int>/product", h.Create)
@@ -40,6 +41,19 @@ func (h *ProductHandler) List(c *fiber.Ctx) error {
 	}
 	q := table.ParseTableQuery(c, 20)
 	res, err := h.svc.List(c.UserContext(), q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *ProductHandler) VariantList(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "product.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	productId, _ := utils.GetParamAsInt(c, "product_id")
+	q := table.ParseTableQuery(c, 20)
+	res, err := h.svc.VariantList(c.UserContext(), productId, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -64,7 +78,7 @@ func (h *ProductHandler) GetByID(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
 	dto, err := h.svc.GetByID(c.UserContext(), id)
@@ -97,7 +111,7 @@ func (h *ProductHandler) Update(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
 	payload, err := app.ParseBody[model.ProductUpsertDTO](c)
@@ -121,10 +135,10 @@ func (h *ProductHandler) Delete(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 	if err := h.svc.Delete(c.UserContext(), id); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.SendStatus(fiber.StatusNoContent)
+	return c.SendStatus(fiber.StatusOK)
 }

@@ -59,11 +59,11 @@ func evaluateShowIf(result *CollectionWithFields, entityData *map[string]any) *C
 	return result
 }
 
-func (r *CollectionRepository) list(ctx context.Context, query string, limit, offset int, withFields, table, form bool, integration bool, group *string) ([]CollectionWithFields, int, error) {
+func (r *CollectionRepository) list(ctx context.Context, query string, limit, offset int, withFields bool, tag *string, table, form bool, integration bool, group *string) ([]CollectionWithFields, int, error) {
 	list := []CollectionWithFields{}
 	var args []any
 
-	conditions := []string{fmt.Sprintf("integration = $%d", len(args)+1)}
+	conditions := []string{"deleted_at IS NULL", fmt.Sprintf("integration = $%d", len(args)+1)}
 	args = append(args, integration)
 
 	if group != nil {
@@ -129,7 +129,7 @@ func (r *CollectionRepository) list(ctx context.Context, query string, limit, of
 		list[i].FieldsCount = counts[list[i].ID]
 
 		if withFields {
-			fields, err := r.GetFieldsByCollectionID(ctx, list[i].ID, table, form, true)
+			fields, err := r.GetFieldsByCollectionID(ctx, list[i].ID, tag, table, form, true)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -140,17 +140,17 @@ func (r *CollectionRepository) list(ctx context.Context, query string, limit, of
 	return list, total, nil
 }
 
-func (r *CollectionRepository) List(ctx context.Context, query string, limit, offset int, withFields, table, form bool) ([]CollectionWithFields, int, error) {
-	return r.list(ctx, query, limit, offset, withFields, table, form, false, nil)
+func (r *CollectionRepository) List(ctx context.Context, query string, limit, offset int, withFields bool, tag *string, table, form bool) ([]CollectionWithFields, int, error) {
+	return r.list(ctx, query, limit, offset, withFields, tag, table, form, false, nil)
 }
 
-func (r *CollectionRepository) ListIntegration(ctx context.Context, group, query string, limit, offset int, withFields, table, form bool) ([]CollectionWithFields, int, error) {
-	return r.list(ctx, query, limit, offset, withFields, table, form, true, &group)
+func (r *CollectionRepository) ListIntegration(ctx context.Context, group, query string, limit, offset int, withFields bool, tag *string, table, form bool) ([]CollectionWithFields, int, error) {
+	return r.list(ctx, query, limit, offset, withFields, tag, table, form, true, &group)
 }
 
-func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
+func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withFields bool, tag *string, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE slug = $1
+		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE slug = $1 AND deleted_at IS NULL
 	`, slug)
 
 	var c model.Collection
@@ -163,7 +163,7 @@ func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withF
 
 	result := &CollectionWithFields{CollectionDTO: *coldto}
 	if withFields {
-		fields, _ := r.GetFieldsByCollectionID(ctx, c.ID, table, form, showHidden)
+		fields, _ := r.GetFieldsByCollectionID(ctx, c.ID, tag, table, form, showHidden)
 		logger.Debug("fields from slug", "slug", slug, "fields", fields)
 		result.Fields = fields
 
@@ -175,9 +175,9 @@ func (r *CollectionRepository) GetBySlug(ctx context.Context, slug string, withF
 	return result, nil
 }
 
-func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
+func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields bool, tag *string, table, form, showHidden bool, entityData *map[string]any) (*CollectionWithFields, error) {
 	row := r.DB.QueryRowContext(ctx, `
-		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE id = $1
+		SELECT id, slug, name, show_if, integration, "group" FROM collections WHERE id = $1 AND deleted_at IS NULL
 	`, id)
 	var c model.Collection
 	if err := row.Scan(&c.ID, &c.Slug, &c.Name, &c.ShowIf, &c.Integration, &c.Group); err != nil {
@@ -189,7 +189,7 @@ func (r *CollectionRepository) GetByID(ctx context.Context, id int, withFields, 
 
 	result := &CollectionWithFields{CollectionDTO: *coldto}
 	if withFields {
-		fields, _ := r.GetFieldsByCollectionID(ctx, id, table, form, showHidden)
+		fields, _ := r.GetFieldsByCollectionID(ctx, id, tag, table, form, showHidden)
 		result.Fields = fields
 	}
 
@@ -271,7 +271,7 @@ func (r *CollectionRepository) Update(
 	query := fmt.Sprintf(`
 		UPDATE collections
 		SET %s
-		WHERE id=$%d
+		WHERE id=$%d AND deleted_at IS NULL
 		RETURNING id, slug, name, show_if, integration, "group"
 	`, strings.Join(setParts, ", "), wherePos)
 
@@ -286,12 +286,12 @@ func (r *CollectionRepository) Update(
 }
 
 func (r *CollectionRepository) Delete(ctx context.Context, id int) error {
-	_, err := r.DB.ExecContext(ctx, `DELETE FROM collections WHERE id=$1`, id)
+	_, err := r.DB.ExecContext(ctx, `UPDATE collections SET deleted_at = NOW() WHERE id=$1 AND deleted_at IS NULL`, id)
 	return err
 }
 
 func (r *CollectionRepository) SlugExists(ctx context.Context, slug string, excludeID *int) (bool, error) {
-	q := "SELECT COUNT(*) FROM collections WHERE slug=$1"
+	q := "SELECT COUNT(*) FROM collections WHERE slug=$1 AND deleted_at IS NULL"
 	args := []any{slug}
 	if excludeID != nil {
 		q += fmt.Sprintf(" AND id <> $%d", len(args)+1)
@@ -304,8 +304,8 @@ func (r *CollectionRepository) SlugExists(ctx context.Context, slug string, excl
 	return cnt > 0, nil
 }
 
-func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int, table, form, showHidden bool) ([]*model.FieldDTO, error) {
-	rows, err := r.DB.QueryContext(ctx, `
+func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, collectionID int, tag *string, table, form, showHidden bool) ([]*model.FieldDTO, error) {
+	query := `
 		SELECT 
 			id, 
 			collection_id, 
@@ -313,7 +313,8 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 			label, 
 			type, 
 			required, 
-			"unique", 
+			"unique",
+			tag, 
 			"table", 
 			form, 
 			search,
@@ -326,9 +327,17 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 		WHERE collection_id = $1 
 			AND ($2::bool IS FALSE OR "table" = TRUE)
 			AND ($3::bool IS FALSE OR form = TRUE)
-			AND ($4::bool IS TRUE OR visibility IS DISTINCT FROM 'hidden')
-		ORDER BY order_index ASC
-	`, collectionID, table, form, showHidden)
+			AND ($4::bool IS TRUE OR visibility IS DISTINCT FROM 'hidden')`
+
+	args := []any{collectionID, table, form, showHidden}
+	if tag != nil {
+		query += " AND tag = $5"
+		args = append(args, *tag)
+	}
+
+	query += " ORDER BY order_index ASC"
+
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -345,6 +354,7 @@ func (r *CollectionRepository) GetFieldsByCollectionID(ctx context.Context, coll
 			&f.Type,
 			&f.Required,
 			&f.Unique,
+			&f.Tag,
 			&f.Table,
 			&f.Form,
 			&f.Search,

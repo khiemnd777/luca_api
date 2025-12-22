@@ -23,6 +23,7 @@ type ProductService interface {
 	Update(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
 	GetByID(ctx context.Context, id int) (*model.ProductDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
+	VariantList(ctx context.Context, templateID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProductDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -66,6 +67,14 @@ func kProductList(q table.TableQuery) string {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("product:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kVariantProductList(templateID int, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("product:list:vid:%d:l%d:p%d:o%s:d%s", templateID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kProductSearch(q dbutils.SearchQuery) string {
@@ -157,6 +166,28 @@ func (s *productService) List(ctx context.Context, q table.TableQuery) (table.Ta
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
 		res, e := s.repo.List(ctx, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
+// ----------------------------------------------------------------------------
+// Variant List
+// ----------------------------------------------------------------------------
+
+func (s *productService) VariantList(ctx context.Context, templateID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error) {
+	type boxed = table.TableListResult[model.ProductDTO]
+	key := kVariantProductList(templateID, query)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.VariantList(ctx, templateID, query)
 		if e != nil {
 			return nil, e
 		}

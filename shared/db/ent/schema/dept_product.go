@@ -23,9 +23,22 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		// base product/template
+		field.Bool("is_template").Default(true),
+
+		field.Int("template_id").
+			Optional().
+			Nillable(),
+
+		field.Int("collection_id").
+			Optional().
+			Nillable(),
+
+		// activated
 		field.Bool("active").
 			Default(true),
 
+		// custom fields
 		field.JSON("custom_fields", map[string]any{}).
 			Optional().
 			Default(map[string]any{}),
@@ -63,6 +76,7 @@ func (Product) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("processes", ProductProcess.Type),
 		edge.To("categories", CategoryProduct.Type),
+		edge.To("order_items", OrderItemProduct.Type),
 	}
 }
 

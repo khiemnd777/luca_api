@@ -32,6 +32,7 @@ type Field struct {
 	Type           string          `json:"type"`
 	Required       bool            `json:"required"`
 	Unique         bool            `json:"unique"`
+	Tag            *string         `json:"tag"`
 	Table          bool            `json:"table"`
 	Form           bool            `json:"form"`
 	Search         bool            `json:"search"`
@@ -51,6 +52,7 @@ type FieldDTO struct {
 	Type           string  `json:"type"`
 	Required       bool    `json:"required"`
 	Unique         bool    `json:"unique"`
+	Tag            *string `json:"tag"`
 	Table          bool    `json:"table"`
 	Form           bool    `json:"form"`
 	Search         bool    `json:"search"`
@@ -68,6 +70,7 @@ type FieldInput struct {
 	Type         string           `json:"type"`
 	Required     bool             `json:"required"`
 	Unique       bool             `json:"unique"`
+	Tag          *string          `json:"tag"`
 	Table        bool             `json:"table"`
 	Form         bool             `json:"form"`
 	Search       bool             `json:"search"`

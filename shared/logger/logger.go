@@ -24,10 +24,20 @@ func Init() {
 	if env == "" {
 		env = "development"
 	}
+
 	if env != "development" {
 		useZap = true
+
+		cfg := zap.NewProductionConfig()
+
+		// TẮT stacktrace mặc định của zap (vì bạn đã log tay)
+		cfg.DisableStacktrace = true
+
 		var err error
-		zapLogger, err = zap.NewProduction()
+		zapLogger, err = cfg.Build(
+			zap.AddCaller(),
+			zap.AddCallerSkip(2),
+		)
 		if err != nil {
 			panic(err)
 		}

@@ -10,6 +10,8 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemmaterial"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemproduct"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
@@ -23,6 +25,9 @@ type OrderItemRepository interface {
 	IsLatestIfOrderID(ctx context.Context, orderID, orderItemID int64) (bool, error)
 	GetLatestByOrderID(ctx context.Context, orderID int64) (*model.OrderItemDTO, error)
 	GetHistoricalByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) ([]*model.OrderItemHistoricalDTO, error)
+	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
+	GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error)
+	GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error)
 	// -- general functions
 	Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
 	Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
@@ -33,19 +38,26 @@ type OrderItemRepository interface {
 }
 
 type orderItemRepository struct {
-	db                   *generated.Client
-	deps                 *module.ModuleDeps[config.ModuleConfig]
-	cfMgr                *customfields.Manager
-	orderItemProcessRepo OrderItemProcessRepository
+	db                    *generated.Client
+	deps                  *module.ModuleDeps[config.ModuleConfig]
+	cfMgr                 *customfields.Manager
+	orderItemProcessRepo  OrderItemProcessRepository
+	orderItemProductRepo  OrderItemProductRepository
+	orderItemMaterialRepo OrderItemMaterialRepository
 }
 
 func NewOrderItemRepository(db *generated.Client, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) OrderItemRepository {
 	orderItemProcessRepo := NewOrderItemProcessRepository(db, deps, cfMgr)
+	orderItemProductRepo := NewOrderItemProductRepository(db)
+	orderItemMaterialRepo := NewOrderItemMaterialRepository(db)
+
 	return &orderItemRepository{
-		db:                   db,
-		deps:                 deps,
-		cfMgr:                cfMgr,
-		orderItemProcessRepo: orderItemProcessRepo,
+		db:                    db,
+		deps:                  deps,
+		cfMgr:                 cfMgr,
+		orderItemProcessRepo:  orderItemProcessRepo,
+		orderItemProductRepo:  orderItemProductRepo,
+		orderItemMaterialRepo: orderItemMaterialRepo,
 	}
 }
 
@@ -106,6 +118,19 @@ func (r *orderItemRepository) GetLatestByOrderID(ctx context.Context, orderID in
 	}
 
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](itemEnt)
+
+	// Products
+	if err := r.orderItemProductRepo.Load(ctx, dto); err != nil {
+		return nil, err
+	}
+
+	// Materials
+	if err := r.orderItemMaterialRepo.LoadConsumable(ctx, dto); err != nil {
+		return nil, err
+	}
+	if err := r.orderItemMaterialRepo.LoadLoaner(ctx, dto); err != nil {
+		return nil, err
+	}
 	return dto, nil
 }
 
@@ -157,6 +182,102 @@ func (r *orderItemRepository) GetHistoricalByOrderIDAndOrderItemID(
 	return out, nil
 }
 
+func (r *orderItemRepository) GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error) {
+	productTotal, err := r.orderItemProductRepo.GetTotalPriceByOrderItemID(ctx, orderItemID)
+	if err != nil {
+		return 0, nil
+	}
+
+	consumableMaterialTotal, err := r.orderItemMaterialRepo.GetConsumableTotalPriceByOrderItemID(ctx, orderItemID)
+	if err != nil {
+		return 0, err
+	}
+
+	total := productTotal + consumableMaterialTotal
+	return total, nil
+}
+
+func (r *orderItemRepository) GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error) {
+	productTotal, err := r.orderItemProductRepo.GetTotalPriceByOrderID(ctx, orderID)
+	if err != nil {
+		return 0, nil
+	}
+	consumableMaterialTotal, err := r.orderItemMaterialRepo.GetConsumableTotalPriceByOrderID(ctx, orderID)
+	if err != nil {
+		return 0, nil
+	}
+	total := productTotal + consumableMaterialTotal
+	return total, nil
+}
+
+func (r *orderItemRepository) GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error) {
+	items, err := r.db.OrderItem.Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Select(orderitem.FieldID, orderitem.FieldOrderID).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+
+	out := make(model.OrderProductsAndMaterialsDTO, len(items))
+	itemIndex := make(map[int64]*model.OrderItemWithProductsAndMaterialsDTO, len(items))
+	for i, it := range items {
+		dto := model.OrderItemWithProductsAndMaterialsDTO{
+			ID:      it.ID,
+			OrderID: it.OrderID,
+		}
+		out[i] = dto
+		itemIndex[it.ID] = &out[i]
+	}
+
+	// Products
+	products, err := r.db.OrderItemProduct.Query().
+		Where(
+			orderitemproduct.OrderIDEQ(orderID),
+			orderitemproduct.HasOrderItemWith(orderitem.DeletedAtIsNil()),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, product := range products {
+		if dto, ok := itemIndex[product.OrderItemID]; ok {
+			dto.Products = append(dto.Products, mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](product))
+		}
+	}
+
+	// Materials
+	materials, err := r.db.OrderItemMaterial.Query().
+		Where(
+			orderitemmaterial.OrderIDEQ(orderID),
+			orderitemmaterial.HasOrderItemWith(orderitem.DeletedAtIsNil()),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, material := range materials {
+		dto, ok := itemIndex[material.OrderItemID]
+		if !ok {
+			continue
+		}
+		switch material.Type {
+		case utils.Ptr("consumable"):
+			dto.ConsumableMaterials = append(dto.ConsumableMaterials, mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](material))
+		case utils.Ptr("loaner"):
+			dto.LoanerMaterials = append(dto.LoanerMaterials, mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](material))
+		}
+	}
+
+	return out, nil
+}
+
 // -- helpers
 func (r *orderItemRepository) getNextItemSeq(ctx context.Context, orderID int64) (int, error) {
 	count, err := r.db.OrderItem.
@@ -172,54 +293,91 @@ func (r *orderItemRepository) getNextItemSeq(ctx context.Context, orderID int64)
 	return count + 1, nil
 }
 
+func (r *orderItemRepository) applyTotalPrice(dto *model.OrderItemDTO, totalPrices ...*float64) {
+	if dto == nil {
+		return
+	}
+
+	if len(totalPrices) == 0 {
+		dto.TotalPrice = nil
+		return
+	}
+
+	var sum float64
+	for _, p := range totalPrices {
+		if p == nil {
+			continue
+		}
+		sum += *p
+	}
+
+	dto.TotalPrice = &sum
+}
+
 // -- general functions
 func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
-	dto := &input.DTO
+	in := &input.DTO
+
+	products := r.orderItemProductRepo.CollectProducts(in)
+	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
+	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(in)
+	totalPriceConsumableMaterial := r.orderItemMaterialRepo.CalculateConsumableTotalPrice(consumableMaterials)
+	r.applyTotalPrice(in, totalPriceProduct, totalPriceConsumableMaterial)
 
 	// order item - ParentItemID + RemakeCount
-	prev, errLatest := r.GetLatestByOrderID(ctx, dto.OrderID)
+	prev, errLatest := r.GetLatestByOrderID(ctx, in.OrderID)
 	if errLatest == nil && prev != nil {
-		dto.ParentItemID = &prev.ID
-		dto.RemakeCount = prev.RemakeCount + 1
+		in.ParentItemID = &prev.ID
+		in.RemakeCount = prev.RemakeCount + 1
 	} else {
-		dto.ParentItemID = nil
-		dto.RemakeCount = 0
+		in.ParentItemID = nil
+		in.RemakeCount = 0
 	}
 
 	// order item - code
-	if dto.Code == nil || *dto.Code == "" {
-		if dto.RemakeCount > 0 {
-			seq, errSeq := r.getNextItemSeq(ctx, dto.OrderID)
+	if in.Code == nil || *in.Code == "" {
+		if in.RemakeCount > 0 {
+			seq, errSeq := r.getNextItemSeq(ctx, in.OrderID)
 			if errSeq != nil {
 				return nil, errSeq
 			}
 
 			alpha := utils.AlphabetSeq(seq)
 
-			code := fmt.Sprintf("%s%s", alpha, *dto.CodeOriginal)
-			dto.Code = &code
+			code := fmt.Sprintf("%s%s", alpha, *in.CodeOriginal)
+			in.Code = &code
 		} else {
-			dto.Code = dto.CodeOriginal
+			in.Code = in.CodeOriginal
 		}
 	}
 
-	q := tx.OrderItem.Create().
-		SetCode(*dto.Code)
-	if dto.ParentItemID != nil {
-		q.SetParentItemID(*dto.ParentItemID)
-	}
-	q.SetRemakeCount(dto.RemakeCount).
-		SetOrderID(dto.OrderID).
-		SetNillableCodeOriginal(dto.CodeOriginal)
+	// qr code
+	qrCode := utils.GenerateQRCodeString(in.Code)
 
-	q.SetNillableProductID(&dto.ProductID).
-		SetNillableProductName(dto.ProductName)
+	q := tx.OrderItem.Create().
+		SetCode(*in.Code).
+		SetNillableQrCode(qrCode)
+
+	if in.ParentItemID != nil {
+		q.SetParentItemID(*in.ParentItemID)
+	}
+
+	q.SetRemakeCount(in.RemakeCount).
+		SetOrderID(in.OrderID).
+		SetNillableCodeOriginal(in.CodeOriginal).
+		SetNillableTotalPrice(in.TotalPrice)
+
+	// metadata
+	// new order is as `received`
+	cf := maps.Clone(in.CustomFields)
+	cf["status"] = "received"
+	in.CustomFields = cf
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err := customfields.PrepareCustomFields(ctx,
 			r.cfMgr,
 			*input.Collections,
-			dto.CustomFields,
+			in.CustomFields,
 			q,
 			false,
 		)
@@ -233,22 +391,67 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	out := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+
+	// Products
+	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
+	if err != nil {
+		return nil, err
+	}
+	out.Products = createdProducts
+
+	// Consumable Materials
+	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumable(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
+	if err != nil {
+		return nil, err
+	}
+	out.ConsumableMaterials = createdConsumableMaterials
+
+	// Loaner Materials
+	loanerMaterials := r.orderItemMaterialRepo.CollectLoanerMaterials(in)
+	loanerMaterials = r.orderItemMaterialRepo.PrepareLoanerForCreate(loanerMaterials)
+	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
+	if err != nil {
+		return nil, err
+	}
+	out.LoanerMaterials = createdLoanerMaterials
 
 	// processes
-	if entity.ProductID > 0 {
+	if len(products) > 0 {
 		priority := utils.SafeGetString(entity.CustomFields, "priority")
-		r.orderItemProcessRepo.CreateManyByProductID(ctx, tx, entity.ID, entity.OrderID, entity.Code, &priority, entity.ProductID)
+		productIDs := make([]int, 0, len(products))
+		for _, product := range products {
+			if product == nil || product.ProductID == 0 {
+				continue
+			}
+			productIDs = append(productIDs, product.ProductID)
+		}
+		if len(productIDs) > 0 {
+			if _, err := r.orderItemProcessRepo.CreateManyByProductIDs(ctx, tx, entity.ID, entity.OrderID, entity.Code, &priority, productIDs); err != nil {
+				return nil, err
+			}
+		}
 	}
 
-	return dto, nil
+	return out, nil
 }
 
 func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	dto := &input.DTO
+	products := r.orderItemProductRepo.CollectProducts(dto)
+	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
+	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(dto)
+	totalPriceConsumableMaterial := r.orderItemMaterialRepo.CalculateConsumableTotalPrice(consumableMaterials)
+	r.applyTotalPrice(dto, totalPriceProduct, totalPriceConsumableMaterial)
+
+	var primaryProductID int
+	if len(products) > 0 {
+		primaryProductID = products[0].ProductID
+	}
 
 	q := tx.OrderItem.UpdateOneID(dto.ID).
-		SetNillableCode(dto.Code)
+		SetNillableCode(dto.Code).
+		SetNillableTotalPrice(dto.TotalPrice)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err := customfields.PrepareCustomFields(ctx,
@@ -268,10 +471,32 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 		return nil, err
 	}
 
-	dto = mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	out := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+
+	// Products
+	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
+	if err != nil {
+		return nil, err
+	}
+	out.Products = createdProducts
+
+	// Consumable Materials
+	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumable(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
+	if err != nil {
+		return nil, err
+	}
+	out.ConsumableMaterials = createdConsumableMaterials
+
+	// Loaner Materials
+	loanerMaterials := r.orderItemMaterialRepo.CollectLoanerMaterials(dto)
+	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
+	if err != nil {
+		return nil, err
+	}
+	out.LoanerMaterials = createdLoanerMaterials
 
 	// processes
-	if entity.ProductID > 0 {
+	if primaryProductID > 0 {
 		priority := utils.SafeGetString(entity.CustomFields, "priority")
 		oipOut, err := r.orderItemProcessRepo.UpdateManyWithProps(ctx, tx, entity.ID, func(prop *model.OrderItemProcessDTO) error {
 			cf := maps.Clone(prop.CustomFields)
@@ -286,10 +511,10 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 		if err != nil {
 			return nil, err
 		}
-		dto.OrderItemProcesses = oipOut
+		out.OrderItemProcesses = oipOut
 	}
 
-	return dto, nil
+	return out, nil
 }
 
 func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.OrderItemDTO, error) {
@@ -305,6 +530,21 @@ func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.Ord
 	}
 
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+
+	// Products
+	if err := r.orderItemProductRepo.Load(ctx, dto); err != nil {
+		return nil, err
+	}
+
+	// Consumable Materials
+	if err := r.orderItemMaterialRepo.LoadConsumable(ctx, dto); err != nil {
+		return nil, err
+	}
+
+	// Loaner Materials
+	if err := r.orderItemMaterialRepo.LoadLoaner(ctx, dto); err != nil {
+		return nil, err
+	}
 
 	// processes
 	// prcs, err := r.orderItemProcessRepo.GetByOrderItemID(ctx, id)
@@ -333,11 +573,23 @@ func (r *orderItemRepository) List(ctx context.Context, query table.TableQuery) 
 		var zero table.TableListResult[model.OrderItemDTO]
 		return zero, err
 	}
+	if err := r.orderItemProductRepo.Load(ctx, list.Items...); err != nil {
+		return list, err
+	}
+	// Consumable Materials
+	if err := r.orderItemMaterialRepo.LoadConsumable(ctx, list.Items...); err != nil {
+		return list, err
+	}
+
+	// Loaner Materials
+	if err := r.orderItemMaterialRepo.LoadLoaner(ctx, list.Items...); err != nil {
+		return list, err
+	}
 	return list, nil
 }
 
 func (r *orderItemRepository) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderItemDTO], error) {
-	return dbutils.Search(
+	res, err := dbutils.Search(
 		ctx,
 		r.db.OrderItem.Query().
 			Where(orderitem.DeletedAtIsNil()),
@@ -353,6 +605,11 @@ func (r *orderItemRepository) Search(ctx context.Context, query dbutils.SearchQu
 			return mapper.MapListAs[*generated.OrderItem, *model.OrderItemDTO](src)
 		},
 	)
+	if err != nil {
+		var zero dbutils.SearchResult[model.OrderItemDTO]
+		return zero, err
+	}
+	return res, nil
 }
 
 func (r *orderItemRepository) Delete(ctx context.Context, id int64) error {

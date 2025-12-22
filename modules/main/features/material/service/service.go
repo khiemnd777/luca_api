@@ -23,7 +23,7 @@ type MaterialService interface {
 	Update(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error)
 	GetByID(ctx context.Context, id int) (*model.MaterialDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
+	Search(ctx context.Context, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -68,12 +68,16 @@ func kMaterialList(q table.TableQuery) string {
 	return fmt.Sprintf("material:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kMaterialSearch(q dbutils.SearchQuery) string {
+func kMaterialSearch(materialType *string, q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("material:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	mtype := ""
+	if materialType != nil {
+		mtype = *materialType
+	}
+	return fmt.Sprintf("material:search:t%s:k%s:l%d:p%d:o%s:d%s", mtype, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 // ----------------------------------------------------------------------------
@@ -186,12 +190,12 @@ func (s *materialService) Delete(ctx context.Context, id int) error {
 // Search
 // ----------------------------------------------------------------------------
 
-func (s *materialService) Search(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
+func (s *materialService) Search(ctx context.Context, materialType *string, q dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
 	type boxed = dbutils.SearchResult[model.MaterialDTO]
-	key := kMaterialSearch(q)
+	key := kMaterialSearch(materialType, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.Search(ctx, q)
+		res, e := s.repo.Search(ctx, materialType, q)
 		if e != nil {
 			return nil, e
 		}

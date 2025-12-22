@@ -21,7 +21,7 @@ type MaterialRepository interface {
 	Update(ctx context.Context, input model.MaterialDTO) (*model.MaterialDTO, error)
 	GetByID(ctx context.Context, id int) (*model.MaterialDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
+	Search(ctx context.Context, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -50,7 +50,8 @@ func (r *materialRepo) Create(ctx context.Context, input model.MaterialDTO) (*mo
 
 	q := tx.Material.Create().
 		SetNillableCode(input.Code).
-		SetNillableName(input.Name)
+		SetNillableName(input.Name).
+		SetNillableType(input.Type)
 
 	_, err = customfields.PrepareCustomFields(ctx,
 		r.cfMgr,
@@ -93,7 +94,8 @@ func (r *materialRepo) Update(ctx context.Context, input model.MaterialDTO) (*mo
 
 	q := tx.Material.UpdateOneID(input.ID).
 		SetNillableCode(input.Code).
-		SetNillableName(input.Name)
+		SetNillableName(input.Name).
+		SetNillableType(input.Type)
 
 	_, err = customfields.PrepareCustomFields(ctx,
 		r.cfMgr,
@@ -112,6 +114,7 @@ func (r *materialRepo) Update(ctx context.Context, input model.MaterialDTO) (*mo
 	}
 
 	dto := mapper.MapAs[*generated.Material, *model.MaterialDTO](entity)
+
 	_, err = relation.UpsertM2M(ctx, tx, "material", entity, input, dto)
 	if err != nil {
 		return nil, err
@@ -156,11 +159,17 @@ func (r *materialRepo) List(ctx context.Context, query table.TableQuery) (table.
 	return list, nil
 }
 
-func (r *materialRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
+func (r *materialRepo) Search(ctx context.Context, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
+	q := r.db.Material.
+		Query().
+		Where(material.DeletedAtIsNil())
+
+	if materialType != nil {
+		q = q.Where(material.TypeEQ(*materialType))
+	}
 	return dbutils.Search(
 		ctx,
-		r.db.Material.Query().
-			Where(material.DeletedAtIsNil()),
+		q,
 		[]string{
 			dbutils.GetNormField(material.FieldCode),
 			dbutils.GetNormField(material.FieldName),

@@ -9,6 +9,7 @@ import (
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	tableutils "github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -274,8 +275,13 @@ func (r *RelationRepository) Search(
 	refTable := cfg.RefTable
 
 	// BUILD WHERE
-	args := []any{}
+	args := make([]any, 0, len(sq.ExtendWhere)+1)
 	whereParts := []string{}
+	if len(sq.ExtendWhere) > 0 {
+		for _, ew := range sq.ExtendWhere {
+			appendExtendWhere(&args, &whereParts, alias, ew)
+		}
+	}
 
 	norm := utils.NormalizeSearchKeyword(sq.Keyword)
 	if norm != "" {
@@ -334,6 +340,8 @@ func (r *RelationRepository) Search(
 		%s
 		%s
 	`, selectCols, refTable, alias, joins, whereSQL, orderSQL, limitSQL)
+
+	logger.Debug(fmt.Sprintf("[AAA] %s", finalSQL))
 
 	rows, err := tx.QueryContext(ctx, finalSQL, args...)
 	if err != nil {
@@ -471,4 +479,75 @@ func decodeValue(v any) any {
 	default:
 		return val
 	}
+}
+
+func appendExtendWhere(args *[]any, whereParts *[]string, alias string, ew any) {
+	switch v := ew.(type) {
+	case map[string]any:
+		for field, val := range v {
+			field = strings.TrimSpace(field)
+			if !isSafeWhereField(field) {
+				continue
+			}
+			*args = append(*args, val)
+			*whereParts = append(*whereParts, fmt.Sprintf("%s = $%d", qualifyWhereField(alias, field), len(*args)))
+		}
+	case string:
+		field, val, ok := parseFieldValue(v)
+		if ok && isSafeWhereField(field) {
+			*args = append(*args, val)
+			*whereParts = append(*whereParts, fmt.Sprintf("%s = $%d", qualifyWhereField(alias, field), len(*args)))
+			return
+		}
+		if strings.TrimSpace(v) != "" {
+			*args = append(*args, v)
+		}
+	default:
+		*args = append(*args, v)
+	}
+}
+
+func parseFieldValue(raw string) (string, any, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil, false
+	}
+	field, val, ok := strings.Cut(raw, "=")
+	if !ok {
+		return "", nil, false
+	}
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return "", nil, false
+	}
+	return field, strings.TrimSpace(val), true
+}
+
+func qualifyWhereField(alias, field string) string {
+	if alias == "" || strings.Contains(field, ".") {
+		return field
+	}
+	return fmt.Sprintf("%s.%s", alias, field)
+}
+
+func isSafeWhereField(field string) bool {
+	if field == "" {
+		return false
+	}
+	prevDot := false
+	for i := 0; i < len(field); i++ {
+		c := field[i]
+		switch {
+		case c == '.':
+			if i == 0 || i == len(field)-1 || prevDot {
+				return false
+			}
+			prevDot = true
+		case c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
+			prevDot = false
+		default:
+			return false
+		}
+	}
+	return true
 }

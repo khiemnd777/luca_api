@@ -66,7 +66,7 @@ func (s *FieldService) Get(ctx context.Context, id int) (*model.FieldDTO, error)
 }
 
 func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.FieldDTO, error) {
-	if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true, nil); err != nil {
+	if _, err := s.cols.GetByID(ctx, in.CollectionID, false, nil, false, false, true, nil); err != nil {
 		return nil, fmt.Errorf("collection not found")
 	}
 	in.Name = strings.TrimSpace(in.Name)
@@ -100,6 +100,7 @@ func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.
 		Type:         in.Type,
 		Required:     in.Required,
 		Unique:       in.Unique,
+		Tag:          in.Tag,
 		Table:        in.Table,
 		Form:         in.Form,
 		Search:       in.Search,
@@ -115,7 +116,7 @@ func (s *FieldService) Create(ctx context.Context, in model.FieldInput) (*model.
 		return nil, err
 	}
 
-	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false, nil)
+	col, err := s.cols.GetByID(ctx, in.CollectionID, false, nil, false, false, false, nil)
 
 	if err != nil {
 		return nil, err
@@ -142,7 +143,7 @@ func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) 
 	oldColID := cur.CollectionID
 
 	if in.CollectionID != 0 && in.CollectionID != cur.CollectionID {
-		if _, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, true, nil); err != nil {
+		if _, err := s.cols.GetByID(ctx, in.CollectionID, false, nil, false, false, true, nil); err != nil {
 			return nil, fmt.Errorf("collection not found")
 		}
 		cur.CollectionID = in.CollectionID
@@ -159,6 +160,7 @@ func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) 
 
 	cur.Required = in.Required
 	cur.Unique = in.Unique
+	cur.Tag = in.Tag
 	cur.Table = in.Table
 	cur.Form = in.Form
 	cur.Search = in.Search
@@ -195,7 +197,7 @@ func (s *FieldService) Update(ctx context.Context, id int, in model.FieldInput) 
 		return nil, err
 	}
 
-	col, err := s.cols.GetByID(ctx, in.CollectionID, false, false, false, false, nil)
+	col, err := s.cols.GetByID(ctx, in.CollectionID, false, nil, false, false, false, nil)
 
 	if err != nil {
 		return nil, err
@@ -247,7 +249,7 @@ func (s *FieldService) Sort(ctx context.Context, collectionID int, ids []int) (*
 		return nil, nil
 	}
 
-	col, err := s.cols.GetByID(ctx, collectionID, false, false, false, true, nil)
+	col, err := s.cols.GetByID(ctx, collectionID, false, nil, false, false, true, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("collection not found")

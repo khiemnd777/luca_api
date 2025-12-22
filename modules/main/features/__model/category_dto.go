@@ -16,6 +16,7 @@ type CategoryDTO struct {
 	CollectionID    *int           `json:"collection_id,omitempty"`
 	Active          bool           `json:"active,omitempty"`
 	ProductIDs      []int          `json:"product_ids,omitempty"`
+	ProcessIDs      []int          `json:"process_ids,omitempty"`
 	CustomFields    map[string]any `json:"custom_fields,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`

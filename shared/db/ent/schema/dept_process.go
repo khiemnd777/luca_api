@@ -62,6 +62,7 @@ func (Process) Fields() []ent.Field {
 func (Process) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("products", ProductProcess.Type),
+		edge.To("categories", CategoryProcess.Type),
 		edge.To("sections", SectionProcess.Type),
 	}
 }

@@ -42,6 +42,7 @@ func kSectionAll() []string {
 		kSectionSearchAll(),
 		"process:list:*",
 		"product_process:list:*",
+		"category_process:list:*",
 	}
 }
 

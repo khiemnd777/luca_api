@@ -13,6 +13,12 @@ import (
 )
 
 type OrderItemService interface {
+	CalculateTotalPrice(prices []float64, quantities []int) float64
+
+	SyncPrice(ctx context.Context, orderItemID int64) (float64, error)
+
+	GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error)
+
 	GetHistoricalByOrderIDAndOrderItemID(
 		ctx context.Context,
 		orderID, orderItemID int64,
@@ -35,6 +41,27 @@ func NewOrderItemService(
 		deps:  deps,
 		cfMgr: cfMgr,
 	}
+}
+
+func (s *orderItemService) CalculateTotalPrice(prices []float64, quantities []int) float64 {
+	var total float64
+
+	for i, price := range prices {
+		qty := 1
+		if i < len(quantities) && quantities[i] > 0 {
+			qty = quantities[i]
+		}
+		total += price * float64(qty)
+	}
+	return total
+}
+
+func (s *orderItemService) SyncPrice(ctx context.Context, orderItemID int64) (float64, error) {
+	return s.repo.GetTotalPriceByOrderItemID(ctx, orderItemID)
+}
+
+func (s *orderItemService) GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error) {
+	return s.repo.GetAllProductsAndMaterialsByOrderID(ctx, orderID)
 }
 
 func (s *orderItemService) GetHistoricalByOrderIDAndOrderItemID(

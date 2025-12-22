@@ -36,12 +36,20 @@ func (OrderItem) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.String("qr_code").
+			Optional().
+			Nillable(),
+
 		field.String("code_parent").
 			Optional().
 			Nillable(),
 
 		field.Int("remake_count").
 			Default(0),
+
+		field.Float("total_price").
+			Optional().
+			Nillable(),
 
 		// product info
 		field.Int("product_id").Optional(),
@@ -59,7 +67,6 @@ func (OrderItem) Fields() []ent.Field {
 			Default(time.Now),
 		field.Time("updated_at").
 			Default(time.Now).UpdateDefault(time.Now),
-
 		field.Time("deleted_at").
 			Optional().
 			Nillable(),
@@ -75,6 +82,9 @@ func (OrderItem) Edges() []ent.Edge {
 			Unique(),
 
 		edge.To("processes", OrderItemProcess.Type),
+
+		edge.To("products", OrderItemProduct.Type),
+		edge.To("materials", OrderItemMaterial.Type),
 
 		edge.To("files", OrderItemFile.Type),
 

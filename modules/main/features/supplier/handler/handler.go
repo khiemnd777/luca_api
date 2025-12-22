@@ -78,7 +78,7 @@ func (h *SupplierHandler) GetByID(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
 	dto, err := h.svc.GetByID(c.UserContext(), id)
@@ -113,7 +113,7 @@ func (h *SupplierHandler) Update(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
 	var payload model.SupplierDTO
@@ -137,7 +137,7 @@ func (h *SupplierHandler) Delete(c *fiber.Ctx) error {
 	}
 	id, _ := utils.GetParamAsInt(c, "id")
 	if id <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid id")
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 	if err := h.svc.Delete(c.UserContext(), id); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())

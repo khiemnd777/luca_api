@@ -72,6 +72,9 @@ func NormalizeSplit(s *string, sep string) []string {
 }
 
 func Singular(input string) string {
+	if strings.HasSuffix(input, "ies") {
+		return input[:len(input)-3] + "y"
+	}
 	if strings.HasSuffix(input, "es") {
 		return input[:len(input)-2]
 	}
@@ -152,4 +155,11 @@ func AlphabetSeq(n int) string {
 		n /= 26
 	}
 	return result
+}
+
+func SafeString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

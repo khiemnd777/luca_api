@@ -12,6 +12,8 @@ type OrderItemProcessDTO struct {
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	CompletedAt  *time.Time `json:"completed_at,omitempty"`
 	Note         *string    `json:"note,omitempty"`
+	SectionName  *string    `json:"section_name,omitempty"`
+	Color        *string    `json:"color,omitempty"`
 	AssignedID   *int64     `json:"assigned_id,omitempty"`
 	AssignedName *string    `json:"assigned_name,omitempty"`
 	// CustomFields

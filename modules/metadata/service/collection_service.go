@@ -27,32 +27,60 @@ const (
 	ttlCollectionItem = 5 * time.Minute
 )
 
-func cacheKeyList(query string, limit, offset int, withFields, table, form bool) string {
-	return fmt.Sprintf("collections:list:q=%s:l=%d:o=%d:f=%t:tb:%t:fm:%t", query, limit, offset, withFields, table, form)
+func cacheKeyList(query string, limit, offset int, withFields bool, tag *string, table, form bool) string {
+	tagVal := "nil"
+	if tag != nil {
+		tagVal = *tag
+	}
+
+	return fmt.Sprintf(
+		"collections:list:q=%s:l=%d:o=%d:f=%t:t=%s:tb=%t:fm=%t",
+		query, limit, offset, withFields, tagVal, table, form,
+	)
 }
 
-func cacheKeyListIntegration(group, query string, limit, offset int, withFields, table, form bool) string {
-	return fmt.Sprintf("collections:list:g=%s:q=%s:l=%d:o=%d:f=%t:tb:%t:fm:%t", group, query, limit, offset, withFields, table, form)
+func cacheKeyListIntegration(group, query string, limit, offset int, withFields bool, tag *string, table, form bool) string {
+	tagVal := "nil"
+	if tag != nil {
+		tagVal = *tag
+	}
+	return fmt.Sprintf("collections:list:g=%s:q=%s:l=%d:o=%d:f=%t:t=%s:tb:%t:fm:%t", group, query, limit, offset, withFields, tagVal, table, form)
 }
 
-func cacheKeySlug(slug string, withFields, table, form bool) string {
-	return fmt.Sprintf("collections:slug:%s:f=%t:tb:%t:fm:%t", slug, withFields, table, form)
+func cacheKeySlug(slug string, withFields bool, tag *string, table, form bool) string {
+	tagVal := "nil"
+	if tag != nil {
+		tagVal = *tag
+	}
+	return fmt.Sprintf("collections:slug:%s:f=%t:t=%s:tb:%t:fm:%t", slug, withFields, tagVal, table, form)
 }
 
-func cacheKeyAvailableSlug(slug string, withFields, table, form bool) string {
-	return fmt.Sprintf("collections:slug:%s:abl:f=%t:tb:%t:fm:%t", slug, withFields, table, form)
+func cacheKeyAvailableSlug(slug string, withFields bool, tag *string, table, form bool) string {
+	tagVal := "nil"
+	if tag != nil {
+		tagVal = *tag
+	}
+	return fmt.Sprintf("collections:slug:%s:abl:f=%t:t=%s:tb:%t:fm:%t", slug, withFields, tagVal, table, form)
 }
 
 func cacheKeySlugAll(slug string) string {
 	return fmt.Sprintf("collections:slug:%s:*", slug)
 }
 
-func cacheKeyID(id int, withFields, table, form bool) string {
-	return fmt.Sprintf("collections:id:%d:f=%t:tb:%t:fm:%t", id, withFields, table, form)
+func cacheKeyID(id int, withFields bool, tag *string, table, form bool) string {
+	tagVal := "nil"
+	if tag != nil {
+		tagVal = *tag
+	}
+	return fmt.Sprintf("collections:id:%d:f=%t:t=%s:tb:%t:fm:%t", id, withFields, tagVal, table, form)
 }
 
-func cacheKeyAvaialbleID(id int, withFields, table, form bool) string {
-	return fmt.Sprintf("collections:id:%d:abl:f=%t:tb:%t:fm:%t", id, withFields, table, form)
+func cacheKeyAvaialbleID(id int, withFields bool, tag *string, table, form bool) string {
+	tagVal := "nil"
+	if tag != nil {
+		tagVal = *tag
+	}
+	return fmt.Sprintf("collections:id:%d:abl:f=%t:t=%s:tb:%t:fm:%t", id, withFields, tagVal, table, form)
 }
 
 func cacheKeyIDAll(id int) string {
@@ -64,6 +92,7 @@ type ListCollectionsInput struct {
 	Limit      int
 	Offset     int
 	WithFields bool
+	Tag        *string
 	Table      bool
 	Form       bool
 }
@@ -93,8 +122,8 @@ func normalizeSlug(s string) string {
 	return strings.Trim(s, "-")
 }
 
-func (s *CollectionService) ListIntegration(ctx context.Context, group, query string, limit, offset int, withFields, table, form bool) ([]repository.CollectionWithFields, int, error) {
-	key := cacheKeyListIntegration(group, query, limit, offset, withFields, table, form)
+func (s *CollectionService) ListIntegration(ctx context.Context, group, query string, limit, offset int, withFields bool, tag *string, table, form bool) ([]repository.CollectionWithFields, int, error) {
+	key := cacheKeyListIntegration(group, query, limit, offset, withFields, tag, table, form)
 
 	type result struct {
 		Items []repository.CollectionWithFields
@@ -102,7 +131,7 @@ func (s *CollectionService) ListIntegration(ctx context.Context, group, query st
 	}
 
 	r, err := cache.Get(key, ttlCollectionList, func() (*result, error) {
-		items, total, err := s.repo.ListIntegration(ctx, group, query, limit, offset, withFields, table, form)
+		items, total, err := s.repo.ListIntegration(ctx, group, query, limit, offset, withFields, tag, table, form)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +145,7 @@ func (s *CollectionService) ListIntegration(ctx context.Context, group, query st
 }
 
 func (s *CollectionService) List(ctx context.Context, in ListCollectionsInput) ([]repository.CollectionWithFields, int, error) {
-	key := cacheKeyList(in.Query, in.Limit, in.Offset, in.WithFields, in.Table, in.Form)
+	key := cacheKeyList(in.Query, in.Limit, in.Offset, in.WithFields, in.Tag, in.Table, in.Form)
 
 	type result struct {
 		Items []repository.CollectionWithFields
@@ -124,7 +153,7 @@ func (s *CollectionService) List(ctx context.Context, in ListCollectionsInput) (
 	}
 
 	r, err := cache.Get(key, ttlCollectionList, func() (*result, error) {
-		items, total, err := s.repo.List(ctx, in.Query, in.Limit, in.Offset, in.WithFields, in.Table, in.Form)
+		items, total, err := s.repo.List(ctx, in.Query, in.Limit, in.Offset, in.WithFields, in.Tag, in.Table, in.Form)
 		if err != nil {
 			return nil, err
 		}
@@ -136,38 +165,37 @@ func (s *CollectionService) List(ctx context.Context, in ListCollectionsInput) (
 	return r.Items, r.Total, nil
 }
 
-func (s *CollectionService) GetBySlug(ctx context.Context, slug string, withFields, table, form bool) (*repository.CollectionWithFields, error) {
+func (s *CollectionService) GetBySlug(ctx context.Context, slug string, withFields bool, tag *string, table, form bool) (*repository.CollectionWithFields, error) {
 	slug = normalizeSlug(slug)
-	key := cacheKeySlug(slug, withFields, table, form)
+	key := cacheKeySlug(slug, withFields, tag, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetBySlug(ctx, slug, withFields, table, form, true, nil)
+		return s.repo.GetBySlug(ctx, slug, withFields, tag, table, form, true, nil)
 	})
 }
 
-// It’s already cached on the client side, so this function doesn’t need to be cached on the server.
-func (s *CollectionService) GetByAvailableSlug(ctx context.Context, slug string, withFields, table, form bool, entityData *map[string]any) (*repository.CollectionWithFields, error) {
+func (s *CollectionService) GetByAvailableSlug(ctx context.Context, slug string, withFields bool, tag *string, table, form bool, entityData *map[string]any) (*repository.CollectionWithFields, error) {
 	slug = normalizeSlug(slug)
-	key := cacheKeyAvailableSlug(slug, withFields, table, form)
+	// key := cacheKeyAvailableSlug(slug, withFields, tag, table, form)
+
+	// return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
+	return s.repo.GetBySlug(ctx, slug, withFields, tag, table, form, false, entityData)
+	// })
+}
+
+func (s *CollectionService) GetByID(ctx context.Context, id int, withFields bool, tag *string, table, form bool) (*repository.CollectionWithFields, error) {
+	key := cacheKeyID(id, withFields, tag, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetBySlug(ctx, slug, withFields, table, form, false, entityData)
+		return s.repo.GetByID(ctx, id, withFields, tag, table, form, true, nil)
 	})
 }
 
-func (s *CollectionService) GetByID(ctx context.Context, id int, withFields, table, form bool) (*repository.CollectionWithFields, error) {
-	key := cacheKeyID(id, withFields, table, form)
+func (s *CollectionService) GetAvailableByID(ctx context.Context, id int, withFields bool, tag *string, table, form bool, entityData *map[string]any) (*repository.CollectionWithFields, error) {
+	key := cacheKeyAvaialbleID(id, withFields, tag, table, form)
 
 	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetByID(ctx, id, withFields, table, form, true, nil)
-	})
-}
-
-func (s *CollectionService) GetAvailableByID(ctx context.Context, id int, withFields, table, form bool, entityData *map[string]any) (*repository.CollectionWithFields, error) {
-	key := cacheKeyAvaialbleID(id, withFields, table, form)
-
-	return cache.Get(key, ttlCollectionItem, func() (*repository.CollectionWithFields, error) {
-		return s.repo.GetByID(ctx, id, withFields, table, form, false, entityData)
+		return s.repo.GetByID(ctx, id, withFields, tag, table, form, false, entityData)
 	})
 }
 
@@ -255,7 +283,7 @@ func (s *CollectionService) Delete(ctx context.Context, id int) error {
 		cacheKeyIDAll(id),
 		fmt.Sprintf("metadata:schema:i%d", id),
 	)
-	cache.InvalidateKeys("collections:list:*")
+	cache.InvalidateKeys("collections:list:*", "collections:slug:*")
 	return nil
 }
 

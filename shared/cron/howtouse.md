@@ -24,7 +24,6 @@ func (j CleanupTokenJob) ConfigKey() string      { return "cron.cleanup_token" }
 
 func (j CleanupTokenJob) Run() error {
 	logger.Info("[CleanupTokenJob] Cleaning expired tokens...")
-	// TODO: logic xóa token hết hạn
 	return nil
 }
 
