@@ -153,7 +153,7 @@ func (s *orderItemProcessService) GetCheckoutLatest(ctx context.Context, orderIt
 }
 
 func (s *orderItemProcessService) PrepareCheckInOrOut(ctx context.Context, orderID int64, orderItemID int64) (*model.OrderItemProcessInProgressDTO, error) {
-	return s.inprogressRepo.PrepareCheckInOrOut(ctx, orderItemID, &orderID)
+	return s.inprogressRepo.PrepareCheckInOrOut(ctx, nil, orderItemID, &orderID)
 }
 
 func (s *orderItemProcessService) PrepareCheckInOrOutByCode(ctx context.Context, code string) (*model.OrderItemProcessInProgressDTO, error) {

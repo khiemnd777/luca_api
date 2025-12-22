@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocessinprogress"
@@ -15,7 +16,7 @@ import (
 )
 
 type OrderItemProcessInProgressRepository interface {
-	PrepareCheckInOrOut(ctx context.Context, orderItemID int64, orderID *int64) (*model.OrderItemProcessInProgressDTO, error)
+	PrepareCheckInOrOut(ctx context.Context, tx *generated.Tx, orderItemID int64, orderID *int64) (*model.OrderItemProcessInProgressDTO, error)
 	PrepareCheckInOrOutByCode(ctx context.Context, code string) (*model.OrderItemProcessInProgressDTO, error)
 	CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO, note *string) (*model.OrderItemProcessInProgressDTO, error)
 	Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error)
@@ -191,6 +192,7 @@ func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOutByCode(ctx con
 		Where(
 			orderitem.CodeEQ(code),
 			orderitem.DeletedAtIsNil(),
+			orderitem.HasOrderWith(order.DeletedAtIsNil()),
 		).
 		Select(
 			orderitem.FieldID,
@@ -204,22 +206,24 @@ func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOutByCode(ctx con
 	orderItemID := orderItemEntity.ID
 	orderID := orderItemEntity.OrderID
 
-	return r.PrepareCheckInOrOut(ctx, orderItemID, &orderID)
+	return r.PrepareCheckInOrOut(ctx, tx, orderItemID, &orderID)
 }
 
-func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOut(ctx context.Context, orderItemID int64, orderID *int64) (*model.OrderItemProcessInProgressDTO, error) {
+func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOut(ctx context.Context, tx *generated.Tx, orderItemID int64, orderID *int64) (*model.OrderItemProcessInProgressDTO, error) {
 	var err error
-	tx, err := r.db.Tx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
+	if tx == nil {
+		tx, err = r.db.Tx(ctx)
 		if err != nil {
-			_ = tx.Rollback()
-		} else {
-			_ = tx.Commit()
+			return nil, err
 		}
-	}()
+		defer func() {
+			if err != nil {
+				_ = tx.Rollback()
+			} else {
+				_ = tx.Commit()
+			}
+		}()
+	}
 
 	processes, err := r.getProcesses(ctx, tx, orderItemID)
 	if err != nil {
@@ -539,12 +543,15 @@ func (r *orderItemProcessInProgressRepository) GetCheckoutLatest(ctx context.Con
 		}).
 		First(ctx)
 	if err != nil {
+		if generated.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
-	proc, err := entity.Edges.ProcessOrErr()
-	if err != nil {
-		return nil, err
+	proc := entity.Edges.Process
+	if proc == nil {
+		return nil, fmt.Errorf("process edge is missing for in_progress id=%d", entity.ID)
 	}
 
 	return &model.OrderItemProcessInProgressAndProcessDTO{

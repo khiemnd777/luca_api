@@ -2,7 +2,6 @@ package dbutils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -19,18 +18,17 @@ type SearchResult[T any] struct {
 }
 
 type SearchQuery struct {
-	Keyword     string  `json:"keyword"`
-	ExtendWhere []any   `json:"extend_where"` //e.g.: extend_where=["order_item_id=123","order_id=456"]
-	Limit       int     `json:"limit"`
-	Page        int     `json:"page"`
-	Offset      int     `json:"offset"`
-	OrderBy     *string `json:"order_by"`
-	Direction   string  `json:"direction"`
+	Keyword     string   `json:"keyword"`
+	ExtendWhere []string `json:"extend_where"` //e.g.: extend_where=["order_item_id=123","order_id=456"]
+	Limit       int      `json:"limit"`
+	Page        int      `json:"page"`
+	Offset      int      `json:"offset"`
+	OrderBy     *string  `json:"order_by"`
+	Direction   string   `json:"direction"`
 }
 
 func ParseSearchQuery(c *fiber.Ctx, defLimit int) SearchQuery {
 	kw := utils.GetQueryAsString(c, "keyword")
-	extendWhereRaw := strings.TrimSpace(utils.GetQueryAsString(c, "extend_where"))
 	limit := utils.GetQueryAsInt(c, "limit", defLimit)
 	page := utils.GetQueryAsInt(c, "page", 1)
 
@@ -44,11 +42,8 @@ func ParseSearchQuery(c *fiber.Ctx, defLimit int) SearchQuery {
 	offset := (page - 1) * limit
 
 	orderBy := utils.GetQueryAsString(c, "order_by")
-
-	if orderBy != "" {
-		if !strings.HasPrefix(orderBy, "custom_fields.") {
-			orderBy = strcase.ToSnake(orderBy)
-		}
+	if orderBy != "" && !strings.HasPrefix(orderBy, "custom_fields.") {
+		orderBy = strcase.ToSnake(orderBy)
 	}
 
 	direction := utils.GetQueryAsString(c, "direction")
@@ -56,40 +51,33 @@ func ParseSearchQuery(c *fiber.Ctx, defLimit int) SearchQuery {
 		direction = "asc"
 	}
 
-	var extendWhere []any
-	if extendWhereRaw != "" {
-		var parsed []any
-		if err := json.Unmarshal([]byte(extendWhereRaw), &parsed); err == nil {
-			extendWhere = parsed
-		} else {
-			parts := strings.Split(extendWhereRaw, ",")
-			extendWhere = make([]any, 0, len(parts))
-			for _, part := range parts {
-				part = strings.TrimSpace(part)
-				if part != "" {
-					extendWhere = append(extendWhere, part)
-				}
+	extendWhere := make([]string, 0)
+
+	args := c.Context().QueryArgs()
+
+	if rawList := args.PeekMulti("extend_where[]"); len(rawList) > 0 {
+		for _, b := range rawList {
+			s := strings.TrimSpace(string(b))
+			if s != "" {
+				extendWhere = append(extendWhere, s)
 			}
 		}
 	}
 
-	args := c.Context().QueryArgs()
-
-	for k, v := range args.All() {
+	for k, vv := range args.All() {
 		key := string(k)
 
 		switch key {
-		case "keyword", "extend_where", "limit", "page", "order_by", "direction":
-			continue
-		}
-		if len(v) == 0 {
+		case "keyword", "limit", "page", "order_by", "direction", "extend_where[]":
 			continue
 		}
 
-		extendWhere = append(
-			extendWhere,
-			fmt.Sprintf("%s=%s", key, string(v)),
-		)
+		for _, item := range vv {
+			s := strings.TrimSpace(string(item))
+			if s != "" {
+				extendWhere = append(extendWhere, fmt.Sprintf("%s=%s", key, s))
+			}
+		}
 	}
 
 	return SearchQuery{
