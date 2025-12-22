@@ -13,6 +13,7 @@ type OrderItemDTO struct {
 	// order
 	Code         *string  `json:"code,omitempty"`
 	CodeOriginal *string  `json:"code_original,omitempty"`
+	QrCode       *string  `json:"qr_code,omitempty"`
 	RemakeCount  int      `json:"remake_count,omitempty"`
 	TotalPrice   *float64 `json:"total_price,omitempty"`
 	// products

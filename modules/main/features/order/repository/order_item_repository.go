@@ -351,18 +351,23 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 		}
 	}
 
+	// qr code
+	qrCode := utils.GenerateQRCodeString(in.Code)
+
 	q := tx.OrderItem.Create().
-		SetCode(*in.Code)
+		SetCode(*in.Code).
+		SetNillableQrCode(qrCode)
+
 	if in.ParentItemID != nil {
 		q.SetParentItemID(*in.ParentItemID)
 	}
+
 	q.SetRemakeCount(in.RemakeCount).
 		SetOrderID(in.OrderID).
 		SetNillableCodeOriginal(in.CodeOriginal).
 		SetNillableTotalPrice(in.TotalPrice)
 
 	// metadata
-
 	// new order is as `received`
 	cf := maps.Clone(in.CustomFields)
 	cf["status"] = "received"

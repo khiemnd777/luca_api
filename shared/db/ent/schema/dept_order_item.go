@@ -36,6 +36,10 @@ func (OrderItem) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.String("qr_code").
+			Optional().
+			Nillable(),
+
 		field.String("code_parent").
 			Optional().
 			Nillable(),

@@ -22,7 +22,7 @@ func GenerateReferenceCode(s string) string {
 	return strings.ToUpper(refCode)
 }
 
-func GenerateQRCodeString(typ, name string) string {
+func GenerateQRCodeString2(typ, name string) string {
 	randomStr := GenerateRandomString(12)
 	buf := fmt.Sprintf("%s:%s:%s", typ, randomStr, name)
 	return base64.StdEncoding.EncodeToString([]byte(buf))
@@ -43,4 +43,13 @@ func GenerateQRCodeStringForProduct(typ, ref string) string {
 func GenerateQRCodeStringForUser(ref string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(ref))
 	return fmt.Sprintf("user/%s", encoded)
+}
+
+func GenerateQRCodeString(code *string) *string {
+	if code == nil || *code == "" {
+		return nil
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(*code))
+	qr := fmt.Sprintf("order/%s", encoded)
+	return &qr
 }
