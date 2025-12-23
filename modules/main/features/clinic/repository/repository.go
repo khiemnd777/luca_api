@@ -9,6 +9,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinic"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinicdentist"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinicpatient"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/dentist"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
@@ -24,6 +25,7 @@ type ClinicRepository interface {
 	GetByID(ctx context.Context, id int) (*model.ClinicDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
 	ListByDentistID(ctx context.Context, dentistID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
+	ListByPatientID(ctx context.Context, patientID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -94,6 +96,22 @@ func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.
 		}
 	}
 
+	if input.PatientIDs != nil {
+		patientIDs := utils.DedupInt(input.PatientIDs, -1)
+		if len(patientIDs) > 0 {
+			bulk := make([]*generated.ClinicPatientCreate, 0, len(patientIDs))
+			for _, did := range patientIDs {
+				bulk = append(bulk, tx.ClinicPatient.Create().
+					SetClinicID(entity.ID).
+					SetPatientID(did),
+				)
+			}
+			if err = tx.ClinicPatient.CreateBulk(bulk...).Exec(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	dto := mapper.MapAs[*generated.Clinic, *model.ClinicDTO](entity)
 	return dto, nil
 }
@@ -148,6 +166,22 @@ func (r *clinicRepo) Update(ctx context.Context, input model.ClinicDTO) (*model.
 				)
 			}
 			if err = tx.ClinicDentist.CreateBulk(bulk...).Exec(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if input.PatientIDs != nil {
+		patientIDs := utils.DedupInt(input.PatientIDs, -1)
+		if len(patientIDs) > 0 {
+			bulk := make([]*generated.ClinicPatientCreate, 0, len(patientIDs))
+			for _, did := range patientIDs {
+				bulk = append(bulk, tx.ClinicPatient.Create().
+					SetClinicID(input.ID).
+					SetPatientID(did),
+				)
+			}
+			if err = tx.ClinicPatient.CreateBulk(bulk...).Exec(ctx); err != nil {
 				return nil, err
 			}
 		}
@@ -218,6 +252,30 @@ func (r *clinicRepo) ListByDentistID(ctx context.Context, dentistID int, query t
 		r.db.Clinic.Query().
 			Where(
 				clinic.HasDentistsWith(clinicdentist.DentistIDEQ(dentistID)),
+				clinic.DeletedAtIsNil(),
+			),
+		query,
+		clinic.Table,
+		clinic.FieldID,
+		clinic.FieldID,
+		func(src []*generated.Clinic) []*model.ClinicDTO {
+			mapped := mapper.MapListAs[*generated.Clinic, *model.ClinicDTO](src)
+			return mapped
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.ClinicDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *clinicRepo) ListByPatientID(ctx context.Context, patientID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Clinic.Query().
+			Where(
+				clinic.HasPatientsWith(clinicpatient.PatientIDEQ(patientID)),
 				clinic.DeletedAtIsNil(),
 			),
 		query,
