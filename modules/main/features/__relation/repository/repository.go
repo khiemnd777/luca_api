@@ -9,7 +9,6 @@ import (
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	tableutils "github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -340,8 +339,6 @@ func (r *RelationRepository) Search(
 		%s
 		%s
 	`, selectCols, refTable, alias, joins, whereSQL, orderSQL, limitSQL)
-
-	logger.Debug(fmt.Sprintf("[AAA] %s", finalSQL))
 
 	rows, err := tx.QueryContext(ctx, finalSQL, args...)
 	if err != nil {
