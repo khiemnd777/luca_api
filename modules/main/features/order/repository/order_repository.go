@@ -176,6 +176,15 @@ func (r *orderRepository) createNewOrder(
 	if err = relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
+	if err = relation.Upsert1(ctx, tx, "orders_clinics", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_dentists", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_patients", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
 
 	return out, nil
 }
@@ -261,6 +270,15 @@ func (r *orderRepository) upsertExistingOrder(
 
 	// relations
 	if err := relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_clinics", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_dentists", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_patients", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
 
@@ -394,6 +412,15 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	// relation
 	err = relation.Upsert1(ctx, tx, "orders_customers", entity, &input.DTO, output)
 	if err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_clinics", entity, &input.DTO, output); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_dentists", entity, &input.DTO, output); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_patients", entity, &input.DTO, output); err != nil {
 		return nil, err
 	}
 

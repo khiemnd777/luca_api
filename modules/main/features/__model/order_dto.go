@@ -13,8 +13,15 @@ type OrderDTO struct {
 	UpdatedAt    time.Time      `json:"updated_at,omitempty"`
 	DeliveryDate *time.Time     `json:"delivery_date,omitempty"`
 	// Customer
+	// deprecated
 	CustomerID   int64   `json:"customer_id,omitempty"`
 	CustomerName *string `json:"customer_name,omitempty"`
+	ClinicID     *int    `json:"clinic_id,omitempty"`
+	ClinicName   *string `json:"clinic_name,omitempty"`
+	DentistID    *int    `json:"dentist_id,omitempty"`
+	DentistName  *string `json:"dentist_name,omitempty"`
+	PatientID    *int    `json:"patient_id,omitempty"`
+	PatientName  *string `json:"patient_name,omitempty"`
 	// Latest props
 	LatestOrderItemUpsert *OrderItemUpsertDTO `json:"latest_order_item_upsert,omitempty"`
 	LatestOrderItem       *OrderItemDTO       `json:"latest_order_item,omitempty"`
