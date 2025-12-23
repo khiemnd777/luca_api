@@ -14,7 +14,7 @@ type OrderDTO struct {
 	DeliveryDate *time.Time     `json:"delivery_date,omitempty"`
 	// Customer
 	// deprecated
-	CustomerID   int64   `json:"customer_id,omitempty"`
+	CustomerID   *int64  `json:"customer_id,omitempty"`
 	CustomerName *string `json:"customer_name,omitempty"`
 	ClinicID     *int    `json:"clinic_id,omitempty"`
 	ClinicName   *string `json:"clinic_name,omitempty"`

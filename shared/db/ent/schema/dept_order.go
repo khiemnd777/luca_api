@@ -31,26 +31,28 @@ func (Order) Fields() []ent.Field {
 			Default(map[string]any{}),
 
 		// deprecated
-		field.Int64("customer_id").Optional(),
+		field.Int64("customer_id").
+			Nillable().
+			Optional(),
 		field.String("customer_name").
 			Nillable().
 			Optional(),
 
-		field.Int64("clinic_id").
+		field.Int("clinic_id").
 			Nillable().
 			Optional(),
 		field.String("clinic_name").
 			Nillable().
 			Optional(),
 
-		field.Int64("dentist_id").
+		field.Int("dentist_id").
 			Optional().
 			Nillable(),
 		field.String("dentist_name").
 			Nillable().
 			Optional(),
 
-		field.Int64("patient_id").
+		field.Int("patient_id").
 			Optional().
 			Nillable(),
 		field.String("patient_name").

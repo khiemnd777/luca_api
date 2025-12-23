@@ -17,7 +17,7 @@ func init() {
 		RefTable:   "clinics",
 		RefIDCol:   "id",
 		RefNameCol: "name",
-		RefFields:  []string{"id", "name", "code"},
+		RefFields:  []string{"id", "name"},
 
 		UpsertedIDProp:   "ClinicID",
 		UpsertedNameProp: utils.Ptr("ClinicName"),
@@ -27,8 +27,8 @@ func init() {
 	})
 	policy.RegisterRefSearch("orders_clinics", policy.ConfigSearch{
 		RefTable:    "clinics",
-		NormFields:  []string{"code", "name"},
-		RefFields:   []string{"id", "name", "code"},
+		NormFields:  []string{"name"},
+		RefFields:   []string{"id", "name"},
 		Permissions: []string{"clinic.search"},
 		CachePrefix: "clinic:search",
 	})
