@@ -96,6 +96,22 @@ func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.
 		}
 	}
 
+	if input.PatientIDs != nil {
+		patientIDs := utils.DedupInt(input.PatientIDs, -1)
+		if len(patientIDs) > 0 {
+			bulk := make([]*generated.ClinicPatientCreate, 0, len(patientIDs))
+			for _, did := range patientIDs {
+				bulk = append(bulk, tx.ClinicPatient.Create().
+					SetClinicID(entity.ID).
+					SetPatientID(did),
+				)
+			}
+			if err = tx.ClinicPatient.CreateBulk(bulk...).Exec(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	dto := mapper.MapAs[*generated.Clinic, *model.ClinicDTO](entity)
 	return dto, nil
 }
@@ -150,6 +166,22 @@ func (r *clinicRepo) Update(ctx context.Context, input model.ClinicDTO) (*model.
 				)
 			}
 			if err = tx.ClinicDentist.CreateBulk(bulk...).Exec(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if input.PatientIDs != nil {
+		patientIDs := utils.DedupInt(input.PatientIDs, -1)
+		if len(patientIDs) > 0 {
+			bulk := make([]*generated.ClinicPatientCreate, 0, len(patientIDs))
+			for _, did := range patientIDs {
+				bulk = append(bulk, tx.ClinicPatient.Create().
+					SetClinicID(input.ID).
+					SetPatientID(did),
+				)
+			}
+			if err = tx.ClinicPatient.CreateBulk(bulk...).Exec(ctx); err != nil {
 				return nil, err
 			}
 		}

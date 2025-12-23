@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/shared/logger"
@@ -45,13 +46,15 @@ func ResponseError(c *fiber.Ctx, statusCode int, err error, extraMessage ...stri
 		message = fmt.Sprintf("%s\n%s", message, err.Error())
 	}
 
-	location := callerLocation(1)
+	// location := callerLocation(1)
 
-	logger.Error(fmt.Sprintf(
-		"[ERROR] %s | at %s",
-		message,
-		location,
-	))
+	// logger.Error(fmt.Sprintf(
+	// 	"[ERROR] %s | at %s",
+	// 	message,
+	// 	location,
+	// ))
+
+	logger.Debug(string(debug.Stack()))
 
 	errResp := ErrorResponse{
 		Code:    statusCode,

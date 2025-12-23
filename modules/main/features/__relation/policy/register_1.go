@@ -48,14 +48,22 @@ func Upsert1(
 	}
 
 	mainVal := reflect.ValueOf(entity).Elem()
-	mainID := int(mainVal.FieldByName(cfg.MainIDProp).Int())
+	mainIDVal := mainVal.FieldByName(cfg.MainIDProp)
+	mainID, err := getIntValue(mainIDVal)
+	if err != nil {
+		return fmt.Errorf("Upsert1: invalid mainID field %s: %w", cfg.MainIDProp, err)
+	}
 
 	inV := reflect.ValueOf(inputDTO)
 	if inV.Kind() != reflect.Ptr {
 		return fmt.Errorf("Upsert1: inputDTO must be a pointer, got %s", inV.Kind())
 	}
 	inVal := inV.Elem()
-	refID := int(inVal.FieldByName(cfg.UpsertedIDProp).Int())
+	refIDVal := inVal.FieldByName(cfg.UpsertedIDProp)
+	refID, err := getIntValue(refIDVal)
+	if err != nil {
+		return fmt.Errorf("Upsert1: invalid refID field %s: %w", cfg.UpsertedIDProp, err)
+	}
 
 	if refID <= 0 {
 
@@ -200,9 +208,12 @@ func Upsert1(
 		f.SetInt(int64(outRefID))
 
 	case reflect.Ptr:
-		if f.Type().Elem().Kind() >= reflect.Int && f.Type().Elem().Kind() <= reflect.Int64 {
-			v := int64(outRefID)
-			f.Set(reflect.ValueOf(&v))
+		elemType := f.Type().Elem()
+
+		if elemType.Kind() >= reflect.Int && elemType.Kind() <= reflect.Int64 {
+			newVal := reflect.New(elemType)
+			newVal.Elem().SetInt(int64(outRefID))
+			f.Set(newVal)
 		}
 
 	default:
@@ -234,4 +245,26 @@ func Upsert1(
 	}
 
 	return nil
+}
+
+func getIntValue(v reflect.Value) (int, error) {
+	if !v.IsValid() {
+		return 0, fmt.Errorf("invalid value")
+	}
+
+	switch v.Kind() {
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(v.Int()), nil
+
+	case reflect.Ptr:
+		if v.IsNil() {
+			return 0, nil
+		}
+		if v.Elem().Kind() >= reflect.Int && v.Elem().Kind() <= reflect.Int64 {
+			return int(v.Elem().Int()), nil
+		}
+	}
+
+	return 0, fmt.Errorf("unsupported kind: %s", v.Kind())
 }
