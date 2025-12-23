@@ -5,7 +5,7 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	"github.com/khiemnd777/andy_api/modules/main/features/clinic/service"
+	"github.com/khiemnd777/andy_api/modules/main/features/patient/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -16,27 +16,26 @@ import (
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
-type ClinicHandler struct {
-	svc  service.ClinicService
+type PatientHandler struct {
+	svc  service.PatientService
 	deps *module.ModuleDeps[config.ModuleConfig]
 }
 
-func NewClinicHandler(svc service.ClinicService, deps *module.ModuleDeps[config.ModuleConfig]) *ClinicHandler {
-	return &ClinicHandler{svc: svc, deps: deps}
+func NewPatientHandler(svc service.PatientService, deps *module.ModuleDeps[config.ModuleConfig]) *PatientHandler {
+	return &PatientHandler{svc: svc, deps: deps}
 }
 
-func (h *ClinicHandler) RegisterRoutes(router fiber.Router) {
-	app.RouterGet(router, "/:dept_id<int>/clinic/list", h.List)
-	app.RouterGet(router, "/:dept_id<int>/clinic/search", h.Search)
-	app.RouterGet(router, "/:dept_id<int>/dentist/:dentist_id<int>/clinics", h.ListByDentistID)
-	app.RouterGet(router, "/:dept_id<int>/patient/:patient_id<int>/clinics", h.ListByPatientID)
-	app.RouterGet(router, "/:dept_id<int>/clinic/:id<int>", h.GetByID)
-	app.RouterPost(router, "/:dept_id<int>/clinic", h.Create)
-	app.RouterPut(router, "/:dept_id<int>/clinic/:id<int>", h.Update)
-	app.RouterDelete(router, "/:dept_id<int>/clinic/:id<int>", h.Delete)
+func (h *PatientHandler) RegisterRoutes(router fiber.Router) {
+	app.RouterGet(router, "/:dept_id<int>/patient/list", h.List)
+	app.RouterGet(router, "/:dept_id<int>/patient/search", h.Search)
+	app.RouterGet(router, "/:dept_id<int>/clinic/:clinic_id<int>/patients", h.ListByClinicID)
+	app.RouterGet(router, "/:dept_id<int>/patient/:id<int>", h.GetByID)
+	app.RouterPost(router, "/:dept_id<int>/patient", h.Create)
+	app.RouterPut(router, "/:dept_id<int>/patient/:id<int>", h.Update)
+	app.RouterDelete(router, "/:dept_id<int>/patient/:id<int>", h.Delete)
 }
 
-func (h *ClinicHandler) List(c *fiber.Ctx) error {
+func (h *PatientHandler) List(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
@@ -48,33 +47,20 @@ func (h *ClinicHandler) List(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
-func (h *ClinicHandler) ListByDentistID(c *fiber.Ctx) error {
+func (h *PatientHandler) ListByClinicID(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
-	dentistID, _ := utils.GetParamAsInt(c, "dentist_id")
-	res, err := h.svc.ListByDentistID(c.UserContext(), dentistID, q)
+	clinicID, _ := utils.GetParamAsInt(c, "clinic_id")
+	res, err := h.svc.ListByClinicID(c.UserContext(), clinicID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
-func (h *ClinicHandler) ListByPatientID(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
-		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
-	}
-	q := table.ParseTableQuery(c, 20)
-	dentistID, _ := utils.GetParamAsInt(c, "patient_id")
-	res, err := h.svc.ListByPatientID(c.UserContext(), dentistID, q)
-	if err != nil {
-		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
-	}
-	return c.Status(fiber.StatusOK).JSON(res)
-}
-
-func (h *ClinicHandler) Search(c *fiber.Ctx) error {
+func (h *PatientHandler) Search(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
@@ -86,7 +72,7 @@ func (h *ClinicHandler) Search(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
-func (h *ClinicHandler) GetByID(c *fiber.Ctx) error {
+func (h *PatientHandler) GetByID(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
@@ -102,11 +88,11 @@ func (h *ClinicHandler) GetByID(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(dto)
 }
 
-func (h *ClinicHandler) Create(c *fiber.Ctx) error {
+func (h *PatientHandler) Create(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.create"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
-	var payload model.ClinicDTO
+	var payload model.PatientDTO
 	if err := c.BodyParser(&payload); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
@@ -123,7 +109,7 @@ func (h *ClinicHandler) Create(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(dto)
 }
 
-func (h *ClinicHandler) Update(c *fiber.Ctx) error {
+func (h *PatientHandler) Update(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.update"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
@@ -132,7 +118,7 @@ func (h *ClinicHandler) Update(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
-	var payload model.ClinicDTO
+	var payload model.PatientDTO
 	if err := c.BodyParser(&payload); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
@@ -147,7 +133,7 @@ func (h *ClinicHandler) Update(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(dto)
 }
 
-func (h *ClinicHandler) Delete(c *fiber.Ctx) error {
+func (h *PatientHandler) Delete(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "clinic.delete"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}

@@ -24,6 +24,7 @@ type ClinicService interface {
 	GetByID(ctx context.Context, id int) (*model.ClinicDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
 	ListByDentistID(ctx context.Context, dentistID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
+	ListByPatientID(ctx context.Context, patientID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error)
 	Delete(ctx context.Context, id int) error
 }
@@ -47,6 +48,7 @@ func kClinicAll() []string {
 		kClinicListAll(),
 		kClinicSearchAll(),
 		kClinicDentistAll(),
+		kClinicPatientAll(),
 	}
 }
 
@@ -62,8 +64,16 @@ func kClinicDentistAll() string {
 	return "clinic:dentist:*"
 }
 
+func kClinicPatientAll() string {
+	return "clinic:patient:*"
+}
+
 func kClinicDentistList(clinicID int) string {
 	return fmt.Sprintf("dentist:clinic:%d:*", clinicID)
+}
+
+func kClinicPatientList(clinicID int) string {
+	return fmt.Sprintf("patient:clinic:%d:*", clinicID)
 }
 
 func kClinicList(q table.TableQuery) string {
@@ -82,6 +92,14 @@ func kDentistClinicList(dentistID int, q table.TableQuery) string {
 	return fmt.Sprintf("clinic:dentist:%d:list:l%d:p%d:o%s:d%s", dentistID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
+func kPatientClinicList(dentistID int, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("clinic:patient:%d:list:l%d:p%d:o%s:d%s", dentistID, q.Limit, q.Page, orderBy, q.Direction)
+}
+
 func kClinicSearch(q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
@@ -97,7 +115,7 @@ func (s *clinicService) Create(ctx context.Context, deptID int, input model.Clin
 	}
 
 	if dto != nil && dto.ID > 0 {
-		cache.InvalidateKeys(kClinicByID(dto.ID), kClinicDentistList(dto.ID))
+		cache.InvalidateKeys(kClinicByID(dto.ID), kClinicDentistList(dto.ID), kClinicPatientList(dto.ID))
 	}
 	cache.InvalidateKeys(kClinicAll()...)
 
@@ -113,7 +131,7 @@ func (s *clinicService) Update(ctx context.Context, deptID int, input model.Clin
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kClinicByID(dto.ID), kClinicDentistList(dto.ID))
+		cache.InvalidateKeys(kClinicByID(dto.ID), kClinicDentistList(dto.ID), kClinicPatientList(dto.ID))
 	}
 	cache.InvalidateKeys(kClinicAll()...)
 
@@ -182,12 +200,30 @@ func (s *clinicService) ListByDentistID(ctx context.Context, dentistID int, q ta
 	return *ptr, nil
 }
 
+func (s *clinicService) ListByPatientID(ctx context.Context, dentistID int, q table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
+	type boxed = table.TableListResult[model.ClinicDTO]
+	key := kPatientClinicList(dentistID, q)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.ListByPatientID(ctx, dentistID, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
 func (s *clinicService) Delete(ctx context.Context, id int) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
 	cache.InvalidateKeys(kClinicAll()...)
-	cache.InvalidateKeys(kClinicByID(id), kClinicDentistList(id))
+	cache.InvalidateKeys(kClinicByID(id), kClinicDentistList(id), kClinicPatientList(id))
 	return nil
 }
 

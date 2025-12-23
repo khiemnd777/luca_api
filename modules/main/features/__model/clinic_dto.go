@@ -14,6 +14,8 @@ type ClinicDTO struct {
 	Active       bool           `json:"active,omitempty"`
 	Dentists     []*DentistDTO  `json:"dentists,omitempty"`
 	DentistIDs   []int          `json:"dentist_ids,omitempty"`
+	Patients     []*PatientDTO  `json:"patients,omitempty"`
+	PatientIDs   []int          `json:"patient_ids,omitempty"`
 	CustomFields map[string]any `json:"custom_fields,omitempty"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`

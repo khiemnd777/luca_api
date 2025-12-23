@@ -38,7 +38,6 @@ func (Clinic) Fields() []ent.Field {
 		field.Bool("active").
 			Default(true),
 
-		// JSONB cho custom fields
 		field.JSON("custom_fields", map[string]any{}).
 			Optional().
 			Default(map[string]any{}),
@@ -60,6 +59,7 @@ func (Clinic) Fields() []ent.Field {
 func (Clinic) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("dentists", ClinicDentist.Type),
+		edge.To("patients", ClinicPatient.Type),
 	}
 }
 
