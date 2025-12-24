@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -437,7 +438,7 @@ func (r *orderItemProcessInProgressRepository) Assign(
 		return nil, err
 	}
 
-	// 5. Sync process status
+	// Sync process status
 	if err := r.updateProcessStatusAndAssign(
 		ctx,
 		tx,
@@ -446,6 +447,11 @@ func (r *orderItemProcessInProgressRepository) Assign(
 		assignedID,
 		assignedName,
 	); err != nil {
+		return nil, err
+	}
+
+	// sync status back to order and order item
+	if err := r.syncOrderAndItemStatus(ctx, tx, current.OrderItemID, current.OrderID); err != nil {
 		return nil, err
 	}
 
@@ -471,7 +477,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		}
 	}()
 
-	// Checkout
+	// ---	Checkout
 	if checkInOrOutData.ID > 0 {
 		if checkInOrOutData.ProcessID == nil {
 			err = fmt.Errorf("process id is required for checkout of order item process %d", checkInOrOutData.ID)
@@ -495,6 +501,11 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 			return nil, err
 		}
 
+		// sync status back to order and order item
+		if err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID); err != nil {
+			return nil, err
+		}
+
 		dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
 		return dto, nil
 	}
@@ -514,7 +525,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 	}
 	checkInOrOutData.SectionName = proc.SectionName
 
-	// Checkin
+	// ---	Checkin
 	startedAt := time.Now()
 	entity, err := r.inprogressClient(tx).
 		Create().
@@ -549,6 +560,11 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		checkInOrOutData.AssignedID,
 		checkInOrOutData.AssignedName,
 	); err != nil {
+		return nil, err
+	}
+
+	// sync status back to order and order item
+	if err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID); err != nil {
 		return nil, err
 	}
 
@@ -752,6 +768,95 @@ func (r *orderItemProcessInProgressRepository) updateProcessStatusAndAssign(
 		assignedName,
 	)
 	return err
+}
+
+func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderItemID int64,
+	orderID *int64,
+) error {
+	processes, err := r.processClient(tx).
+		Query().
+		Where(orderitemprocess.OrderItemID(orderItemID)).
+		Select(orderitemprocess.FieldCustomFields).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+	if len(processes) == 0 {
+		return fmt.Errorf("no processes found for order item %d", orderItemID)
+	}
+
+	allWaiting := true
+	allCompleted := true
+	anyInProgress := false
+
+	for _, p := range processes {
+		status := utils.SafeGetString(p.CustomFields, "status")
+		if status != "waiting" {
+			allWaiting = false
+		}
+		if status != "completed" {
+			allCompleted = false
+		}
+		switch status {
+		case "in_progress", "qc", "rework":
+			anyInProgress = true
+		}
+	}
+
+	var orderStatus string
+	switch {
+	case allWaiting:
+		orderStatus = "received"
+	case anyInProgress:
+		orderStatus = "in_progress"
+	case allCompleted:
+		orderStatus = "completed"
+	default:
+		orderStatus = "in_progress"
+	}
+
+	orderItem, err := tx.OrderItem.
+		Query().
+		Where(orderitem.IDEQ(orderItemID)).
+		Select(
+			orderitem.FieldCustomFields,
+			orderitem.FieldOrderID,
+		).
+		Only(ctx)
+	if err != nil {
+		return err
+	}
+
+	cf := maps.Clone(orderItem.CustomFields)
+	if cf == nil {
+		cf = make(map[string]any)
+	}
+	cf["status"] = orderStatus
+
+	if _, err := tx.OrderItem.
+		UpdateOneID(orderItemID).
+		SetCustomFields(cf).
+		Save(ctx); err != nil {
+		return err
+	}
+
+	if orderID == nil {
+		oid := orderItem.OrderID
+		orderID = &oid
+	}
+
+	if orderID != nil {
+		if _, err := tx.Order.UpdateOneID(*orderID).
+			SetNillableStatusLatest(&orderStatus).
+			Save(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *orderItemProcessInProgressRepository) checkinWithData(ctx context.Context, tx *generated.Tx, latest *generated.OrderItemProcessInProgress, processes []*generated.OrderItemProcess, orderItemID int64, orderID *int64, note *string) (*model.OrderItemProcessInProgressDTO, error) {
