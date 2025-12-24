@@ -23,6 +23,8 @@ type OrderItemService interface {
 		ctx context.Context,
 		orderID, orderItemID int64,
 	) ([]*model.OrderItemHistoricalDTO, error)
+
+	GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error)
 }
 
 type orderItemService struct {
@@ -71,4 +73,8 @@ func (s *orderItemService) GetHistoricalByOrderIDAndOrderItemID(
 	return cache.GetList(fmt.Sprintf("order:id:%d:historical:oid:%d", orderID, orderItemID), cache.TTLMedium, func() ([]*model.OrderItemHistoricalDTO, error) {
 		return s.repo.GetHistoricalByOrderIDAndOrderItemID(ctx, orderID, orderItemID)
 	})
+}
+
+func (s *orderItemService) GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error) {
+	return s.repo.GetOrderIDAndOrderItemIDByCode(ctx, code)
 }

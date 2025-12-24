@@ -9,6 +9,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemmaterial"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemproduct"
@@ -31,6 +32,7 @@ type OrderItemRepository interface {
 	// -- general functions
 	Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
 	Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
+	GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderItemDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderItemDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderItemDTO], error)
@@ -515,6 +517,30 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 	}
 
 	return out, nil
+}
+
+func (r *orderItemRepository) GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error) {
+	if code == "" {
+		return 0, 0, fmt.Errorf("code is required")
+	}
+
+	entity, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.CodeEQ(code),
+			orderitem.DeletedAtIsNil(),
+			orderitem.HasOrderWith(order.DeletedAtIsNil()),
+		).
+		Select(
+			orderitem.FieldID,
+			orderitem.FieldOrderID,
+		).
+		Only(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return entity.OrderID, entity.ID, nil
 }
 
 func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.OrderItemDTO, error) {

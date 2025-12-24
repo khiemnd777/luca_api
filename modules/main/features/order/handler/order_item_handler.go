@@ -24,6 +24,7 @@ func NewOrderItemHandler(svc service.OrderItemService, deps *module.ModuleDeps[c
 
 func (h *OrderItemHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/products-materials", h.ProductsAndMaterials)
+	app.RouterGet(router, "/:dept_id<int>/order/item/ids-by-code", h.GetOrderIDAndOrderItemIDByCode)
 	app.RouterPost(router, "/:dept_id<int>/order/item/calculate-total-price", h.CalculateTotalPrice)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/sync-price", h.SyncPrice)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/list", h.Historical)
@@ -44,6 +45,27 @@ func (h *OrderItemHandler) ProductsAndMaterials(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemHandler) GetOrderIDAndOrderItemIDByCode(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	code := utils.GetQueryAsString(c, "code")
+	if code == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid code")
+	}
+
+	orderID, orderItemID, err := h.svc.GetOrderIDAndOrderItemIDByCode(c.UserContext(), code)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"order_id":      orderID,
+		"order_item_id": orderItemID,
+	})
 }
 
 func (h *OrderItemHandler) CalculateTotalPrice(c *fiber.Ctx) error {
