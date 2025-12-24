@@ -61,6 +61,7 @@ func kOrderAll() []string {
 		kOrderListAll(),
 		kOrderSearchAll(),
 		"order:assigned:*",
+		"order:item:material:loaner:*",
 	}
 }
 

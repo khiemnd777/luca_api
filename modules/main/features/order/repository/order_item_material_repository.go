@@ -5,11 +5,13 @@ import (
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/material"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemmaterial"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type OrderItemMaterialRepository interface {
@@ -21,6 +23,7 @@ type OrderItemMaterialRepository interface {
 	LoadConsumable(ctx context.Context, items ...*model.OrderItemDTO) error
 
 	// Loaner
+	GetLoanerMaterials(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderItemMaterialDTO], error)
 	CollectLoanerMaterials(dto *model.OrderItemDTO) []*model.OrderItemMaterialDTO
 	LoadLoaner(ctx context.Context, items ...*model.OrderItemDTO) error
 
@@ -160,6 +163,70 @@ func (r *orderItemMaterialRepository) GetConsumableTotalPriceByOrderID(ctx conte
 	}
 
 	return total, nil
+}
+
+func (r *orderItemMaterialRepository) GetLoanerMaterials(
+	ctx context.Context,
+	query table.TableQuery,
+) (table.TableListResult[model.OrderItemMaterialDTO], error) {
+	base := r.db.OrderItemMaterial.
+		Query().
+		Where(
+			orderitemmaterial.TypeEQ("loaner"),
+			orderitemmaterial.StatusEQ("on_loan"),
+		)
+
+	list, err := table.TableListV2(
+		ctx,
+		base,
+		query,
+		orderitemmaterial.Table,
+		orderitemmaterial.FieldID,
+		orderitemmaterial.FieldID,
+		func(q *generated.OrderItemMaterialQuery) *generated.OrderItemMaterialQuery {
+			return q.
+				Select(
+					orderitemmaterial.FieldID,
+					orderitemmaterial.FieldMaterialCode,
+					orderitemmaterial.FieldMaterialID,
+					orderitemmaterial.FieldOrderItemID,
+					orderitemmaterial.FieldOrderID,
+					orderitemmaterial.FieldQuantity,
+					orderitemmaterial.FieldType,
+					orderitemmaterial.FieldStatus,
+					orderitemmaterial.FieldRetailPrice,
+				).
+				WithOrderItem(func(oq *generated.OrderItemQuery) {
+					oq.Select(orderitem.FieldCode)
+				}).
+				WithMaterial(func(mq *generated.MaterialQuery) {
+					mq.Select(material.FieldName)
+				})
+		},
+		func(src []*generated.OrderItemMaterial) []*model.OrderItemMaterialDTO {
+			out := make([]*model.OrderItemMaterialDTO, 0, len(src))
+			for _, item := range src {
+				if item == nil {
+					continue
+				}
+				dto := mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](item)
+				if item.Edges.OrderItem != nil {
+					dto.OrderItemCode = item.Edges.OrderItem.Code
+				}
+				if item.Edges.Material != nil {
+					dto.MaterialName = item.Edges.Material.Name
+				}
+				out = append(out, dto)
+			}
+			return out
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.OrderItemMaterialDTO]
+		return zero, err
+	}
+
+	return list, nil
 }
 
 func (r *orderItemMaterialRepository) CollectLoanerMaterials(dto *model.OrderItemDTO) []*model.OrderItemMaterialDTO {

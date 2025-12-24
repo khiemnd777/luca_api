@@ -29,6 +29,11 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	ordItemHandler := handler.NewOrderItemHandler(ordItemSvc, deps)
 	ordItemHandler.RegisterRoutes(router)
 
+	ordItemMaterialRepo := repository.NewOrderItemMaterialRepository(deps.Ent.(*generated.Client))
+	ordItemMaterialSvc := service.NewOrderItemMaterialService(ordItemMaterialRepo, deps)
+	ordItemMaterialHandler := handler.NewOrderItemMaterialHandler(ordItemMaterialSvc, deps)
+	ordItemMaterialHandler.RegisterRoutes(router)
+
 	ordItemProcessRepo := repository.NewOrderItemProcessRepository(deps.Ent.(*generated.Client), deps, cfMgr)
 	ordItemProcessInProgressRepo := repository.NewOrderItemProcessInProgressRepository(deps.Ent.(*generated.Client), ordItemProcessRepo)
 	ordItemProcessSvc := service.NewOrderItemProcessService(ordItemProcessRepo, ordItemProcessInProgressRepo, deps, cfMgr)

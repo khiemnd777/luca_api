@@ -64,5 +64,6 @@ func (OrderItemMaterial) Indexes() []ent.Index {
 		index.Fields("order_id"),
 		index.Fields("order_item_id", "type"),
 		index.Fields("material_id"),
+		index.Fields("type", "status"),
 	}
 }
