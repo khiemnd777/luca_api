@@ -506,6 +506,11 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 			return nil, err
 		}
 
+		// sync process to order
+		if err := r.syncOrderProcessLatest(ctx, tx, *checkInOrOutData.ProcessID, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID); err != nil {
+			return nil, err
+		}
+
 		dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
 		return dto, nil
 	}
@@ -565,6 +570,11 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 
 	// sync status back to order and order item
 	if err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID); err != nil {
+		return nil, err
+	}
+
+	// sync process to order
+	if err := r.syncOrderProcessLatest(ctx, tx, *checkInOrOutData.ProcessID, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID); err != nil {
 		return nil, err
 	}
 
@@ -854,6 +864,50 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 			Save(ctx); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (r *orderItemProcessInProgressRepository) syncOrderProcessLatest(
+	ctx context.Context,
+	tx *generated.Tx,
+	processID int64,
+	orderItemID int64,
+	orderID *int64,
+) error {
+	if orderID == nil {
+		orderItem, err := tx.OrderItem.
+			Query().
+			Where(orderitem.IDEQ(orderItemID)).
+			Select(orderitem.FieldOrderID).
+			Only(ctx)
+		if err != nil {
+			return err
+		}
+		oid := orderItem.OrderID
+		orderID = &oid
+	}
+
+	if orderID == nil {
+		return nil
+	}
+
+	process, err := r.processClient(tx).
+		Query().
+		Where(orderitemprocess.IDEQ(processID)).
+		Select(orderitemprocess.FieldProcessName).
+		Only(ctx)
+	if err != nil {
+		return err
+	}
+
+	processIDLatest := int(processID)
+	if _, err := tx.Order.UpdateOneID(*orderID).
+		SetProcessIDLatest(processIDLatest).
+		SetNillableProcessNameLatest(process.ProcessName).
+		Save(ctx); err != nil {
+		return err
 	}
 
 	return nil

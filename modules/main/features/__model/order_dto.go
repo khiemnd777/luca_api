@@ -14,7 +14,8 @@ type OrderDTO struct {
 	DeliveryDate *time.Time     `json:"delivery_date,omitempty"`
 	// Customer
 	// deprecated
-	CustomerID   *int64  `json:"customer_id,omitempty"`
+	CustomerID *int64 `json:"customer_id,omitempty"`
+	// deprecated
 	CustomerName *string `json:"customer_name,omitempty"`
 	ClinicID     *int    `json:"clinic_id,omitempty"`
 	ClinicName   *string `json:"clinic_name,omitempty"`
@@ -28,6 +29,8 @@ type OrderDTO struct {
 	CodeLatest            *string             `json:"code_latest,omitempty"`
 	StatusLatest          *string             `json:"status_latest,omitempty"`
 	PriorityLatest        *string             `json:"priority_latest,omitempty"`
+	ProcessIDLatest       *int                `json:"process_id_latest,omitempty"`
+	ProcessNameLatest     *string             `json:"process_name_latest,omitempty"`
 	// Product props
 	ProductID   int      `json:"product_id,omitempty"`
 	ProductName *string  `json:"product_name,omitempty"`
