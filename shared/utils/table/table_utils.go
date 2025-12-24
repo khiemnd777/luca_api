@@ -172,10 +172,7 @@ func buildSQLOptions[O ~func(*sql.Selector)](table, field string, desc bool, pkF
 	return opts
 }
 
-// ====== Generic cho MỌI bảng Ent ======
-// T: entity non-pointer (vd: generated.Role)
-// O: order option type của entity đó (vd: role.OrderOption) ~ func(*sql.Selector)
-// Q: query type (vd: *generated.RoleQuery)
+// deprecated: use TableListV2
 func TableList[
 	T any,
 	R any,
@@ -228,4 +225,59 @@ func TableList[
 	}
 
 	return TableListResult[R]{Items: anyItems, Total: total}, nil
+}
+
+func TableListV2[
+	T any,
+	R any,
+	O ~func(*sql.Selector),
+	Q interface {
+		Clone() Q
+		Count(context.Context) (int, error)
+		Limit(int) Q
+		Offset(int) Q
+		Order(...O) Q
+		All(context.Context) ([]*T, error)
+	},
+](
+	ctx context.Context,
+	base Q, // ⚠️ KHÔNG Select
+	opts TableQuery,
+	table string,
+	pkField string,
+	defaultField string,
+	buildDataQuery func(Q) Q,
+	mapItems func(src []*T) []*R,
+) (TableListResult[R], error) {
+
+	total, err := base.Clone().Count(ctx)
+	if err != nil {
+		return TableListResult[R]{}, err
+	}
+
+	limit, offset := normalizePaging(opts.Limit, opts.Offset)
+	field, _ := resolveOrderField(opts.OrderBy, defaultField)
+	desc := isDesc(opts.Direction)
+	orderOpts := buildSQLOptions[O](table, field, desc, pkField)
+
+	q := buildDataQuery(base.Clone()).
+		Limit(limit).
+		Offset(offset).
+		Order(orderOpts...)
+
+	src, err := q.All(ctx)
+	if err != nil {
+		return TableListResult[R]{}, err
+	}
+
+	if mapItems != nil {
+		return TableListResult[R]{Items: mapItems(src), Total: total}, nil
+	}
+
+	out := make([]*R, len(src))
+	for i, v := range src {
+		out[i] = any(v).(*R)
+	}
+
+	return TableListResult[R]{Items: out, Total: total}, nil
 }

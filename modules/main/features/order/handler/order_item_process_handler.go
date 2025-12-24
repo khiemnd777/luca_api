@@ -12,6 +12,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type OrderItemProcessHandler struct {
@@ -25,6 +26,7 @@ func NewOrderItemProcessHandler(svc service.OrderItemProcessService, deps *modul
 
 func (h *OrderItemProcessHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes", h.ProcessesForStaff)
+	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes/in-progresses", h.GetInProgressesByAssignedID)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes", h.Processes)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/in-progresses", h.GetInProgressesByOrderItemID)
 	app.RouterGet(router, "/:dept_id<int>/order/processes/in-progress/:in_progress_id<int>", h.GetInProgressByID)
@@ -224,6 +226,19 @@ func (h *OrderItemProcessHandler) ProcessesForStaff(c *fiber.Ctx) error {
 	}
 	staffID, _ := utils.GetParamAsInt(c, "staff_id")
 	res, err := h.svc.GetProcessesByAssignedID(c.UserContext(), int64(staffID))
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemProcessHandler) GetInProgressesByAssignedID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.development"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	staffID, _ := utils.GetParamAsInt(c, "staff_id")
+	q := table.ParseTableQuery(c, 20)
+	res, err := h.svc.GetInProgressesByAssignedID(c.UserContext(), int64(staffID), q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

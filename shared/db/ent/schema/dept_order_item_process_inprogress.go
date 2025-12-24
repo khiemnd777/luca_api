@@ -33,6 +33,9 @@ func (OrderItemProcessInProgress) Fields() []ent.Field {
 
 		// cache
 		field.Int64("order_item_id"),
+		field.String("order_item_code").
+			Nillable().
+			Optional(),
 		field.Int64("order_id").
 			Nillable().
 			Optional(),

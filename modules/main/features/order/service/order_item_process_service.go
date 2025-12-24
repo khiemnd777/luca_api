@@ -11,6 +11,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type OrderItemProcessService interface {
@@ -42,6 +43,12 @@ type OrderItemProcessService interface {
 		orderID int64,
 		orderItemID int64,
 	) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
+
+	GetInProgressesByAssignedID(
+		ctx context.Context,
+		assignedID int64,
+		query table.TableQuery,
+	) (table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO], error)
 	GetCheckoutLatest(
 		ctx context.Context,
 		orderItemID int64,
@@ -98,6 +105,14 @@ func NewOrderItemProcessService(
 	}
 }
 
+func kAssignedInProgressList(assignedID int64, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("order:assigned:%d:inprogresses:l%d:p%d:o%s:d%s", assignedID, q.Limit, q.Page, orderBy, q.Direction)
+}
+
 func (s *orderItemProcessService) GetRawProcessesByProductID(ctx context.Context, productID int) ([]*model.ProcessDTO, error) {
 	return cache.GetList(fmt.Sprintf("product:id:%d:processes", productID), cache.TTLMedium, func() ([]*model.ProcessDTO, error) {
 		return s.repo.GetRawProcessesByProductID(ctx, productID)
@@ -143,6 +158,28 @@ func (s *orderItemProcessService) GetInProgressesByOrderItemID(
 	return cache.GetList(fmt.Sprintf("order:id:%d:oid:%d:inprogresses", orderID, orderItemID), cache.TTLShort, func() ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
 		return s.inprogressRepo.GetInProgressesByOrderItemID(ctx, nil, orderItemID)
 	})
+}
+
+func (s *orderItemProcessService) GetInProgressesByAssignedID(
+	ctx context.Context,
+	assignedID int64,
+	query table.TableQuery,
+) (table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO], error) {
+	type boxed = table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO]
+	key := kAssignedInProgressList(assignedID, query)
+
+	ptr, err := cache.Get(key, cache.TTLShort, func() (*boxed, error) {
+		res, e := s.inprogressRepo.GetInProgressesByAssignedID(ctx, nil, assignedID, query)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
 }
 
 func (s *orderItemProcessService) GetCheckoutLatest(ctx context.Context, orderItemID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
@@ -199,6 +236,9 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOut
 	if dto.NextProcessID != nil {
 		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.NextProcessID))
 	}
+	if dto.AssignedID != nil {
+		keys = append(keys, fmt.Sprintf("order:assigned:%d:*", *dto.AssignedID))
+	}
 
 	cache.InvalidateKeys(keys...)
 	cache.InvalidateKeys(kOrderAll()...)
@@ -234,6 +274,9 @@ func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64
 	}
 	if dto.NextProcessID != nil {
 		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.NextProcessID))
+	}
+	if dto.AssignedID != nil {
+		keys = append(keys, fmt.Sprintf("order:assigned:%d:*", *dto.AssignedID))
 	}
 
 	cache.InvalidateKeys(keys...)

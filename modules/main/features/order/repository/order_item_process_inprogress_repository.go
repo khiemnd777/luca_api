@@ -15,6 +15,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocessinprogress"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type OrderItemProcessInProgressRepository interface {
@@ -29,6 +30,7 @@ type OrderItemProcessInProgressRepository interface {
 	GetInProgressesByOrderItemID(ctx context.Context, tx *generated.Tx, orderItemID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetInProgressesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetInProgressByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error)
+	GetInProgressesByAssignedID(ctx context.Context, tx *generated.Tx, assignedID int64, query table.TableQuery) (table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO], error)
 }
 
 type orderItemProcessInProgressRepository struct {
@@ -99,6 +101,7 @@ func (r *orderItemProcessInProgressRepository) GetInProgressesByOrderItemID(ctx 
 			orderitemprocessinprogress.FieldID,
 			orderitemprocessinprogress.FieldOrderID,
 			orderitemprocessinprogress.FieldOrderItemID,
+			orderitemprocessinprogress.FieldOrderItemCode,
 			orderitemprocessinprogress.FieldCheckInNote,
 			orderitemprocessinprogress.FieldCheckOutNote,
 			orderitemprocessinprogress.FieldAssignedID,
@@ -126,18 +129,19 @@ func (r *orderItemProcessInProgressRepository) GetInProgressesByOrderItemID(ctx 
 			return nil, err
 		}
 		out = append(out, &model.OrderItemProcessInProgressAndProcessDTO{
-			ID:           item.ID,
-			OrderID:      item.OrderID,
-			OrderItemID:  item.OrderItemID,
-			CheckInNote:  item.CheckInNote,
-			CheckOutNote: item.CheckOutNote,
-			AssignedID:   item.AssignedID,
-			AssignedName: item.AssignedName,
-			StartedAt:    item.StartedAt,
-			CompletedAt:  item.CompletedAt,
-			ProcessName:  proc.ProcessName,
-			SectionName:  proc.SectionName,
-			Color:        proc.Color,
+			ID:            item.ID,
+			OrderID:       item.OrderID,
+			OrderItemID:   item.OrderItemID,
+			OrderItemCode: item.OrderItemCode,
+			CheckInNote:   item.CheckInNote,
+			CheckOutNote:  item.CheckOutNote,
+			AssignedID:    item.AssignedID,
+			AssignedName:  item.AssignedName,
+			StartedAt:     item.StartedAt,
+			CompletedAt:   item.CompletedAt,
+			ProcessName:   proc.ProcessName,
+			SectionName:   proc.SectionName,
+			Color:         proc.Color,
 		})
 	}
 
@@ -538,6 +542,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		SetNillablePrevProcessID(checkInOrOutData.PrevProcessID).
 		SetOrderItemID(checkInOrOutData.OrderItemID).
 		SetNillableOrderID(checkInOrOutData.OrderID).
+		SetNillableOrderItemCode(checkInOrOutData.OrderItemCode).
 		SetNillableAssignedID(checkInOrOutData.AssignedID).
 		SetNillableAssignedName(checkInOrOutData.AssignedName).
 		SetNillableSectionName(checkInOrOutData.SectionName).
@@ -637,6 +642,7 @@ func (r *orderItemProcessInProgressRepository) GetCheckoutLatest(ctx context.Con
 			orderitemprocessinprogress.FieldID,
 			orderitemprocessinprogress.FieldOrderID,
 			orderitemprocessinprogress.FieldOrderItemID,
+			orderitemprocessinprogress.FieldOrderItemCode,
 			orderitemprocessinprogress.FieldCheckInNote,
 			orderitemprocessinprogress.FieldCheckOutNote,
 			orderitemprocessinprogress.FieldAssignedID,
@@ -666,18 +672,19 @@ func (r *orderItemProcessInProgressRepository) GetCheckoutLatest(ctx context.Con
 	}
 
 	return &model.OrderItemProcessInProgressAndProcessDTO{
-		ID:           entity.ID,
-		OrderID:      entity.OrderID,
-		OrderItemID:  entity.OrderItemID,
-		CheckInNote:  entity.CheckInNote,
-		CheckOutNote: entity.CheckOutNote,
-		AssignedID:   entity.AssignedID,
-		AssignedName: entity.AssignedName,
-		StartedAt:    entity.StartedAt,
-		CompletedAt:  entity.CompletedAt,
-		ProcessName:  proc.ProcessName,
-		SectionName:  proc.SectionName,
-		Color:        proc.Color,
+		ID:            entity.ID,
+		OrderID:       entity.OrderID,
+		OrderItemID:   entity.OrderItemID,
+		OrderItemCode: entity.OrderItemCode,
+		CheckInNote:   entity.CheckInNote,
+		CheckOutNote:  entity.CheckOutNote,
+		AssignedID:    entity.AssignedID,
+		AssignedName:  entity.AssignedName,
+		StartedAt:     entity.StartedAt,
+		CompletedAt:   entity.CompletedAt,
+		ProcessName:   proc.ProcessName,
+		SectionName:   proc.SectionName,
+		Color:         proc.Color,
 	}, nil
 }
 
@@ -1004,4 +1011,89 @@ func sameAssigned(a, b *int64) bool {
 		return false
 	}
 	return *a == *b
+}
+
+func (r *orderItemProcessInProgressRepository) GetInProgressesByAssignedID(
+	ctx context.Context,
+	tx *generated.Tx,
+	assignedID int64,
+	query table.TableQuery,
+) (table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO], error) {
+
+	base := r.inprogressClient(tx).
+		Query().
+		Where(
+			orderitemprocessinprogress.AssignedID(assignedID),
+		)
+
+	list, err := table.TableListV2[
+		generated.OrderItemProcessInProgress,
+		generated.OrderItemProcessInProgress,
+	](
+		ctx,
+		base,
+		query,
+		orderitemprocessinprogress.Table,
+		orderitemprocessinprogress.FieldID,
+		orderitemprocessinprogress.FieldStartedAt,
+
+		func(q *generated.OrderItemProcessInProgressQuery) *generated.OrderItemProcessInProgressQuery {
+			return q.
+				Select(
+					orderitemprocessinprogress.FieldID,
+					orderitemprocessinprogress.FieldOrderID,
+					orderitemprocessinprogress.FieldOrderItemID,
+					orderitemprocessinprogress.FieldOrderItemCode,
+					orderitemprocessinprogress.FieldCheckInNote,
+					orderitemprocessinprogress.FieldCheckOutNote,
+					orderitemprocessinprogress.FieldAssignedID,
+					orderitemprocessinprogress.FieldAssignedName,
+					orderitemprocessinprogress.FieldStartedAt,
+					orderitemprocessinprogress.FieldCompletedAt,
+				).
+				WithProcess(func(pq *generated.OrderItemProcessQuery) {
+					pq.Select(
+						orderitemprocess.FieldID,
+						orderitemprocess.FieldProcessName,
+						orderitemprocess.FieldSectionName,
+						orderitemprocess.FieldColor,
+					)
+				})
+		},
+		nil,
+	)
+	if err != nil {
+		var zero table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO]
+		return zero, err
+	}
+
+	out := make([]*model.OrderItemProcessInProgressAndProcessDTO, 0, len(list.Items))
+	for _, item := range list.Items {
+		proc, err := item.Edges.ProcessOrErr()
+		if err != nil {
+			var zero table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO]
+			return zero, err
+		}
+
+		out = append(out, &model.OrderItemProcessInProgressAndProcessDTO{
+			ID:            item.ID,
+			OrderID:       item.OrderID,
+			OrderItemID:   item.OrderItemID,
+			OrderItemCode: item.OrderItemCode,
+			CheckInNote:   item.CheckInNote,
+			CheckOutNote:  item.CheckOutNote,
+			AssignedID:    item.AssignedID,
+			AssignedName:  item.AssignedName,
+			StartedAt:     item.StartedAt,
+			CompletedAt:   item.CompletedAt,
+			ProcessName:   proc.ProcessName,
+			SectionName:   proc.SectionName,
+			Color:         proc.Color,
+		})
+	}
+
+	return table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO]{
+		Items: out,
+		Total: list.Total,
+	}, nil
 }
