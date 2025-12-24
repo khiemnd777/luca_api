@@ -13,13 +13,17 @@ DO UPDATE SET role_name = EXCLUDED.role_name;
 -- ============================================
 INSERT INTO permissions (permission_name, permission_value)
 VALUES
+--  Order
   ('Đơn hàng - Xem', 'order.view'),
   ('Đơn hàng - Tạo', 'order.create'),
   ('Đơn hàng - Sửa', 'order.update'),
   ('Đơn hàng - Xoá', 'order.delete'),
   ('Đơn hàng - Tìm kiếm', 'order.search'),
 	('Đơn hàng - Import', 'order.import'),
-	('Đơn hàng - Export', 'order.export')
+	('Đơn hàng - Export', 'order.export'),
+--  Order development
+  ('Đơn hàng - Gia công', 'order.development')
+
 ON CONFLICT (permission_value)
 DO UPDATE SET permission_name = EXCLUDED.permission_name;
 
@@ -36,7 +40,8 @@ JOIN permissions p ON p.permission_value IN (
   'order.delete',
   'order.search',
 	'order.import',
-	'order.export'
+	'order.export',
+  'order.development'
 )
 WHERE r.role_name = 'admin'
 ON CONFLICT DO NOTHING;

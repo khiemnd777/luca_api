@@ -117,7 +117,7 @@ func (h *OrderItemProcessHandler) GetCheckoutLatest(c *fiber.Ctx) error {
 }
 
 func (h *OrderItemProcessHandler) PrepareCheckInOrOut(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.development"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 
@@ -134,7 +134,7 @@ func (h *OrderItemProcessHandler) PrepareCheckInOrOut(c *fiber.Ctx) error {
 }
 
 func (h *OrderItemProcessHandler) PrepareCheckInOrOutByCode(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.development"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 
@@ -151,7 +151,7 @@ func (h *OrderItemProcessHandler) PrepareCheckInOrOutByCode(c *fiber.Ctx) error 
 }
 
 func (h *OrderItemProcessHandler) CheckInOrOut(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.development"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 
@@ -194,7 +194,7 @@ func (h *OrderItemProcessHandler) CheckInOrOut(c *fiber.Ctx) error {
 }
 
 func (h *OrderItemProcessHandler) Assign(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.development"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	inProgressID, _ := utils.GetParamAsInt(c, "in_progress_id")
