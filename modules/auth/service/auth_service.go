@@ -80,7 +80,6 @@ func (s *AuthService) Login(ctx context.Context, phoneOrEmail, password string) 
 		tokens *auth.AuthTokenPair
 		err    error
 	)
-
 	switch {
 	case utils.IsEmail(phoneOrEmail):
 		_, tokens, err = s.LoginWithEmail(ctx, phoneOrEmail, password)
@@ -94,8 +93,7 @@ func (s *AuthService) Login(ctx context.Context, phoneOrEmail, password string) 
 }
 
 func (s *AuthService) LoginWithPhone(ctx context.Context, phone, password string) (*generated.User, *auth.AuthTokenPair, error) {
-	normalziedPhone := utils.NormalizePhone(&phone)
-	user, err := s.repo.GetUserByPhone(ctx, normalziedPhone)
+	user, err := s.repo.GetUserByPhone(ctx, phone)
 
 	if err != nil {
 		return nil, nil, authErrors.ErrInvalidCredentials
