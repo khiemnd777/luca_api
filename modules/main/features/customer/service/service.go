@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -122,19 +121,25 @@ func (s *customerService) Update(ctx context.Context, deptID int, input model.Cu
 // ----------------------------------------------------------------------------
 
 func (s *customerService) upsertSearch(ctx context.Context, deptID int, dto *model.CustomerDTO) {
-	// Bạn có thể chỉnh lại cho phù hợp với module thực tế (Title/Content/Keywords...).
 	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "customer", []any{dto.Code}, dto.CustomFields)
 
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
 		EntityType: "customer",
 		EntityID:   int64(dto.ID),
 		Title:      *dto.Name,
-		Subtitle:   nil,     
+		Subtitle:   nil,
 		Keywords:   &kwPtr,
-		Content:    nil,     
+		Content:    nil,
 		Attributes: map[string]any{},
 		OrgID:      utils.Ptr(int64(deptID)),
 		OwnerID:    nil,
+	})
+}
+
+func (s *customerService) unlinkSearch(id int) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "customer",
+		EntityID:   int64(id),
 	})
 }
 
@@ -180,6 +185,8 @@ func (s *customerService) Delete(ctx context.Context, id int) error {
 	}
 	cache.InvalidateKeys(kCustomerAll()...)
 	cache.InvalidateKeys(kCustomerByID(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

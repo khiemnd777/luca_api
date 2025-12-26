@@ -171,6 +171,13 @@ func (s *staffService) upsertSearch(ctx context.Context, deptID int, dto *model.
 	})
 }
 
+func (s *staffService) unlinkSearch(id int) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "staff",
+		EntityID:   int64(id),
+	})
+}
+
 func (s *staffService) ChangePassword(ctx context.Context, id int, newPassword string) error {
 	return s.repo.ChangePassword(ctx, id, newPassword)
 }
@@ -249,6 +256,8 @@ func (s *staffService) Delete(ctx context.Context, id int) error {
 	}
 	cache.InvalidateKeys(kStaffAll()...)
 	cache.InvalidateKeys(kStaffByID(id), kStaffSectionList(id), kUserRoleList(id), kSectionStaffAll(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

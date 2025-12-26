@@ -139,6 +139,13 @@ func (s *categoryService) upsertSearch(ctx context.Context, deptID int, dto *mod
 	})
 }
 
+func (s *categoryService) unlinkSearch(id int) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "category",
+		EntityID:   int64(id),
+	})
+}
+
 // ----------------------------------------------------------------------------
 // GetByID
 // ----------------------------------------------------------------------------
@@ -181,6 +188,8 @@ func (s *categoryService) Delete(ctx context.Context, id int) error {
 	}
 	cache.InvalidateKeys(kCategoryAll()...)
 	cache.InvalidateKeys(kCategoryByID(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

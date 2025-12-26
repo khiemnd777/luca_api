@@ -52,10 +52,6 @@ func kOrderByIDAll(id int64) string {
 	return fmt.Sprintf("order:id:%d:*", id)
 }
 
-func kOrderByOrderIDAndOrderItemID(orderID, orderItemID int64) string {
-	return fmt.Sprintf("order:id:%d:oid:%d", orderID, orderItemID)
-}
-
 func kOrderAll() []string {
 	return []string{
 		kOrderListAll(),
@@ -166,6 +162,13 @@ func (s *orderService) upsertSearch(ctx context.Context, deptID int, dto *model.
 	})
 }
 
+func (s *orderService) unlinkSearch(id int64) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "order",
+		EntityID:   id,
+	})
+}
+
 // ----------------------------------------------------------------------------
 // GetByID
 // ----------------------------------------------------------------------------
@@ -220,6 +223,8 @@ func (s *orderService) Delete(ctx context.Context, id int64) error {
 	}
 	cache.InvalidateKeys(kOrderAll()...)
 	cache.InvalidateKeys(kOrderByID(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

@@ -13,6 +13,11 @@ type Row struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
+type UnlinkDoc struct {
+	EntityType string `json:"entity_type"`
+	EntityID   int64  `json:"entity_id"`
+}
+
 type Doc struct {
 	EntityType string         `json:"entity_type"`
 	EntityID   int64          `json:"entity_id"`

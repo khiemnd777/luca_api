@@ -130,7 +130,6 @@ func (s *supplierService) Update(ctx context.Context, deptID int, input model.Su
 // ----------------------------------------------------------------------------
 
 func (s *supplierService) upsertSearch(ctx context.Context, deptID int, dto *model.SupplierDTO) {
-	// Bạn có thể chỉnh lại cho phù hợp với module thực tế (Title/Content/Keywords...).
 	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "supplier", []any{dto.Code}, dto.CustomFields)
 
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
@@ -143,6 +142,13 @@ func (s *supplierService) upsertSearch(ctx context.Context, deptID int, dto *mod
 		Attributes: map[string]any{},
 		OrgID:      utils.Ptr(int64(deptID)),
 		OwnerID:    nil,
+	})
+}
+
+func (s *supplierService) unlinkSearch(id int) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "supplier",
+		EntityID:   int64(id),
 	})
 }
 
@@ -206,6 +212,8 @@ func (s *supplierService) Delete(ctx context.Context, id int) error {
 	}
 	cache.InvalidateKeys(kSupplierAll()...)
 	cache.InvalidateKeys(kSupplierByID(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

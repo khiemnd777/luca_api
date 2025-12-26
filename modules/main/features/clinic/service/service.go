@@ -158,6 +158,13 @@ func (s *clinicService) upsertSearch(ctx context.Context, deptID int, dto *model
 	})
 }
 
+func (s *clinicService) unlinkSearch(id int) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "clinic",
+		EntityID:   int64(id),
+	})
+}
+
 func (s *clinicService) GetByID(ctx context.Context, id int) (*model.ClinicDTO, error) {
 	return cache.Get(kClinicByID(id), cache.TTLMedium, func() (*model.ClinicDTO, error) {
 		return s.repo.GetByID(ctx, id)
@@ -224,6 +231,8 @@ func (s *clinicService) Delete(ctx context.Context, id int) error {
 	}
 	cache.InvalidateKeys(kClinicAll()...)
 	cache.InvalidateKeys(kClinicByID(id), kClinicDentistList(id), kClinicPatientList(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

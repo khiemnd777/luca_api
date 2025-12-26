@@ -125,7 +125,6 @@ func (s *materialService) Update(ctx context.Context, deptID int, input model.Ma
 // ----------------------------------------------------------------------------
 
 func (s *materialService) upsertSearch(ctx context.Context, deptID int, dto *model.MaterialDTO) {
-	// Bạn có thể chỉnh lại cho phù hợp với module thực tế (Title/Content/Keywords...).
 	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "material", []any{dto.Code}, dto.CustomFields)
 
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
@@ -138,6 +137,13 @@ func (s *materialService) upsertSearch(ctx context.Context, deptID int, dto *mod
 		Attributes: map[string]any{},
 		OrgID:      utils.Ptr(int64(deptID)),
 		OwnerID:    nil,
+	})
+}
+
+func (s *materialService) unlinkSearch(id int) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "material",
+		EntityID:   int64(id),
 	})
 }
 
@@ -183,6 +189,8 @@ func (s *materialService) Delete(ctx context.Context, id int) error {
 	}
 	cache.InvalidateKeys(kMaterialAll()...)
 	cache.InvalidateKeys(kMaterialByID(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

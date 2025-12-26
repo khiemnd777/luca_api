@@ -136,7 +136,6 @@ func (s *processService) Update(ctx context.Context, deptID int, input model.Pro
 // ----------------------------------------------------------------------------
 
 func (s *processService) upsertSearch(ctx context.Context, deptID int, dto *model.ProcessDTO) {
-	// Bạn có thể chỉnh lại cho phù hợp với module thực tế (Title/Content/Keywords...).
 	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "process", []any{dto.Code}, dto.CustomFields)
 
 	pubsub.PublishAsync("search:upsert", &searchmodel.Doc{
@@ -149,6 +148,13 @@ func (s *processService) upsertSearch(ctx context.Context, deptID int, dto *mode
 		Attributes: map[string]any{},
 		OrgID:      utils.Ptr(int64(deptID)),
 		OwnerID:    nil,
+	})
+}
+
+func (s *processService) unlinkSearch(id int) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "process",
+		EntityID:   int64(id),
 	})
 }
 
@@ -198,6 +204,8 @@ func (s *processService) Delete(ctx context.Context, id int) error {
 	}
 	cache.InvalidateKeys(kProcessAll()...)
 	cache.InvalidateKeys(kProcessByID(id))
+
+	s.unlinkSearch(id)
 	return nil
 }
 

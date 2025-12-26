@@ -30,6 +30,11 @@ func NewSearchService(repo repository.SearchRepository, deps *module.ModuleDeps[
 		return svc.Upsert(ctx, *payload)
 	})
 
+	pubsub.SubscribeAsync("search:unlink", func(payload *searchmodel.UnlinkDoc) error {
+		ctx := context.Background()
+		return svc.Delete(ctx, payload.EntityType, payload.EntityID)
+	})
+
 	return &svc
 }
 
