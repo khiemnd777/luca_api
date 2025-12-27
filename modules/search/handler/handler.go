@@ -28,10 +28,20 @@ func (h *SearchHandler) RegisterRoutes(router fiber.Router) {
 
 func (h *SearchHandler) Search(c *fiber.Ctx) error {
 	q := utils.GetQueryAsString(c, "q")
+	entityType := utils.GetQueryAsString(c, "entityType")
+	if entityType == "" {
+		entityType = utils.GetQueryAsString(c, "entity_type")
+	}
 	deptID, _ := utils.GetDeptIDInt(c)
+
+	var types []string
+	if entityType != "" {
+		types = []string{entityType}
+	}
 
 	rows, err := h.svc.Search(c.UserContext(), model.Options{
 		Query:           q,
+		Types:           types,
 		OrgID:           utils.Ptr(int64(deptID)),
 		UseTrgmFallback: true,
 	})

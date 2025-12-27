@@ -89,7 +89,7 @@ func (r *searchRepo) Search(ctx context.Context, opt model.Options) ([]sharedmod
 	// Types
 	if len(opt.Types) > 0 {
 		where += " AND entity_type = ANY($1)"
-		args = append(args, dbutils.PqStringArray(opt.Types)) // helper below
+		args = append(args, dbutils.PqStringArray(opt.Types))
 	}
 	// Org/Owner
 	if opt.OrgID != nil {
