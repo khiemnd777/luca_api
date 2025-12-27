@@ -10,9 +10,13 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/material"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemmaterial"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemproduct"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
@@ -26,6 +30,8 @@ type OrderRepository interface {
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	SyncPrice(ctx context.Context, orderID int64) (float64, error)
+	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
+	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	// -- general functions
 	Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
@@ -622,4 +628,118 @@ func (r *orderRepository) Delete(ctx context.Context, id int64) error {
 	return r.db.Order.UpdateOneID(id).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
+}
+
+func (r *orderRepository) GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error) {
+	products, err := r.db.OrderItemProduct.
+		Query().
+		Where(
+			orderitemproduct.OrderIDEQ(orderID),
+			orderitemproduct.HasOrderItemWith(orderitem.DeletedAtIsNil()),
+		).
+		Select(
+			orderitemproduct.FieldID,
+			orderitemproduct.FieldOrderID,
+			orderitemproduct.FieldOrderItemID,
+			orderitemproduct.FieldProductID,
+			orderitemproduct.FieldProductCode,
+			orderitemproduct.FieldQuantity,
+			orderitemproduct.FieldRetailPrice,
+		).
+		WithOrderItem(func(q *generated.OrderItemQuery) {
+			q.Select(orderitem.FieldID, orderitem.FieldCode)
+		}).
+		WithProduct(func(q *generated.ProductQuery) {
+			q.Select(product.FieldID, product.FieldCode, product.FieldName)
+		}).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(products) == 0 {
+		return nil, nil
+	}
+
+	out := make([]*model.OrderItemProductDTO, 0, len(products))
+	for _, it := range products {
+		dto := &model.OrderItemProductDTO{
+			ID:          it.ID,
+			ProductCode: it.ProductCode,
+			ProductID:   it.ProductID,
+			OrderItemID: it.OrderItemID,
+			OrderID:     it.OrderID,
+			Quantity:    it.Quantity,
+			RetailPrice: it.RetailPrice,
+		}
+		if it.Edges.OrderItem != nil {
+			dto.OrderItemCode = it.Edges.OrderItem.Code
+		}
+		if it.Edges.Product != nil {
+			dto.ProductName = it.Edges.Product.Name
+			if dto.ProductCode == nil {
+				dto.ProductCode = it.Edges.Product.Code
+			}
+		}
+		out = append(out, dto)
+	}
+
+	return out, nil
+}
+
+func (r *orderRepository) GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error) {
+	materials, err := r.db.OrderItemMaterial.
+		Query().
+		Where(
+			orderitemmaterial.OrderIDEQ(orderID),
+			orderitemmaterial.HasOrderItemWith(orderitem.DeletedAtIsNil()),
+		).
+		Select(
+			orderitemmaterial.FieldID,
+			orderitemmaterial.FieldOrderID,
+			orderitemmaterial.FieldOrderItemID,
+			orderitemmaterial.FieldMaterialID,
+			orderitemmaterial.FieldMaterialCode,
+			orderitemmaterial.FieldQuantity,
+			orderitemmaterial.FieldRetailPrice,
+			orderitemmaterial.FieldType,
+		).
+		WithOrderItem(func(q *generated.OrderItemQuery) {
+			q.Select(orderitem.FieldID, orderitem.FieldCode)
+		}).
+		WithMaterial(func(q *generated.MaterialQuery) {
+			q.Select(material.FieldID, material.FieldCode, material.FieldName)
+		}).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(materials) == 0 {
+		return nil, nil
+	}
+
+	out := make([]*model.OrderItemMaterialDTO, 0, len(materials))
+	for _, it := range materials {
+		dto := &model.OrderItemMaterialDTO{
+			ID:           it.ID,
+			MaterialCode: it.MaterialCode,
+			MaterialID:   it.MaterialID,
+			OrderItemID:  it.OrderItemID,
+			OrderID:      it.OrderID,
+			Quantity:     it.Quantity,
+			RetailPrice:  it.RetailPrice,
+			Type:         it.Type,
+		}
+		if it.Edges.OrderItem != nil {
+			dto.OrderItemCode = it.Edges.OrderItem.Code
+		}
+		if it.Edges.Material != nil {
+			dto.MaterialName = it.Edges.Material.Name
+			if dto.MaterialCode == nil {
+				dto.MaterialCode = it.Edges.Material.Code
+			}
+		}
+		out = append(out, dto)
+	}
+
+	return out, nil
 }

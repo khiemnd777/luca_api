@@ -24,6 +24,8 @@ type OrderService interface {
 	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
+	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
+	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
@@ -185,6 +187,14 @@ func (s *orderService) GetByOrderIDAndOrderItemID(ctx context.Context, orderID, 
 	// return cache.Get(kOrderByOrderIDAndOrderItemID(orderID, orderItemID), cache.TTLMedium, func() (*model.OrderDTO, error) {
 	// 	return s.repo.GetByOrderIDAndOrderItemID(ctx, orderID, orderItemID)
 	// })
+}
+
+func (s *orderService) GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error) {
+	return s.repo.GetAllOrderProducts(ctx, orderID)
+}
+
+func (s *orderService) GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error) {
+	return s.repo.GetAllOrderMaterials(ctx, orderID)
 }
 
 func (s *orderService) SyncPrice(ctx context.Context, orderID int64) (float64, error) {
