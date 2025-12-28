@@ -720,6 +720,35 @@ func (r *orderItemRepository) Delete(ctx context.Context, id int64) error {
 		if err != nil {
 			return err
 		}
+		return nil
+	}
+
+	latest, err := tx.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(item.OrderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt)).
+		Select(
+			orderitem.FieldCode,
+			orderitem.FieldCustomFields,
+			orderitem.FieldRemakeCount,
+		).
+		First(ctx)
+	if err != nil {
+		return err
+	}
+
+	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
+	rmkCount := latest.RemakeCount
+
+	if err = tx.Order.UpdateOneID(item.OrderID).
+		SetNillableCodeLatest(latest.Code).
+		SetNillableRemakeType(rmkType).
+		SetNillableRemakeCount(&rmkCount).
+		Exec(ctx); err != nil {
+		return err
 	}
 	return nil
 }
