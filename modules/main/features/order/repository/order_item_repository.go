@@ -25,6 +25,7 @@ type OrderItemRepository interface {
 	IsLatest(ctx context.Context, orderItemID int64) (bool, error)
 	IsLatestIfOrderID(ctx context.Context, orderID, orderItemID int64) (bool, error)
 	GetLatestByOrderID(ctx context.Context, orderID int64) (*model.OrderItemDTO, error)
+	GetLatestOrderItemIDByOrderID(ctx context.Context, orderID int64) (int64, error)
 	GetHistoricalByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) ([]*model.OrderItemHistoricalDTO, error)
 	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
 	GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error)
@@ -519,6 +520,23 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 	return out, nil
 }
 
+func (r *orderItemRepository) GetLatestOrderItemIDByOrderID(ctx context.Context, orderID int64) (int64, error) {
+	item, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt)).
+		Select(orderitem.FieldID).
+		First(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return item.ID, nil
+}
+
 func (r *orderItemRepository) GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error) {
 	if code == "" {
 		return 0, 0, fmt.Errorf("code is required")
@@ -639,7 +657,69 @@ func (r *orderItemRepository) Search(ctx context.Context, query dbutils.SearchQu
 }
 
 func (r *orderItemRepository) Delete(ctx context.Context, id int64) error {
-	return r.db.OrderItem.UpdateOneID(id).
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	hasChildren, err := tx.OrderItem.
+		Query().
+		Where(
+			orderitem.ParentItemIDEQ(id),
+			orderitem.DeletedAtIsNil(),
+		).
+		Exist(ctx)
+	if err != nil {
+		return err
+	}
+	if hasChildren {
+		return fmt.Errorf("cannot delete order item %d because it still has child order items", id)
+	}
+
+	item, err := tx.OrderItem.
+		Query().
+		Where(
+			orderitem.ID(id),
+			orderitem.DeletedAtIsNil(),
+		).
+		Select(orderitem.FieldOrderID).
+		Only(ctx)
+	if err != nil {
+		return err
+	}
+
+	remainCount, err := tx.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(item.OrderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Count(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err = tx.OrderItem.UpdateOneID(id).
 		SetDeletedAt(time.Now()).
-		Exec(ctx)
+		Exec(ctx); err != nil {
+		return err
+	}
+
+	if remainCount == 1 {
+		err = tx.Order.UpdateOneID(item.OrderID).
+			SetDeletedAt(time.Now()).
+			Exec(ctx)
+
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

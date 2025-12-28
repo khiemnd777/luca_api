@@ -24,10 +24,12 @@ func NewOrderItemHandler(svc service.OrderItemService, deps *module.ModuleDeps[c
 
 func (h *OrderItemHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/products-materials", h.ProductsAndMaterials)
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/latest-order-item-id", h.GetLatestOrderItemIDByOrderID)
 	app.RouterGet(router, "/:dept_id<int>/order/item/ids-by-code", h.GetOrderIDAndOrderItemIDByCode)
 	app.RouterPost(router, "/:dept_id<int>/order/item/calculate-total-price", h.CalculateTotalPrice)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/sync-price", h.SyncPrice)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/list", h.Historical)
+	app.RouterDelete(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>", h.Delete)
 }
 
 func (h *OrderItemHandler) ProductsAndMaterials(c *fiber.Ctx) error {
@@ -45,6 +47,26 @@ func (h *OrderItemHandler) ProductsAndMaterials(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemHandler) GetLatestOrderItemIDByOrderID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	orderItemID, err := h.svc.GetLatestOrderItemIDByOrderID(c.UserContext(), int64(orderID))
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"order_item_id": orderItemID,
+	})
 }
 
 func (h *OrderItemHandler) GetOrderIDAndOrderItemIDByCode(c *fiber.Ctx) error {
@@ -125,4 +147,19 @@ func (h *OrderItemHandler) Historical(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemHandler) Delete(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.delete"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	orderItemID, _ := utils.GetParamAsInt(c, "order_item_id")
+	if orderItemID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
+	}
+	if err := h.svc.Delete(c.UserContext(), int64(orderID), int64(orderItemID)); err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }

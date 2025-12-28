@@ -24,7 +24,9 @@ type OrderItemService interface {
 		orderID, orderItemID int64,
 	) ([]*model.OrderItemHistoricalDTO, error)
 
+	GetLatestOrderItemIDByOrderID(ctx context.Context, orderID int64) (int64, error)
 	GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error)
+	Delete(ctx context.Context, orderID, orderItemID int64) error
 }
 
 type orderItemService struct {
@@ -75,6 +77,26 @@ func (s *orderItemService) GetHistoricalByOrderIDAndOrderItemID(
 	})
 }
 
+func (s *orderItemService) GetLatestOrderItemIDByOrderID(ctx context.Context, orderID int64) (int64, error) {
+	return s.repo.GetLatestOrderItemIDByOrderID(ctx, orderID)
+}
+
 func (s *orderItemService) GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error) {
 	return s.repo.GetOrderIDAndOrderItemIDByCode(ctx, code)
+}
+
+func (s *orderItemService) Delete(ctx context.Context, orderID, orderItemID int64) error {
+	err := s.repo.Delete(ctx, orderItemID)
+	if err != nil {
+		return err
+	}
+
+	cache.InvalidateKeys(
+		fmt.Sprintf("order:id:%d:historical:oid:%d", orderID, orderItemID),
+		fmt.Sprintf("order:id:%d:historical:oid:0", orderID),
+		"order:list:*",
+		"order:search:*",
+	)
+
+	return nil
 }

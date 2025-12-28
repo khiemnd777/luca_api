@@ -13,3 +13,7 @@ CREATE INDEX IF NOT EXISTS ix_order_items_latest_by_code_original_not_deleted
 CREATE INDEX IF NOT EXISTS ix_order_items_latest_by_order_id_not_deleted
   ON order_items(order_id, created_at)
   WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS ix_order_items_parent_order_id_not_deleted
+  ON order_items(parent_item_id)
+  WHERE deleted_at IS NULL;

@@ -625,6 +625,19 @@ func (r *orderRepository) Search(ctx context.Context, query dbutils.SearchQuery)
 }
 
 func (r *orderRepository) Delete(ctx context.Context, id int64) error {
+	hasItems, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(id),
+			orderitem.DeletedAtIsNil(),
+		).
+		Exist(ctx)
+	if err != nil {
+		return err
+	}
+	if hasItems {
+		return fmt.Errorf("cannot delete order %d because it still has order items", id)
+	}
 	return r.db.Order.UpdateOneID(id).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
