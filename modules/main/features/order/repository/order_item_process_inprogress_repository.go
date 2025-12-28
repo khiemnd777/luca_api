@@ -414,6 +414,7 @@ func (r *orderItemProcessInProgressRepository) Assign(
 	}
 
 	// Close current
+	// Then, assign it to the other one
 	checkoutNote := fmt.Sprintf("➡ Đã giao cho kỹ thuật viên %s", utils.SafeString(assignedName))
 
 	if _, err := r.inprogressClient(tx).
