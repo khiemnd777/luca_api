@@ -28,7 +28,7 @@ type OrderItemRepository interface {
 	GetLatestOrderItemIDByOrderID(ctx context.Context, orderID int64) (int64, error)
 	GetHistoricalByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) ([]*model.OrderItemHistoricalDTO, error)
 	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
-	GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error)
+	GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
 	GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error)
 	// -- general functions
 	Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
@@ -200,12 +200,12 @@ func (r *orderItemRepository) GetTotalPriceByOrderItemID(ctx context.Context, or
 	return total, nil
 }
 
-func (r *orderItemRepository) GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error) {
-	productTotal, err := r.orderItemProductRepo.GetTotalPriceByOrderID(ctx, orderID)
+func (r *orderItemRepository) GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error) {
+	productTotal, err := r.orderItemProductRepo.GetTotalPriceByOrderID(ctx, tx, orderID)
 	if err != nil {
 		return 0, nil
 	}
-	consumableMaterialTotal, err := r.orderItemMaterialRepo.GetConsumableTotalPriceByOrderID(ctx, orderID)
+	consumableMaterialTotal, err := r.orderItemMaterialRepo.GetConsumableTotalPriceByOrderID(ctx, tx, orderID)
 	if err != nil {
 		return 0, nil
 	}

@@ -19,7 +19,7 @@ type OrderItemMaterialRepository interface {
 	CollectConsumableMaterials(dto *model.OrderItemDTO) []*model.OrderItemMaterialDTO
 	CalculateConsumableTotalPrice(materials []*model.OrderItemMaterialDTO) *float64
 	GetConsumableTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
-	GetConsumableTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error)
+	GetConsumableTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
 	LoadConsumable(ctx context.Context, items ...*model.OrderItemDTO) error
 
 	// Loaner
@@ -139,8 +139,14 @@ func (r *orderItemMaterialRepository) GetConsumableTotalPriceByOrderItemID(ctx c
 	return total, nil
 }
 
-func (r *orderItemMaterialRepository) GetConsumableTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error) {
-	materials, err := r.db.OrderItemMaterial.
+func (r *orderItemMaterialRepository) GetConsumableTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error) {
+	var c *generated.OrderItemMaterialClient
+	if tx != nil {
+		c = tx.OrderItemMaterial
+	} else {
+		c = r.db.OrderItemMaterial
+	}
+	materials, err := c.
 		Query().
 		Where(
 			orderitemmaterial.TypeEQ("consumable"),

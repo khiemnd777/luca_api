@@ -22,7 +22,7 @@ type OrderItemProductRepository interface {
 	) ([]*model.OrderItemProductDTO, error)
 	Load(ctx context.Context, items ...*model.OrderItemDTO) error
 	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
-	GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error)
+	GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
 }
 
 type orderItemProductRepository struct {
@@ -194,8 +194,14 @@ func (r *orderItemProductRepository) GetTotalPriceByOrderItemID(ctx context.Cont
 	return total, nil
 }
 
-func (r *orderItemProductRepository) GetTotalPriceByOrderID(ctx context.Context, orderID int64) (float64, error) {
-	products, err := r.db.OrderItemProduct.
+func (r *orderItemProductRepository) GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error) {
+	var oipC *generated.OrderItemProductClient
+	if tx != nil {
+		oipC = tx.OrderItemProduct
+	} else {
+		oipC = r.db.OrderItemProduct
+	}
+	products, err := oipC.
 		Query().
 		Where(
 			orderitemproduct.OrderIDEQ(orderID),

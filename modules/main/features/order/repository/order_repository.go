@@ -97,7 +97,7 @@ func (r *orderRepository) GetByOrderIDAndOrderItemID(ctx context.Context, orderI
 }
 
 func (r *orderRepository) SyncPrice(ctx context.Context, orderID int64) (float64, error) {
-	return r.orderItemRepo.GetTotalPriceByOrderID(ctx, orderID)
+	return r.orderItemRepo.GetTotalPriceByOrderID(ctx, nil, orderID)
 }
 
 // -- helpers
@@ -147,10 +147,16 @@ func (r *orderRepository) createNewOrder(
 	lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
 	lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
 	prdQty := utils.SafeGetIntPtr(latest.CustomFields, "quantity")
-	prdTotalPrice := latest.TotalPrice
 	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 	rmkCount := latest.RemakeCount
+
+	// total price
+	totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(ctx, tx, out.ID)
+	if err != nil {
+		return nil, err
+	}
+	prdTotalPrice := totalPrice
 
 	_, err = orderEnt.
 		Update().
@@ -158,7 +164,7 @@ func (r *orderRepository) createNewOrder(
 		SetNillableStatusLatest(lstStatus).
 		SetNillablePriorityLatest(lstPriority).
 		SetNillableQuantity(prdQty).
-		SetNillableTotalPrice(prdTotalPrice).
+		SetTotalPrice(prdTotalPrice).
 		SetNillableDeliveryDate(dlrDate).
 		SetNillableRemakeType(rmkType).
 		SetNillableRemakeCount(&rmkCount).
@@ -173,7 +179,7 @@ func (r *orderRepository) createNewOrder(
 	out.StatusLatest = lstStatus
 	out.PriorityLatest = lstPriority
 	out.Quantity = prdQty
-	out.TotalPrice = prdTotalPrice
+	out.TotalPrice = &prdTotalPrice
 	out.DeliveryDate = dlrDate
 	out.RemakeType = rmkType
 	out.RemakeCount = &rmkCount
@@ -383,17 +389,23 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	if isLatest {
 		lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
 		lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
-		prdTotalPrice := latest.TotalPrice
 		dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 		rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 		rmkCount := latest.RemakeCount
+
+		// total price
+		totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(ctx, tx, output.ID)
+		if err != nil {
+			return nil, err
+		}
+		prdTotalPrice := totalPrice
 
 		_, err = entity.
 			Update().
 			SetNillableCodeLatest(latest.Code).
 			SetNillableStatusLatest(lstStatus).
 			SetNillablePriorityLatest(lstPriority).
-			SetNillableTotalPrice(prdTotalPrice).
+			SetTotalPrice(prdTotalPrice).
 			SetNillableDeliveryDate(dlrDate).
 			SetNillableRemakeType(rmkType).
 			SetNillableRemakeCount(&rmkCount).
@@ -407,7 +419,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 		output.CodeLatest = latest.Code
 		output.StatusLatest = lstStatus
 		output.PriorityLatest = lstPriority
-		output.TotalPrice = prdTotalPrice
+		output.TotalPrice = &prdTotalPrice
 		output.DeliveryDate = dlrDate
 		output.RemakeType = rmkType
 		output.RemakeCount = &rmkCount
