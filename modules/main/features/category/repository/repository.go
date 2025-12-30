@@ -13,6 +13,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/category"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	collectionutils "github.com/khiemnd777/andy_api/shared/metadata/collection"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
@@ -367,6 +368,8 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
 		return err
 	}
 
+	logger.Debug(fmt.Sprintf("Deleting category: %+v", entity))
+
 	countChildren, err := tx.Category.Query().
 		Where(
 			category.ParentID(id),
@@ -380,12 +383,6 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
 		return fmt.Errorf("cannot delete category %d because it still has child categories", id)
 	}
 
-	if err = tx.Category.UpdateOneID(id).
-		SetDeletedAt(time.Now()).
-		Exec(ctx); err != nil {
-		return err
-	}
-
 	if err = collectionutils.UpsertAncestorCollections(
 		ctx,
 		tx,
@@ -394,6 +391,14 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
 	); err != nil {
 		return err
 	}
+
+	if err = tx.Category.UpdateOneID(id).
+		SetDeletedAt(time.Now()).
+		Exec(ctx); err != nil {
+		return err
+	}
+
+	logger.Debug(fmt.Sprintf("Deleting category: %+v", err))
 
 	return nil
 }
