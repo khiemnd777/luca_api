@@ -321,7 +321,7 @@ func (r *orderItemRepository) applyTotalPrice(dto *model.OrderItemDTO, totalPric
 func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	in := &input.DTO
 
-	products := r.orderItemProductRepo.CollectProducts(in)
+	products := r.orderItemProductRepo.PrepareProducts(in)
 	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
 	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(in)
 	totalPriceConsumableMaterial := r.orderItemMaterialRepo.CalculateConsumableTotalPrice(consumableMaterials)
@@ -441,7 +441,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 
 func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	dto := &input.DTO
-	products := r.orderItemProductRepo.CollectProducts(dto)
+	products := r.orderItemProductRepo.PrepareProducts(dto)
 	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
 	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(dto)
 	totalPriceConsumableMaterial := r.orderItemMaterialRepo.CalculateConsumableTotalPrice(consumableMaterials)

@@ -12,7 +12,7 @@ import (
 )
 
 type OrderItemProductRepository interface {
-	CollectProducts(dto *model.OrderItemDTO) []*model.OrderItemProductDTO
+	PrepareProducts(dto *model.OrderItemDTO) []*model.OrderItemProductDTO
 	CalculateTotalPrice(products []*model.OrderItemProductDTO) *float64
 	Sync(
 		ctx context.Context,
@@ -21,6 +21,7 @@ type OrderItemProductRepository interface {
 		orderItemID int64,
 		products []*model.OrderItemProductDTO,
 	) ([]*model.OrderItemProductDTO, error)
+
 	GetProductsByOrderID(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	Load(ctx context.Context, items ...*model.OrderItemDTO) error
 	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
@@ -35,7 +36,9 @@ func NewOrderItemProductRepository(db *generated.Client) OrderItemProductReposit
 	return &orderItemProductRepository{db: db}
 }
 
-func (r *orderItemProductRepository) CollectProducts(dto *model.OrderItemDTO) []*model.OrderItemProductDTO {
+func (r *orderItemProductRepository) PrepareProducts(
+	dto *model.OrderItemDTO,
+) []*model.OrderItemProductDTO {
 	if dto == nil || len(dto.Products) == 0 {
 		return nil
 	}
@@ -53,13 +56,15 @@ func (r *orderItemProductRepository) CollectProducts(dto *model.OrderItemDTO) []
 		seen[product.ProductID] = struct{}{}
 
 		qty := r.normalizeQuantity(product.Quantity)
+
 		out = append(out, &model.OrderItemProductDTO{
-			ID:          product.ID,
-			ProductID:   product.ProductID,
-			OrderItemID: product.OrderItemID,
-			OrderID:     product.OrderID,
-			Quantity:    qty,
-			RetailPrice: product.RetailPrice,
+			ID:                  product.ID,
+			ProductID:           product.ProductID,
+			OrderItemID:         product.OrderItemID,
+			OriginalOrderItemID: product.OriginalOrderItemID,
+			OrderID:             product.OrderID,
+			Quantity:            qty,
+			RetailPrice:         product.RetailPrice,
 		})
 	}
 
@@ -86,57 +91,256 @@ func (r *orderItemProductRepository) CalculateTotalPrice(products []*model.Order
 	return &total
 }
 
-func (r *orderItemProductRepository) Sync(
+func (r *orderItemProductRepository) SyncFromDerived(
 	ctx context.Context,
 	tx *generated.Tx,
-	orderID,
-	orderItemID int64,
+	orderID int64,
+	derivedOrderItemID int64,
+	sourceOrderItemID int64,
 	products []*model.OrderItemProductDTO,
-) ([]*model.OrderItemProductDTO, error) {
-	_, err := tx.OrderItemProduct.Delete().
-		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
-		Exec(ctx)
-	if err != nil {
-		return nil, err
+) error {
+
+	// delete all products of source
+	if _, err := tx.OrderItemProduct.Delete().
+		Where(orderitemproduct.OrderItemIDEQ(sourceOrderItemID)).
+		Exec(ctx); err != nil {
+		return err
 	}
 
 	if len(products) == 0 {
-		return nil, nil
+		return nil
 	}
 
-	bulk := make([]*generated.OrderItemProductCreate, 0, len(products))
-	for _, product := range products {
-		if product == nil || product.ProductID == 0 {
+	var bulk []*generated.OrderItemProductCreate
+
+	for _, p := range products {
+		if p == nil || p.ProductID == 0 {
 			continue
 		}
 
-		qty := r.normalizeQuantity(product.Quantity)
-		create := tx.OrderItemProduct.Create().
-			SetOrderID(orderID).
-			SetOrderItemID(orderItemID).
-			SetProductID(product.ProductID).
-			SetQuantity(qty).
-			SetNillableProductCode(product.ProductCode).
-			SetNillableRetailPrice(product.RetailPrice)
+		qty := r.normalizeQuantity(p.Quantity)
 
-		bulk = append(bulk, create)
+		bulk = append(bulk,
+			tx.OrderItemProduct.Create().
+				SetOrderID(orderID).
+				SetOrderItemID(sourceOrderItemID).
+				SetProductID(p.ProductID).
+				SetOriginalOrderItemID(sourceOrderItemID).
+				SetQuantity(qty).
+				SetNillableProductCode(p.ProductCode).
+				SetNillableRetailPrice(p.RetailPrice),
+		)
 	}
 
-	if len(bulk) == 0 {
-		return nil, nil
+	if len(bulk) > 0 {
+		if _, err := tx.OrderItemProduct.CreateBulk(bulk...).Save(ctx); err != nil {
+			return err
+		}
 	}
 
-	created, err := tx.OrderItemProduct.CreateBulk(bulk...).Save(ctx)
+	return nil
+}
+
+func (r *orderItemProductRepository) SyncFromSource(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+	sourceOrderItemID int64,
+	sourceProducts []*model.OrderItemProductDTO,
+) error {
+
+	// find derived order items
+	var derivedOrderItemIDs []int64
+	if err := tx.OrderItemProduct.
+		Query().
+		Where(
+			orderitemproduct.OriginalOrderItemIDEQ(sourceOrderItemID),
+			orderitemproduct.OrderItemIDNEQ(sourceOrderItemID),
+		).
+		GroupBy(orderitemproduct.FieldOrderItemID).
+		Scan(ctx, &derivedOrderItemIDs); err != nil {
+		return err
+	}
+
+	for _, derivedOID := range derivedOrderItemIDs {
+
+		// delete derived products
+		if _, err := tx.OrderItemProduct.Delete().
+			Where(orderitemproduct.OrderItemIDEQ(derivedOID)).
+			Exec(ctx); err != nil {
+			return err
+		}
+
+		if len(sourceProducts) == 0 {
+			continue
+		}
+
+		var bulk []*generated.OrderItemProductCreate
+
+		for _, p := range sourceProducts {
+			if p == nil || p.ProductID == 0 {
+				continue
+			}
+
+			qty := r.normalizeQuantity(p.Quantity)
+
+			bulk = append(bulk,
+				tx.OrderItemProduct.Create().
+					SetOrderID(orderID).
+					SetOrderItemID(derivedOID).
+					SetProductID(p.ProductID).
+					SetOriginalOrderItemID(sourceOrderItemID).
+					SetQuantity(qty).
+					SetNillableProductCode(p.ProductCode).
+					SetNillableRetailPrice(p.RetailPrice),
+			)
+		}
+
+		if len(bulk) > 0 {
+			if _, err := tx.OrderItemProduct.CreateBulk(bulk...).Save(ctx); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *orderItemProductRepository) Sync(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+	orderItemID int64,
+	products []*model.OrderItemProductDTO,
+) ([]*model.OrderItemProductDTO, error) {
+	existing, err := tx.OrderItemProduct.
+		Query().
+		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
+		All(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]*model.OrderItemProductDTO, 0, len(created))
-	for _, it := range created {
-		out = append(out, mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](it))
+	existingByProductID := make(map[int]*generated.OrderItemProduct)
+	for _, e := range existing {
+		existingByProductID[e.ProductID] = e
+	}
+
+	inputByProductID := make(map[int]*model.OrderItemProductDTO)
+
+	sourceProducts := make([]*model.OrderItemProductDTO, 0)
+	derivedBySource := make(map[int64][]*model.OrderItemProductDTO)
+
+	for _, p := range products {
+		if p == nil || p.ProductID == 0 {
+			continue
+		}
+
+		inputByProductID[p.ProductID] = p
+
+		if p.OriginalOrderItemID != nil && *p.OriginalOrderItemID != orderItemID {
+			// DERIVED product
+			derivedBySource[*p.OriginalOrderItemID] =
+				append(derivedBySource[*p.OriginalOrderItemID], p)
+		} else {
+			// SOURCE product
+			sourceProducts = append(sourceProducts, p)
+		}
+	}
+
+	for sourceOID, items := range derivedBySource {
+		if err := r.SyncFromDerived(
+			ctx,
+			tx,
+			orderID,
+			orderItemID,
+			sourceOID,
+			items,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(sourceProducts) > 0 {
+		if err := r.SyncFromSource(
+			ctx,
+			tx,
+			orderID,
+			orderItemID,
+			sourceProducts,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	for productID, row := range existingByProductID {
+		if _, ok := inputByProductID[productID]; ok {
+			continue
+		}
+
+		isSource := row.OriginalOrderItemID != nil &&
+			*row.OriginalOrderItemID == row.OrderItemID
+
+		if isSource {
+			// DELETE SOURCE → cascade
+			if err := r.deleteSourceProductCascade(
+				ctx,
+				tx,
+				row.OrderItemID,
+				productID,
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			// DELETE DERIVED → fan-in
+			if row.OriginalOrderItemID != nil {
+				if err := r.SyncFromDerived(
+					ctx,
+					tx,
+					orderID,
+					orderItemID,
+					*row.OriginalOrderItemID,
+					nil,
+				); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	finalRows, err := tx.OrderItemProduct.
+		Query().
+		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemProductDTO, 0, len(finalRows))
+	for _, row := range finalRows {
+		out = append(out,
+			mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](row),
+		)
 	}
 
 	return out, nil
+}
+
+func (r *orderItemProductRepository) deleteSourceProductCascade(
+	ctx context.Context,
+	tx *generated.Tx,
+	sourceOrderItemID int64,
+	productID int,
+) error {
+
+	_, err := tx.OrderItemProduct.Delete().
+		Where(
+			orderitemproduct.OriginalOrderItemIDEQ(sourceOrderItemID),
+			orderitemproduct.ProductIDEQ(productID),
+		).
+		Exec(ctx)
+
+	return err
 }
 
 func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error) {
@@ -150,6 +354,7 @@ func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, o
 			orderitemproduct.FieldID,
 			orderitemproduct.FieldOrderID,
 			orderitemproduct.FieldOrderItemID,
+			orderitemproduct.FieldOriginalOrderItemID,
 			orderitemproduct.FieldProductID,
 			orderitemproduct.FieldProductCode,
 			orderitemproduct.FieldQuantity,
@@ -172,13 +377,14 @@ func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, o
 	out := make([]*model.OrderItemProductDTO, 0, len(products))
 	for _, it := range products {
 		dto := &model.OrderItemProductDTO{
-			ID:          it.ID,
-			ProductCode: it.ProductCode,
-			ProductID:   it.ProductID,
-			OrderItemID: it.OrderItemID,
-			OrderID:     it.OrderID,
-			Quantity:    it.Quantity,
-			RetailPrice: it.RetailPrice,
+			ID:                  it.ID,
+			ProductCode:         it.ProductCode,
+			ProductID:           it.ProductID,
+			OrderItemID:         it.OrderItemID,
+			OriginalOrderItemID: it.OriginalOrderItemID,
+			OrderID:             it.OrderID,
+			Quantity:            it.Quantity,
+			RetailPrice:         it.RetailPrice,
 		}
 		if it.Edges.OrderItem != nil {
 			dto.OrderItemCode = it.Edges.OrderItem.Code

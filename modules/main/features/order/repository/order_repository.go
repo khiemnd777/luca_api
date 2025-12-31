@@ -666,6 +666,7 @@ func (r *orderRepository) GetAllOrderProducts(ctx context.Context, orderID int64
 			orderitemproduct.FieldID,
 			orderitemproduct.FieldOrderID,
 			orderitemproduct.FieldOrderItemID,
+			orderitemproduct.FieldOriginalOrderItemID,
 			orderitemproduct.FieldProductID,
 			orderitemproduct.FieldProductCode,
 			orderitemproduct.FieldQuantity,
@@ -688,13 +689,14 @@ func (r *orderRepository) GetAllOrderProducts(ctx context.Context, orderID int64
 	out := make([]*model.OrderItemProductDTO, 0, len(products))
 	for _, it := range products {
 		dto := &model.OrderItemProductDTO{
-			ID:          it.ID,
-			ProductCode: it.ProductCode,
-			ProductID:   it.ProductID,
-			OrderItemID: it.OrderItemID,
-			OrderID:     it.OrderID,
-			Quantity:    it.Quantity,
-			RetailPrice: it.RetailPrice,
+			ID:                  it.ID,
+			ProductCode:         it.ProductCode,
+			ProductID:           it.ProductID,
+			OrderItemID:         it.OrderItemID,
+			OriginalOrderItemID: it.OriginalOrderItemID,
+			OrderID:             it.OrderID,
+			Quantity:            it.Quantity,
+			RetailPrice:         it.RetailPrice,
 		}
 		if it.Edges.OrderItem != nil {
 			dto.OrderItemCode = it.Edges.OrderItem.Code
