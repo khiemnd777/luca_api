@@ -7,6 +7,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemproduct"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 )
 
@@ -20,6 +21,7 @@ type OrderItemProductRepository interface {
 		orderItemID int64,
 		products []*model.OrderItemProductDTO,
 	) ([]*model.OrderItemProductDTO, error)
+	GetProductsByOrderID(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	Load(ctx context.Context, items ...*model.OrderItemDTO) error
 	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
 	GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
@@ -132,6 +134,62 @@ func (r *orderItemProductRepository) Sync(
 	out := make([]*model.OrderItemProductDTO, 0, len(created))
 	for _, it := range created {
 		out = append(out, mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](it))
+	}
+
+	return out, nil
+}
+
+func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error) {
+	products, err := r.db.OrderItemProduct.
+		Query().
+		Where(
+			orderitemproduct.OrderIDEQ(orderID),
+			orderitemproduct.HasOrderItemWith(orderitem.DeletedAtIsNil()),
+		).
+		Select(
+			orderitemproduct.FieldID,
+			orderitemproduct.FieldOrderID,
+			orderitemproduct.FieldOrderItemID,
+			orderitemproduct.FieldProductID,
+			orderitemproduct.FieldProductCode,
+			orderitemproduct.FieldQuantity,
+			orderitemproduct.FieldRetailPrice,
+		).
+		WithOrderItem(func(q *generated.OrderItemQuery) {
+			q.Select(orderitem.FieldID, orderitem.FieldCode)
+		}).
+		WithProduct(func(q *generated.ProductQuery) {
+			q.Select(product.FieldID, product.FieldCode, product.FieldName)
+		}).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(products) == 0 {
+		return nil, nil
+	}
+
+	out := make([]*model.OrderItemProductDTO, 0, len(products))
+	for _, it := range products {
+		dto := &model.OrderItemProductDTO{
+			ID:          it.ID,
+			ProductCode: it.ProductCode,
+			ProductID:   it.ProductID,
+			OrderItemID: it.OrderItemID,
+			OrderID:     it.OrderID,
+			Quantity:    it.Quantity,
+			RetailPrice: it.RetailPrice,
+		}
+		if it.Edges.OrderItem != nil {
+			dto.OrderItemCode = it.Edges.OrderItem.Code
+		}
+		if it.Edges.Product != nil {
+			dto.ProductName = it.Edges.Product.Name
+			if dto.ProductCode == nil {
+				dto.ProductCode = it.Edges.Product.Code
+			}
+		}
+		out = append(out, dto)
 	}
 
 	return out, nil

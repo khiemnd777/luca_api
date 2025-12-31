@@ -590,13 +590,6 @@ func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.Ord
 		return nil, err
 	}
 
-	// processes
-	// prcs, err := r.orderItemProcessRepo.GetByOrderItemID(ctx, id)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// dto.OrderItemProcesses = prcs
-
 	return dto, nil
 }
 

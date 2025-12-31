@@ -17,3 +17,10 @@ CREATE INDEX IF NOT EXISTS ix_order_items_latest_by_order_id_not_deleted
 CREATE INDEX IF NOT EXISTS ix_order_items_parent_order_id_not_deleted
   ON order_items(parent_item_id)
   WHERE deleted_at IS NULL;
+
+-- order_item_products indexes
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_order_item_products_order_id
+ON order_item_products (order_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_order_item_products_order_id_order_item_id
+ON order_item_products (order_id, order_item_id);
