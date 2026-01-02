@@ -11,4 +11,5 @@ type OrderItemProductDTO struct {
 	OrderID             int64    `json:"order_id,omitempty"`
 	Quantity            int      `json:"quantity,omitempty"`
 	RetailPrice         *float64 `json:"retail_price,omitempty"`
+	IsCloneable         *bool    `json:"is_cloneable,omitempty"`
 }

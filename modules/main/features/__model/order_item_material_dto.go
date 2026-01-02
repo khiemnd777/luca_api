@@ -12,4 +12,5 @@ type OrderItemMaterialDTO struct {
 	Type          *string  `json:"type,omitempty"`
 	Status        *string  `json:"status,omitempty"`
 	RetailPrice   *float64 `json:"retail_price,omitempty"`
+	IsCloneable   *bool    `json:"is_cloneable,omitempty"`
 }

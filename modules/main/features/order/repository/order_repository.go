@@ -36,6 +36,10 @@ type OrderRepository interface {
 	Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
+	PrepareForRemakeByOrderID(
+		ctx context.Context,
+		orderID int64,
+	) (*model.OrderDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
@@ -594,6 +598,38 @@ func (r *orderRepository) GetByID(ctx context.Context, id int64) (*model.OrderDT
 		return nil, err
 	}
 	dto.LatestOrderItem = latest
+	return dto, nil
+}
+
+func (r *orderRepository) PrepareForRemakeByOrderID(
+	ctx context.Context,
+	orderID int64,
+) (*model.OrderDTO, error) {
+
+	entity, err := r.db.Order.
+		Query().
+		Where(
+			order.ID(orderID),
+			order.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := mapper.MapAs[
+		*generated.Order,
+		*model.OrderDTO,
+	](entity)
+
+	latestItem, err := r.orderItemRepo.
+		PrepareLatestForRemakeByOrderID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	dto.LatestOrderItem = latestItem
+
 	return dto, nil
 }
 

@@ -38,6 +38,10 @@ func (OrderItemMaterial) Fields() []ent.Field {
 		field.Float("retail_price").
 			Optional().
 			Nillable(),
+
+		field.Bool("is_cloneable").
+			Optional().
+			Nillable(),
 	}
 }
 

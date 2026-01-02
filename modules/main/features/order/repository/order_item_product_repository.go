@@ -24,6 +24,10 @@ type OrderItemProductRepository interface {
 
 	GetProductsByOrderID(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	Load(ctx context.Context, items ...*model.OrderItemDTO) error
+	PrepareForRemake(
+		ctx context.Context,
+		items ...*model.OrderItemDTO,
+	) error
 	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
 	GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
 }
@@ -431,6 +435,57 @@ func (r *orderItemProductRepository) Load(ctx context.Context, items ...*model.O
 		if dto, ok := itemIndex[rel.OrderItemID]; ok {
 			dto.Products = append(dto.Products, mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](rel))
 		}
+	}
+
+	return nil
+}
+
+func (r *orderItemProductRepository) PrepareForRemake(
+	ctx context.Context,
+	items ...*model.OrderItemDTO,
+) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	itemIndex := make(map[int64]*model.OrderItemDTO, len(items))
+	itemIDs := make([]int64, 0, len(items))
+
+	for _, it := range items {
+		if it == nil {
+			continue
+		}
+		itemIDs = append(itemIDs, it.ID)
+		itemIndex[it.ID] = it
+	}
+
+	if len(itemIDs) == 0 {
+		return nil
+	}
+
+	relations, err := r.db.OrderItemProduct.
+		Query().
+		Where(orderitemproduct.OrderItemIDIn(itemIDs...)).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, rel := range relations {
+		dto, ok := itemIndex[rel.OrderItemID]
+		if !ok {
+			continue
+		}
+
+		mapped := mapper.MapAs[
+			*generated.OrderItemProduct,
+			*model.OrderItemProductDTO,
+		](rel)
+
+		cloneable := true
+		mapped.IsCloneable = &cloneable
+
+		dto.Products = append(dto.Products, mapped)
 	}
 
 	return nil

@@ -24,6 +24,7 @@ type OrderService interface {
 	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
+	PrepareForRemakeByOrderID(ctx context.Context, orderID int64) (*model.OrderDTO, error)
 	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
@@ -187,6 +188,10 @@ func (s *orderService) GetByOrderIDAndOrderItemID(ctx context.Context, orderID, 
 	// return cache.Get(kOrderByOrderIDAndOrderItemID(orderID, orderItemID), cache.TTLMedium, func() (*model.OrderDTO, error) {
 	// 	return s.repo.GetByOrderIDAndOrderItemID(ctx, orderID, orderItemID)
 	// })
+}
+
+func (s *orderService) PrepareForRemakeByOrderID(ctx context.Context, orderID int64) (*model.OrderDTO, error) {
+	return s.repo.PrepareForRemakeByOrderID(ctx, orderID)
 }
 
 func (s *orderService) GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error) {

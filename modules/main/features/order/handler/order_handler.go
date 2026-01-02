@@ -31,6 +31,7 @@ func (h *OrderHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/list", h.List)
 	app.RouterGet(router, "/:dept_id<int>/order/search", h.Search)
 	app.RouterGet(router, "/:dept_id<int>/order/:id<int>", h.GetByID)
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/remake/prepare", h.PrepareForRemakeByOrderID)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>", h.GetByOrderIDAndOrderItemID)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/products", h.GetAllOrderProducts)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/materials", h.GetAllOrderMaterials)
@@ -96,6 +97,22 @@ func (h *OrderHandler) GetByOrderIDAndOrderItemID(c *fiber.Ctx) error {
 	}
 
 	dto, err := h.svc.GetByOrderIDAndOrderItemID(c.UserContext(), int64(orderID), int64(orderItemID))
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *OrderHandler) PrepareForRemakeByOrderID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	dto, err := h.svc.PrepareForRemakeByOrderID(c.UserContext(), int64(orderID))
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

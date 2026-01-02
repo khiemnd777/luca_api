@@ -35,6 +35,10 @@ type OrderItemRepository interface {
 	Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
 	GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderItemDTO, error)
+	PrepareLatestForRemakeByOrderID(
+		ctx context.Context,
+		orderID int64,
+	) (*model.OrderItemDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderItemDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderItemDTO], error)
 	Delete(ctx context.Context, id int64) error
@@ -134,6 +138,46 @@ func (r *orderItemRepository) GetLatestByOrderID(ctx context.Context, orderID in
 	if err := r.orderItemMaterialRepo.LoadLoaner(ctx, dto); err != nil {
 		return nil, err
 	}
+	return dto, nil
+}
+
+func (r *orderItemRepository) PrepareLatestForRemakeByOrderID(
+	ctx context.Context,
+	orderID int64,
+) (*model.OrderItemDTO, error) {
+
+	itemEnt, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt)).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dto := mapper.MapAs[
+		*generated.OrderItem,
+		*model.OrderItemDTO,
+	](itemEnt)
+
+	if err := r.orderItemProductRepo.
+		PrepareForRemake(ctx, dto); err != nil {
+		return nil, err
+	}
+
+	if err := r.orderItemMaterialRepo.
+		PrepareConsumableForRemake(ctx, dto); err != nil {
+		return nil, err
+	}
+
+	if err := r.orderItemMaterialRepo.
+		PrepareLoanerForRemake(ctx, dto); err != nil {
+		return nil, err
+	}
+
 	return dto, nil
 }
 

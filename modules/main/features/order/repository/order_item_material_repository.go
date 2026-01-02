@@ -20,10 +20,18 @@ type OrderItemMaterialRepository interface {
 	CalculateConsumableTotalPrice(materials []*model.OrderItemMaterialDTO) *float64
 	GetConsumableTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
 	GetConsumableTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
+	PrepareConsumableForRemake(
+		ctx context.Context,
+		items ...*model.OrderItemDTO,
+	) error
 	LoadConsumable(ctx context.Context, items ...*model.OrderItemDTO) error
 
 	// Loaner
 	GetLoanerMaterials(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderItemMaterialDTO], error)
+	PrepareLoanerForRemake(
+		ctx context.Context,
+		items ...*model.OrderItemDTO,
+	) error
 	CollectLoanerMaterials(dto *model.OrderItemDTO) []*model.OrderItemMaterialDTO
 	LoadLoaner(ctx context.Context, items ...*model.OrderItemDTO) error
 
@@ -441,6 +449,60 @@ func (r *orderItemMaterialRepository) LoadConsumable(ctx context.Context, items 
 	return nil
 }
 
+func (r *orderItemMaterialRepository) PrepareConsumableForRemake(
+	ctx context.Context,
+	items ...*model.OrderItemDTO,
+) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	itemIndex := make(map[int64]*model.OrderItemDTO, len(items))
+	itemIDs := make([]int64, 0, len(items))
+
+	for _, it := range items {
+		if it == nil {
+			continue
+		}
+		itemIDs = append(itemIDs, it.ID)
+		itemIndex[it.ID] = it
+	}
+
+	if len(itemIDs) == 0 {
+		return nil
+	}
+
+	relations, err := r.db.OrderItemMaterial.
+		Query().
+		Where(
+			orderitemmaterial.OrderItemIDIn(itemIDs...),
+			orderitemmaterial.TypeEQ("consumable"),
+		).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, rel := range relations {
+		dto, ok := itemIndex[rel.OrderItemID]
+		if !ok {
+			continue
+		}
+
+		mapped := mapper.MapAs[
+			*generated.OrderItemMaterial,
+			*model.OrderItemMaterialDTO,
+		](rel)
+
+		cloneable := true
+		mapped.IsCloneable = &cloneable
+
+		dto.ConsumableMaterials = append(dto.ConsumableMaterials, mapped)
+	}
+
+	return nil
+}
+
 func (r *orderItemMaterialRepository) LoadLoaner(ctx context.Context, items ...*model.OrderItemDTO) error {
 	if len(items) == 0 {
 		return nil
@@ -474,6 +536,60 @@ func (r *orderItemMaterialRepository) LoadLoaner(ctx context.Context, items ...*
 		if dto, ok := itemIndex[rel.OrderItemID]; ok {
 			dto.LoanerMaterials = append(dto.LoanerMaterials, mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](rel))
 		}
+	}
+
+	return nil
+}
+
+func (r *orderItemMaterialRepository) PrepareLoanerForRemake(
+	ctx context.Context,
+	items ...*model.OrderItemDTO,
+) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	itemIndex := make(map[int64]*model.OrderItemDTO, len(items))
+	itemIDs := make([]int64, 0, len(items))
+
+	for _, it := range items {
+		if it == nil {
+			continue
+		}
+		itemIDs = append(itemIDs, it.ID)
+		itemIndex[it.ID] = it
+	}
+
+	if len(itemIDs) == 0 {
+		return nil
+	}
+
+	relations, err := r.db.OrderItemMaterial.
+		Query().
+		Where(
+			orderitemmaterial.OrderItemIDIn(itemIDs...),
+			orderitemmaterial.TypeEQ("loaner"),
+		).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, rel := range relations {
+		dto, ok := itemIndex[rel.OrderItemID]
+		if !ok {
+			continue
+		}
+
+		mapped := mapper.MapAs[
+			*generated.OrderItemMaterial,
+			*model.OrderItemMaterialDTO,
+		](rel)
+
+		cloneable := true
+		mapped.IsCloneable = &cloneable
+
+		dto.LoanerMaterials = append(dto.LoanerMaterials, mapped)
 	}
 
 	return nil
