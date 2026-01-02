@@ -24,3 +24,10 @@ ON order_item_products (order_id);
 
 CREATE INDEX IF NOT EXISTS idx_order_item_products_order_id_order_item_id
 ON order_item_products (order_id, order_item_id);
+
+-- order_item_materials indexes
+CREATE INDEX IF NOT EXISTS idx_order_item_materials_order_id
+ON order_item_materials (order_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_item_materials_order_id_order_item_id
+ON order_item_materials (order_id, order_item_id);
