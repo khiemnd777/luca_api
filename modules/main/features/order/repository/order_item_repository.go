@@ -448,7 +448,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 	out.Products = createdProducts
 
 	// Consumable Materials
-	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumable(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
+	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumableV2(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +457,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 	// Loaner Materials
 	loanerMaterials := r.orderItemMaterialRepo.PrepareLoanerMaterials(in)
 	loanerMaterials = r.orderItemMaterialRepo.PrepareLoanerForCreate(loanerMaterials)
-	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
+	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoanerV2(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +528,7 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 	out.Products = createdProducts
 
 	// Consumable Materials
-	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumable(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
+	createdConsumableMaterials, err := r.orderItemMaterialRepo.SyncConsumableV2(ctx, tx, entity.OrderID, entity.ID, consumableMaterials)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +536,7 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 
 	// Loaner Materials
 	loanerMaterials := r.orderItemMaterialRepo.PrepareLoanerMaterials(dto)
-	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
+	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoanerV2(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
 		return nil, err
 	}

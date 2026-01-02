@@ -8,6 +8,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/material"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemmaterial"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -42,12 +43,28 @@ type OrderItemMaterialRepository interface {
 		materials []*model.OrderItemMaterialDTO,
 	) ([]*model.OrderItemMaterialDTO, error)
 
+	SyncConsumableV2(
+		ctx context.Context,
+		tx *generated.Tx,
+		orderID int64,
+		orderItemID int64,
+		materials []*model.OrderItemMaterialDTO,
+	) ([]*model.OrderItemMaterialDTO, error)
+
 	PrepareLoanerForCreate(materials []*model.OrderItemMaterialDTO) []*model.OrderItemMaterialDTO
 
 	SyncLoaner(
 		ctx context.Context,
 		tx *generated.Tx,
 		orderID,
+		orderItemID int64,
+		materials []*model.OrderItemMaterialDTO,
+	) ([]*model.OrderItemMaterialDTO, error)
+
+	SyncLoanerV2(
+		ctx context.Context,
+		tx *generated.Tx,
+		orderID int64,
 		orderItemID int64,
 		materials []*model.OrderItemMaterialDTO,
 	) ([]*model.OrderItemMaterialDTO, error)
@@ -348,6 +365,7 @@ func (r *orderItemMaterialRepository) syncFromSource(
 	sourceMaterials []*model.OrderItemMaterialDTO,
 	opts materialBulkOptions,
 ) error {
+
 	var derivedOrderItemIDs []int64
 	if err := tx.OrderItemMaterial.
 		Query().
@@ -362,9 +380,12 @@ func (r *orderItemMaterialRepository) syncFromSource(
 	}
 
 	for _, derivedOID := range derivedOrderItemIDs {
+
+		// ONLY delete materials cloned from this source
 		if _, err := tx.OrderItemMaterial.Delete().
 			Where(
 				orderitemmaterial.OrderItemIDEQ(derivedOID),
+				orderitemmaterial.OriginalOrderItemIDEQ(sourceOrderItemID),
 				orderitemmaterial.TypeEQ(opts.materialType),
 			).
 			Exec(ctx); err != nil {
@@ -383,6 +404,7 @@ func (r *orderItemMaterialRepository) syncFromSource(
 			sourceMaterials,
 			opts,
 		)
+
 		if len(bulk) > 0 {
 			if _, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx); err != nil {
 				return err
@@ -397,13 +419,14 @@ func (r *orderItemMaterialRepository) syncConsumableFromDerived(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID int64,
-	derivedOrderItemID int64,
 	sourceOrderItemID int64,
 	materials []*model.OrderItemMaterialDTO,
 ) error {
+
 	if _, err := tx.OrderItemMaterial.Delete().
 		Where(
 			orderitemmaterial.OrderItemIDEQ(sourceOrderItemID),
+			orderitemmaterial.OriginalOrderItemIDEQ(sourceOrderItemID),
 			orderitemmaterial.TypeEQ("consumable"),
 		).
 		Exec(ctx); err != nil {
@@ -420,8 +443,12 @@ func (r *orderItemMaterialRepository) syncConsumableFromDerived(
 		sourceOrderItemID,
 		sourceOrderItemID,
 		materials,
-		materialBulkOptions{materialType: "consumable", withRetailPrice: true},
+		materialBulkOptions{
+			materialType:    "consumable",
+			withRetailPrice: true,
+		},
 	)
+
 	if len(bulk) > 0 {
 		if _, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx); err != nil {
 			return err
@@ -463,6 +490,171 @@ func (r *orderItemMaterialRepository) deleteSourceConsumableCascade(
 		Exec(ctx)
 
 	return err
+}
+
+func (r *orderItemMaterialRepository) replaceConsumableCurrent(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+	orderItemID int64,
+	materials []*model.OrderItemMaterialDTO,
+) error {
+
+	// Delete ALL consumable rows of CURRENT order item (FULL STATE)
+	if _, err := tx.OrderItemMaterial.Delete().
+		Where(
+			orderitemmaterial.OrderItemIDEQ(orderItemID),
+			orderitemmaterial.TypeEQ("consumable"),
+		).
+		Exec(ctx); err != nil {
+		return err
+	}
+
+	if len(materials) == 0 {
+		return nil
+	}
+
+	bulk := make([]*generated.OrderItemMaterialCreate, 0, len(materials))
+
+	for _, m := range materials {
+		if m == nil || m.MaterialID == 0 {
+			continue
+		}
+
+		qty := r.normalizeQuantity(m.Quantity)
+
+		origOID := orderItemID
+		if m.OriginalOrderItemID != nil && *m.OriginalOrderItemID != 0 {
+			origOID = *m.OriginalOrderItemID
+		}
+
+		c := tx.OrderItemMaterial.Create().
+			SetOrderID(orderID).
+			SetOrderItemID(orderItemID).
+			SetOriginalOrderItemID(origOID).
+			SetMaterialID(m.MaterialID).
+			SetQuantity(qty).
+			SetType("consumable").
+			SetNillableRetailPrice(m.RetailPrice).
+			SetNillableStatus(m.Status).
+			SetNillableIsCloneable(m.IsCloneable)
+
+		// Optional fields if your Ent schema has them:
+		// c.SetNillableMaterialCode(m.MaterialCode)
+		// c.SetNillableMaterialName(m.MaterialName)
+		// c.SetNillableOrderItemCode(m.OrderItemCode)
+
+		bulk = append(bulk, c)
+	}
+
+	if len(bulk) == 0 {
+		return nil
+	}
+
+	_, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx)
+	return err
+}
+
+func (r *orderItemMaterialRepository) SyncConsumableV2(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+	orderItemID int64,
+	materials []*model.OrderItemMaterialDTO,
+) ([]*model.OrderItemMaterialDTO, error) {
+
+	logger.Debug("SyncConsumableV2: start",
+		"orderItemID", orderItemID,
+		"inputCount", len(materials),
+	)
+
+	current := make([]*model.OrderItemMaterialDTO, 0, len(materials))
+	cloneToParent := make(map[int64][]*model.OrderItemMaterialDTO)
+	cloneToChildren := make([]*model.OrderItemMaterialDTO, 0)
+
+	for _, m := range materials {
+		if m == nil || m.MaterialID == 0 {
+			continue
+		}
+
+		current = append(current, m)
+
+		isCloneable := m.IsCloneable != nil && *m.IsCloneable
+
+		if isCloneable {
+			if m.OriginalOrderItemID != nil && *m.OriginalOrderItemID != orderItemID {
+				parentOID := *m.OriginalOrderItemID
+				cloneToParent[parentOID] = append(cloneToParent[parentOID], m)
+			}
+		} else {
+			cloneToChildren = append(cloneToChildren, m)
+		}
+	}
+
+	logger.Debug("SyncConsumableV2: partition",
+		"current", len(current),
+		"cloneUpGroups", len(cloneToParent),
+		"cloneDown", len(cloneToChildren),
+	)
+
+	if err := r.replaceConsumableCurrent(
+		ctx, tx, orderID, orderItemID, current,
+	); err != nil {
+		return nil, err
+	}
+
+	for parentOID, items := range cloneToParent {
+		if parentOID == orderItemID {
+			continue
+		}
+
+		if err := r.syncConsumableFromDerived(
+			ctx,
+			tx,
+			orderID,
+			parentOID,
+			items,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(cloneToChildren) > 0 {
+		if err := r.syncConsumableFromSource(
+			ctx,
+			tx,
+			orderID,
+			orderItemID,
+			cloneToChildren,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	rows, err := tx.OrderItemMaterial.
+		Query().
+		Where(
+			orderitemmaterial.OrderItemIDEQ(orderItemID),
+			orderitemmaterial.TypeEQ("consumable"),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemMaterialDTO, 0, len(rows))
+	for _, r := range rows {
+		out = append(out,
+			mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](r),
+		)
+	}
+
+	logger.Debug("SyncConsumableV2: done",
+		"orderItemID", orderItemID,
+		"finalCount", len(out),
+	)
+
+	return out, nil
 }
 
 func (r *orderItemMaterialRepository) SyncConsumable(
@@ -512,7 +704,6 @@ func (r *orderItemMaterialRepository) SyncConsumable(
 			ctx,
 			tx,
 			orderID,
-			orderItemID,
 			sourceOID,
 			items,
 		); err != nil {
@@ -555,7 +746,6 @@ func (r *orderItemMaterialRepository) SyncConsumable(
 					ctx,
 					tx,
 					orderID,
-					orderItemID,
 					*row.OriginalOrderItemID,
 					nil,
 				); err != nil {
@@ -582,6 +772,166 @@ func (r *orderItemMaterialRepository) SyncConsumable(
 			mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](row),
 		)
 	}
+
+	return out, nil
+}
+
+func (r *orderItemMaterialRepository) replaceLoanerCurrent(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+	orderItemID int64,
+	materials []*model.OrderItemMaterialDTO,
+) error {
+
+	// Delete ALL loaner rows of CURRENT order item (FULL STATE)
+	if _, err := tx.OrderItemMaterial.Delete().
+		Where(
+			orderitemmaterial.OrderItemIDEQ(orderItemID),
+			orderitemmaterial.TypeEQ("loaner"),
+		).
+		Exec(ctx); err != nil {
+		return err
+	}
+
+	if len(materials) == 0 {
+		return nil
+	}
+
+	bulk := make([]*generated.OrderItemMaterialCreate, 0, len(materials))
+
+	for _, m := range materials {
+		if m == nil || m.MaterialID == 0 {
+			continue
+		}
+
+		qty := r.normalizeQuantity(m.Quantity)
+
+		origOID := orderItemID
+		if m.OriginalOrderItemID != nil && *m.OriginalOrderItemID != 0 {
+			origOID = *m.OriginalOrderItemID
+		}
+
+		c := tx.OrderItemMaterial.Create().
+			SetOrderID(orderID).
+			SetOrderItemID(orderItemID).
+			SetOriginalOrderItemID(origOID).
+			SetMaterialID(m.MaterialID).
+			SetQuantity(qty).
+			SetType("loaner").
+			SetNillableStatus(m.Status).
+			SetNillableIsCloneable(m.IsCloneable)
+
+		// Optional:
+		// c.SetNillableMaterialCode(m.MaterialCode)
+		// c.SetNillableMaterialName(m.MaterialName)
+		// c.SetNillableOrderItemCode(m.OrderItemCode)
+
+		bulk = append(bulk, c)
+	}
+
+	if len(bulk) == 0 {
+		return nil
+	}
+
+	_, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx)
+	return err
+}
+
+func (r *orderItemMaterialRepository) SyncLoanerV2(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+	orderItemID int64,
+	materials []*model.OrderItemMaterialDTO,
+) ([]*model.OrderItemMaterialDTO, error) {
+
+	logger.Debug("SyncLoanerV2: start",
+		"orderItemID", orderItemID,
+		"inputCount", len(materials),
+	)
+
+	current := make([]*model.OrderItemMaterialDTO, 0, len(materials))
+	cloneToParent := make(map[int64][]*model.OrderItemMaterialDTO)
+	cloneToChildren := make([]*model.OrderItemMaterialDTO, 0)
+
+	for _, m := range materials {
+		if m == nil || m.MaterialID == 0 {
+			continue
+		}
+
+		current = append(current, m)
+
+		isCloneable := m.IsCloneable != nil && *m.IsCloneable
+
+		if isCloneable {
+			if m.OriginalOrderItemID != nil && *m.OriginalOrderItemID != orderItemID {
+				parentOID := *m.OriginalOrderItemID
+				cloneToParent[parentOID] = append(cloneToParent[parentOID], m)
+			}
+		} else {
+			cloneToChildren = append(cloneToChildren, m)
+		}
+	}
+
+	// WRITE CURRENT
+	if err := r.replaceLoanerCurrent(
+		ctx, tx, orderID, orderItemID, current,
+	); err != nil {
+		return nil, err
+	}
+
+	// UP
+	for parentOID, items := range cloneToParent {
+		if parentOID == orderItemID {
+			continue
+		}
+
+		if err := r.syncLoanerFromDerived(
+			ctx, tx,
+			orderID,
+			orderItemID,
+			parentOID,
+			items,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	// DOWN
+	if len(cloneToChildren) > 0 {
+		if err := r.syncLoanerFromSource(
+			ctx, tx,
+			orderID,
+			orderItemID,
+			cloneToChildren,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	rows, err := tx.OrderItemMaterial.
+		Query().
+		Where(
+			orderitemmaterial.OrderItemIDEQ(orderItemID),
+			orderitemmaterial.TypeEQ("loaner"),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemMaterialDTO, 0, len(rows))
+	for _, r := range rows {
+		out = append(out,
+			mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](r),
+		)
+	}
+
+	logger.Debug("SyncLoanerV2: done",
+		"orderItemID", orderItemID,
+		"finalCount", len(out),
+	)
 
 	return out, nil
 }
@@ -715,10 +1065,11 @@ func (r *orderItemMaterialRepository) syncLoanerFromDerived(
 	sourceOrderItemID int64,
 	materials []*model.OrderItemMaterialDTO,
 ) error {
-	// delete all loaner materials of source
+
 	if _, err := tx.OrderItemMaterial.Delete().
 		Where(
 			orderitemmaterial.OrderItemIDEQ(sourceOrderItemID),
+			orderitemmaterial.OriginalOrderItemIDEQ(sourceOrderItemID),
 			orderitemmaterial.TypeEQ("loaner"),
 		).
 		Exec(ctx); err != nil {
@@ -735,8 +1086,12 @@ func (r *orderItemMaterialRepository) syncLoanerFromDerived(
 		sourceOrderItemID,
 		sourceOrderItemID,
 		materials,
-		materialBulkOptions{materialType: "loaner", withStatus: true},
+		materialBulkOptions{
+			materialType: "loaner",
+			withStatus:   true,
+		},
 	)
+
 	if len(bulk) > 0 {
 		if _, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx); err != nil {
 			return err
