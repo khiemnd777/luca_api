@@ -18,6 +18,9 @@ func (OrderItemMaterial) Fields() []ent.Field {
 			Nillable(),
 		field.Int("material_id"),
 		field.Int64("order_item_id"),
+		field.Int64("original_order_item_id").
+			Optional().
+			Nillable(),
 		field.Int64("order_id"),
 		field.Int("quantity").
 			Default(1),

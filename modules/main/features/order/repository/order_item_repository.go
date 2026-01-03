@@ -367,7 +367,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 
 	products := r.orderItemProductRepo.PrepareProducts(in)
 	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
-	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(in)
+	consumableMaterials := r.orderItemMaterialRepo.PrepareConsumableMaterials(in)
 	totalPriceConsumableMaterial := r.orderItemMaterialRepo.CalculateConsumableTotalPrice(consumableMaterials)
 	r.applyTotalPrice(in, totalPriceProduct, totalPriceConsumableMaterial)
 
@@ -455,7 +455,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 	out.ConsumableMaterials = createdConsumableMaterials
 
 	// Loaner Materials
-	loanerMaterials := r.orderItemMaterialRepo.CollectLoanerMaterials(in)
+	loanerMaterials := r.orderItemMaterialRepo.PrepareLoanerMaterials(in)
 	loanerMaterials = r.orderItemMaterialRepo.PrepareLoanerForCreate(loanerMaterials)
 	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
@@ -487,7 +487,7 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 	dto := &input.DTO
 	products := r.orderItemProductRepo.PrepareProducts(dto)
 	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
-	consumableMaterials := r.orderItemMaterialRepo.CollectConsumableMaterials(dto)
+	consumableMaterials := r.orderItemMaterialRepo.PrepareConsumableMaterials(dto)
 	totalPriceConsumableMaterial := r.orderItemMaterialRepo.CalculateConsumableTotalPrice(consumableMaterials)
 	r.applyTotalPrice(dto, totalPriceProduct, totalPriceConsumableMaterial)
 
@@ -535,7 +535,7 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 	out.ConsumableMaterials = createdConsumableMaterials
 
 	// Loaner Materials
-	loanerMaterials := r.orderItemMaterialRepo.CollectLoanerMaterials(dto)
+	loanerMaterials := r.orderItemMaterialRepo.PrepareLoanerMaterials(dto)
 	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
 		return nil, err
