@@ -15,15 +15,8 @@ import (
 type OrderItemProductRepository interface {
 	PrepareProducts(dto *model.OrderItemDTO) []*model.OrderItemProductDTO
 	CalculateTotalPrice(products []*model.OrderItemProductDTO) *float64
-	Sync(
-		ctx context.Context,
-		tx *generated.Tx,
-		orderID,
-		orderItemID int64,
-		products []*model.OrderItemProductDTO,
-	) ([]*model.OrderItemProductDTO, error)
 
-	SyncV2(
+	Sync(
 		ctx context.Context,
 		tx *generated.Tx,
 		orderID int64,
@@ -111,11 +104,10 @@ func (r *orderItemProductRepository) CalculateTotalPrice(products []*model.Order
 // 3) If IsCloneable == false -> sync DOWN to children (find derived by OriginalOrderItemID == orderItemID)
 //
 // Notes:
-// - IsCloneable nil is treated as false (sync down).
-// - When writing current rows:
+//   - IsCloneable nil is treated as false (sync down).
+//   - When writing current rows:
 //     OriginalOrderItemID = dto.OriginalOrderItemID if provided, else = orderItemID (self/source)
-
-func (r *orderItemProductRepository) SyncV2(
+func (r *orderItemProductRepository) Sync(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID int64,
@@ -191,12 +183,28 @@ func (r *orderItemProductRepository) SyncV2(
 		)
 
 		// Reuse your existing semantics: derived overrides parent
-		if err := r.SyncFromDerived(
+		if err := r.syncFromDerived(
 			ctx,
 			tx,
 			orderID,
 			orderItemID, // derived/current
 			parentOID,   // parent/source
+			items,
+		); err != nil {
+			return nil, err
+		}
+
+		// SyncProductV2: parent -> all children
+		logger.Debug("SyncProductV2: parent -> all children",
+			"source", parentOID,
+			"count", len(items),
+		)
+
+		if err := r.syncFromSource(
+			ctx,
+			tx,
+			orderID,
+			parentOID,
 			items,
 		); err != nil {
 			return nil, err
@@ -213,7 +221,7 @@ func (r *orderItemProductRepository) SyncV2(
 		)
 
 		// Reuse your existing semantics: source cascades to children
-		if err := r.SyncFromSource(
+		if err := r.syncFromSource(
 			ctx,
 			tx,
 			orderID,
@@ -309,7 +317,7 @@ func (r *orderItemProductRepository) replaceProductsForOrderItem(
 	return err
 }
 
-func (r *orderItemProductRepository) SyncFromDerived(
+func (r *orderItemProductRepository) syncFromDerived(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID int64,
@@ -363,7 +371,7 @@ func (r *orderItemProductRepository) SyncFromDerived(
 	return nil
 }
 
-func (r *orderItemProductRepository) SyncFromSource(
+func (r *orderItemProductRepository) syncFromSource(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID int64,
@@ -426,194 +434,6 @@ func (r *orderItemProductRepository) SyncFromSource(
 	}
 
 	return nil
-}
-
-func (r *orderItemProductRepository) Sync(
-	ctx context.Context,
-	tx *generated.Tx,
-	orderID int64,
-	orderItemID int64,
-	products []*model.OrderItemProductDTO,
-) ([]*model.OrderItemProductDTO, error) {
-
-	logger.Debug("SyncProduct: start",
-		"orderID", orderID,
-		"orderItemID", orderItemID,
-		"inputCount", len(products),
-	)
-
-	existing, err := tx.OrderItemProduct.
-		Query().
-		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	logger.Debug("SyncProduct: loaded existing",
-		"orderItemID", orderItemID,
-		"existingCount", len(existing),
-	)
-
-	existingByProductID := make(map[int]*generated.OrderItemProduct)
-	for _, e := range existing {
-		existingByProductID[e.ProductID] = e
-	}
-
-	inputByProductID := make(map[int]*model.OrderItemProductDTO)
-
-	sourceProducts := make([]*model.OrderItemProductDTO, 0)
-	derivedBySource := make(map[int64][]*model.OrderItemProductDTO)
-
-	for _, p := range products {
-		if p == nil || p.ProductID == 0 {
-			continue
-		}
-
-		inputByProductID[p.ProductID] = p
-
-		if p.OriginalOrderItemID != nil && *p.OriginalOrderItemID != orderItemID {
-			// DERIVED product
-			derivedBySource[*p.OriginalOrderItemID] =
-				append(derivedBySource[*p.OriginalOrderItemID], p)
-		} else {
-			// SOURCE product
-			sourceProducts = append(sourceProducts, p)
-		}
-	}
-
-	logger.Debug("SyncProduct: partition input",
-		"sourceCount", len(sourceProducts),
-		"derivedSourceCount", len(derivedBySource),
-	)
-
-	// --------------------------------------------------
-	// DERIVED → SOURCE (override)
-	// --------------------------------------------------
-	for sourceOID, items := range derivedBySource {
-		logger.Debug("SyncProduct: derived override source",
-			"sourceOrderItemID", sourceOID,
-			"derivedCount", len(items),
-		)
-
-		if err := r.SyncFromDerived(
-			ctx,
-			tx,
-			orderID,
-			orderItemID,
-			sourceOID,
-			items,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	// --------------------------------------------------
-	// SOURCE → DERIVED (cascade)
-	// --------------------------------------------------
-	if len(sourceProducts) > 0 {
-		logger.Debug("SyncProduct: source cascade derived",
-			"sourceOrderItemID", orderItemID,
-			"sourceCount", len(sourceProducts),
-		)
-
-		if err := r.SyncFromSource(
-			ctx,
-			tx,
-			orderID,
-			orderItemID,
-			sourceProducts,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	// --------------------------------------------------
-	// DELETE handling
-	// --------------------------------------------------
-	for productID, row := range existingByProductID {
-		if _, ok := inputByProductID[productID]; ok {
-			continue
-		}
-
-		isSource := row.OriginalOrderItemID != nil &&
-			*row.OriginalOrderItemID == row.OrderItemID
-
-		if isSource {
-			// DELETE SOURCE → cascade
-			logger.Debug("SyncProduct: delete source cascade",
-				"productID", productID,
-				"sourceOrderItemID", row.OrderItemID,
-			)
-
-			if err := r.deleteSourceProductCascade(
-				ctx,
-				tx,
-				row.OrderItemID,
-				productID,
-			); err != nil {
-				return nil, err
-			}
-		} else {
-			// DELETE DERIVED → fan-in
-			if row.OriginalOrderItemID != nil {
-				logger.Debug("SyncProduct: delete derived fan-in",
-					"productID", productID,
-					"sourceOrderItemID", *row.OriginalOrderItemID,
-				)
-
-				if err := r.SyncFromDerived(
-					ctx,
-					tx,
-					orderID,
-					orderItemID,
-					*row.OriginalOrderItemID,
-					nil,
-				); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
-	finalRows, err := tx.OrderItemProduct.
-		Query().
-		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	logger.Debug("SyncProduct: completed",
-		"orderItemID", orderItemID,
-		"finalCount", len(finalRows),
-	)
-
-	out := make([]*model.OrderItemProductDTO, 0, len(finalRows))
-	for _, row := range finalRows {
-		out = append(out,
-			mapper.MapAs[*generated.OrderItemProduct, *model.OrderItemProductDTO](row),
-		)
-	}
-
-	return out, nil
-}
-
-func (r *orderItemProductRepository) deleteSourceProductCascade(
-	ctx context.Context,
-	tx *generated.Tx,
-	sourceOrderItemID int64,
-	productID int,
-) error {
-
-	_, err := tx.OrderItemProduct.Delete().
-		Where(
-			orderitemproduct.OriginalOrderItemIDEQ(sourceOrderItemID),
-			orderitemproduct.ProductIDEQ(productID),
-		).
-		Exec(ctx)
-
-	return err
 }
 
 func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error) {

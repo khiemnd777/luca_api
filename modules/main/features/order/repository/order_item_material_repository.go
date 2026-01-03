@@ -38,14 +38,6 @@ type OrderItemMaterialRepository interface {
 	SyncConsumable(
 		ctx context.Context,
 		tx *generated.Tx,
-		orderID,
-		orderItemID int64,
-		materials []*model.OrderItemMaterialDTO,
-	) ([]*model.OrderItemMaterialDTO, error)
-
-	SyncConsumableV2(
-		ctx context.Context,
-		tx *generated.Tx,
 		orderID int64,
 		orderItemID int64,
 		materials []*model.OrderItemMaterialDTO,
@@ -54,14 +46,6 @@ type OrderItemMaterialRepository interface {
 	PrepareLoanerForCreate(materials []*model.OrderItemMaterialDTO) []*model.OrderItemMaterialDTO
 
 	SyncLoaner(
-		ctx context.Context,
-		tx *generated.Tx,
-		orderID,
-		orderItemID int64,
-		materials []*model.OrderItemMaterialDTO,
-	) ([]*model.OrderItemMaterialDTO, error)
-
-	SyncLoanerV2(
 		ctx context.Context,
 		tx *generated.Tx,
 		orderID int64,
@@ -475,23 +459,6 @@ func (r *orderItemMaterialRepository) syncConsumableFromSource(
 	)
 }
 
-func (r *orderItemMaterialRepository) deleteSourceConsumableCascade(
-	ctx context.Context,
-	tx *generated.Tx,
-	sourceOrderItemID int64,
-	materialID int,
-) error {
-	_, err := tx.OrderItemMaterial.Delete().
-		Where(
-			orderitemmaterial.OriginalOrderItemIDEQ(sourceOrderItemID),
-			orderitemmaterial.MaterialIDEQ(materialID),
-			orderitemmaterial.TypeEQ("consumable"),
-		).
-		Exec(ctx)
-
-	return err
-}
-
 func (r *orderItemMaterialRepository) replaceConsumableCurrent(
 	ctx context.Context,
 	tx *generated.Tx,
@@ -555,7 +522,7 @@ func (r *orderItemMaterialRepository) replaceConsumableCurrent(
 	return err
 }
 
-func (r *orderItemMaterialRepository) SyncConsumableV2(
+func (r *orderItemMaterialRepository) SyncConsumable(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID int64,
@@ -617,6 +584,16 @@ func (r *orderItemMaterialRepository) SyncConsumableV2(
 		); err != nil {
 			return nil, err
 		}
+
+		if err := r.syncConsumableFromSource(
+			ctx,
+			tx,
+			orderID,
+			parentOID,
+			items,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	if len(cloneToChildren) > 0 {
@@ -653,125 +630,6 @@ func (r *orderItemMaterialRepository) SyncConsumableV2(
 		"orderItemID", orderItemID,
 		"finalCount", len(out),
 	)
-
-	return out, nil
-}
-
-func (r *orderItemMaterialRepository) SyncConsumable(
-	ctx context.Context,
-	tx *generated.Tx,
-	orderID,
-	orderItemID int64,
-	materials []*model.OrderItemMaterialDTO,
-) ([]*model.OrderItemMaterialDTO, error) {
-	existing, err := tx.OrderItemMaterial.
-		Query().
-		Where(
-			orderitemmaterial.OrderItemIDEQ(orderItemID),
-			orderitemmaterial.TypeEQ("consumable"),
-		).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	existingByMaterialID := make(map[int]*generated.OrderItemMaterial, len(existing))
-	for _, e := range existing {
-		existingByMaterialID[e.MaterialID] = e
-	}
-
-	inputByMaterialID := make(map[int]*model.OrderItemMaterialDTO, len(materials))
-	sourceMaterials := make([]*model.OrderItemMaterialDTO, 0)
-	derivedBySource := make(map[int64][]*model.OrderItemMaterialDTO)
-
-	for _, m := range materials {
-		if m == nil || m.MaterialID == 0 {
-			continue
-		}
-
-		inputByMaterialID[m.MaterialID] = m
-
-		if m.OriginalOrderItemID != nil && *m.OriginalOrderItemID != orderItemID {
-			derivedBySource[*m.OriginalOrderItemID] =
-				append(derivedBySource[*m.OriginalOrderItemID], m)
-		} else {
-			sourceMaterials = append(sourceMaterials, m)
-		}
-	}
-
-	for sourceOID, items := range derivedBySource {
-		if err := r.syncConsumableFromDerived(
-			ctx,
-			tx,
-			orderID,
-			sourceOID,
-			items,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	if len(sourceMaterials) > 0 {
-		if err := r.syncConsumableFromSource(
-			ctx,
-			tx,
-			orderID,
-			orderItemID,
-			sourceMaterials,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	for materialID, row := range existingByMaterialID {
-		if _, ok := inputByMaterialID[materialID]; ok {
-			continue
-		}
-
-		isSource := row.OriginalOrderItemID != nil &&
-			*row.OriginalOrderItemID == row.OrderItemID
-
-		if isSource {
-			if err := r.deleteSourceConsumableCascade(
-				ctx,
-				tx,
-				row.OrderItemID,
-				materialID,
-			); err != nil {
-				return nil, err
-			}
-		} else {
-			if row.OriginalOrderItemID != nil {
-				if err := r.syncConsumableFromDerived(
-					ctx,
-					tx,
-					orderID,
-					*row.OriginalOrderItemID,
-					nil,
-				); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
-	finalRows, err := tx.OrderItemMaterial.
-		Query().
-		Where(
-			orderitemmaterial.OrderItemIDEQ(orderItemID),
-			orderitemmaterial.TypeEQ("consumable"),
-		).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]*model.OrderItemMaterialDTO, 0, len(finalRows))
-	for _, row := range finalRows {
-		out = append(out,
-			mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](row),
-		)
-	}
 
 	return out, nil
 }
@@ -838,7 +696,7 @@ func (r *orderItemMaterialRepository) replaceLoanerCurrent(
 	return err
 }
 
-func (r *orderItemMaterialRepository) SyncLoanerV2(
+func (r *orderItemMaterialRepository) SyncLoaner(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID int64,
@@ -888,9 +746,19 @@ func (r *orderItemMaterialRepository) SyncLoanerV2(
 		}
 
 		if err := r.syncLoanerFromDerived(
-			ctx, tx,
+			ctx,
+			tx,
 			orderID,
-			orderItemID,
+			parentOID,
+			items,
+		); err != nil {
+			return nil, err
+		}
+
+		if err := r.syncLoanerFromSource(
+			ctx,
+			tx,
+			orderID,
 			parentOID,
 			items,
 		); err != nil {
@@ -936,132 +804,10 @@ func (r *orderItemMaterialRepository) SyncLoanerV2(
 	return out, nil
 }
 
-func (r *orderItemMaterialRepository) SyncLoaner(
-	ctx context.Context,
-	tx *generated.Tx,
-	orderID,
-	orderItemID int64,
-	materials []*model.OrderItemMaterialDTO,
-) ([]*model.OrderItemMaterialDTO, error) {
-	existing, err := tx.OrderItemMaterial.
-		Query().
-		Where(
-			orderitemmaterial.OrderItemIDEQ(orderItemID),
-			orderitemmaterial.TypeEQ("loaner"),
-		).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	existingByMaterialID := make(map[int]*generated.OrderItemMaterial, len(existing))
-	for _, e := range existing {
-		existingByMaterialID[e.MaterialID] = e
-	}
-
-	inputByMaterialID := make(map[int]*model.OrderItemMaterialDTO, len(materials))
-	sourceMaterials := make([]*model.OrderItemMaterialDTO, 0)
-	derivedBySource := make(map[int64][]*model.OrderItemMaterialDTO)
-
-	for _, m := range materials {
-		if m == nil || m.MaterialID == 0 {
-			continue
-		}
-
-		inputByMaterialID[m.MaterialID] = m
-
-		if m.OriginalOrderItemID != nil && *m.OriginalOrderItemID != orderItemID {
-			derivedBySource[*m.OriginalOrderItemID] =
-				append(derivedBySource[*m.OriginalOrderItemID], m)
-		} else {
-			sourceMaterials = append(sourceMaterials, m)
-		}
-	}
-
-	for sourceOID, items := range derivedBySource {
-		if err := r.syncLoanerFromDerived(
-			ctx,
-			tx,
-			orderID,
-			orderItemID,
-			sourceOID,
-			items,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	if len(sourceMaterials) > 0 {
-		if err := r.syncLoanerFromSource(
-			ctx,
-			tx,
-			orderID,
-			orderItemID,
-			sourceMaterials,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	for materialID, row := range existingByMaterialID {
-		if _, ok := inputByMaterialID[materialID]; ok {
-			continue
-		}
-
-		isSource := row.OriginalOrderItemID != nil &&
-			*row.OriginalOrderItemID == row.OrderItemID
-
-		if isSource {
-			if err := r.deleteSourceLoanerCascade(
-				ctx,
-				tx,
-				row.OrderItemID,
-				materialID,
-			); err != nil {
-				return nil, err
-			}
-		} else {
-			if row.OriginalOrderItemID != nil {
-				if err := r.syncLoanerFromDerived(
-					ctx,
-					tx,
-					orderID,
-					orderItemID,
-					*row.OriginalOrderItemID,
-					nil,
-				); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
-	finalRows, err := tx.OrderItemMaterial.
-		Query().
-		Where(
-			orderitemmaterial.OrderItemIDEQ(orderItemID),
-			orderitemmaterial.TypeEQ("loaner"),
-		).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]*model.OrderItemMaterialDTO, 0, len(finalRows))
-	for _, row := range finalRows {
-		out = append(out,
-			mapper.MapAs[*generated.OrderItemMaterial, *model.OrderItemMaterialDTO](row),
-		)
-	}
-
-	return out, nil
-}
-
 func (r *orderItemMaterialRepository) syncLoanerFromDerived(
 	ctx context.Context,
 	tx *generated.Tx,
 	orderID int64,
-	derivedOrderItemID int64,
 	sourceOrderItemID int64,
 	materials []*model.OrderItemMaterialDTO,
 ) error {
@@ -1116,23 +862,6 @@ func (r *orderItemMaterialRepository) syncLoanerFromSource(
 		sourceMaterials,
 		materialBulkOptions{materialType: "loaner", withStatus: true},
 	)
-}
-
-func (r *orderItemMaterialRepository) deleteSourceLoanerCascade(
-	ctx context.Context,
-	tx *generated.Tx,
-	sourceOrderItemID int64,
-	materialID int,
-) error {
-	_, err := tx.OrderItemMaterial.Delete().
-		Where(
-			orderitemmaterial.OriginalOrderItemIDEQ(sourceOrderItemID),
-			orderitemmaterial.MaterialIDEQ(materialID),
-			orderitemmaterial.TypeEQ("loaner"),
-		).
-		Exec(ctx)
-
-	return err
 }
 
 func (r *orderItemMaterialRepository) LoadConsumable(ctx context.Context, items ...*model.OrderItemDTO) error {
