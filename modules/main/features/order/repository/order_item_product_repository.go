@@ -379,7 +379,7 @@ func (r *orderItemProductRepository) syncFromSource(
 	sourceProducts []*model.OrderItemProductDTO,
 ) error {
 
-	// find derived order items
+	// 1. Find derived order items
 	var derivedOrderItemIDs []int64
 	if err := tx.OrderItemProduct.
 		Query().
@@ -394,40 +394,65 @@ func (r *orderItemProductRepository) syncFromSource(
 
 	for _, derivedOID := range derivedOrderItemIDs {
 
-		// delete derived products
-		if _, err := tx.OrderItemProduct.Delete().
-			Where(orderitemproduct.OrderItemIDEQ(derivedOID)).
-			Exec(ctx); err != nil {
+		// 2. Load existing derived rows for this source
+		existing, err := tx.OrderItemProduct.
+			Query().
+			Where(
+				orderitemproduct.OrderItemIDEQ(derivedOID),
+				orderitemproduct.OriginalOrderItemIDEQ(sourceOrderItemID),
+			).
+			All(ctx)
+		if err != nil {
 			return err
 		}
 
-		if len(sourceProducts) == 0 {
-			continue
+		existingByProductID := map[int]*generated.OrderItemProduct{}
+		for _, row := range existing {
+			existingByProductID[row.ProductID] = row
 		}
 
-		var bulk []*generated.OrderItemProductCreate
+		seen := map[int]struct{}{}
 
+		// 3. UPSERT (merge, keep derived metadata)
 		for _, p := range sourceProducts {
 			if p == nil || p.ProductID == 0 {
 				continue
 			}
 
 			qty := r.normalizeQuantity(p.Quantity)
+			seen[p.ProductID] = struct{}{}
 
-			bulk = append(bulk,
-				tx.OrderItemProduct.Create().
+			if row, ok := existingByProductID[p.ProductID]; ok {
+				// UPDATE business fields ONLY
+				if _, err := tx.OrderItemProduct.
+					UpdateOne(row).
+					SetQuantity(qty).
+					SetNillableRetailPrice(p.RetailPrice).
+					Save(ctx); err != nil {
+					return err
+				}
+			} else {
+				// INSERT new clone (inherit IsCloneable from source ONLY if not exist)
+				if _, err := tx.OrderItemProduct.Create().
 					SetOrderID(orderID).
 					SetOrderItemID(derivedOID).
 					SetProductID(p.ProductID).
 					SetOriginalOrderItemID(sourceOrderItemID).
 					SetQuantity(qty).
-					SetNillableProductCode(p.ProductCode).
-					SetNillableRetailPrice(p.RetailPrice),
-			)
+					SetNillableRetailPrice(p.RetailPrice).
+					SetIsCloneable(true).
+					Save(ctx); err != nil {
+					return err
+				}
+			}
 		}
 
-		if len(bulk) > 0 {
-			if _, err := tx.OrderItemProduct.CreateBulk(bulk...).Save(ctx); err != nil {
+		// 4. DELETE removed clones (still lineage-safe)
+		for _, row := range existing {
+			if _, ok := seen[row.ProductID]; ok {
+				continue
+			}
+			if err := tx.OrderItemProduct.DeleteOne(row).Exec(ctx); err != nil {
 				return err
 			}
 		}

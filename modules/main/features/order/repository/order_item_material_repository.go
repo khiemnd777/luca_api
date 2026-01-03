@@ -112,6 +112,7 @@ func (r *orderItemMaterialRepository) syncFromSource(
 	opts materialBulkOptions,
 ) error {
 
+	// 1. Find derived order items
 	var derivedOrderItemIDs []int64
 	if err := tx.OrderItemMaterial.
 		Query().
@@ -127,32 +128,81 @@ func (r *orderItemMaterialRepository) syncFromSource(
 
 	for _, derivedOID := range derivedOrderItemIDs {
 
-		// ONLY delete materials cloned from this source
-		if _, err := tx.OrderItemMaterial.Delete().
+		// 2. Load existing derived clones of THIS source
+		existing, err := tx.OrderItemMaterial.
+			Query().
 			Where(
 				orderitemmaterial.OrderItemIDEQ(derivedOID),
 				orderitemmaterial.OriginalOrderItemIDEQ(sourceOrderItemID),
 				orderitemmaterial.TypeEQ(opts.materialType),
 			).
-			Exec(ctx); err != nil {
+			All(ctx)
+		if err != nil {
 			return err
 		}
 
-		if len(sourceMaterials) == 0 {
-			continue
+		existingByMaterialID := map[int]*generated.OrderItemMaterial{}
+		for _, row := range existing {
+			existingByMaterialID[row.MaterialID] = row
 		}
 
-		bulk := r.buildMaterialBulk(
-			tx,
-			orderID,
-			derivedOID,
-			sourceOrderItemID,
-			sourceMaterials,
-			opts,
-		)
+		seen := map[int]struct{}{}
 
-		if len(bulk) > 0 {
-			if _, err := tx.OrderItemMaterial.CreateBulk(bulk...).Save(ctx); err != nil {
+		// 3. MERGE (UPSERT)
+		for _, m := range sourceMaterials {
+			if m == nil || m.MaterialID == 0 {
+				continue
+			}
+
+			qty := r.normalizeQuantity(m.Quantity)
+			seen[m.MaterialID] = struct{}{}
+
+			if row, ok := existingByMaterialID[m.MaterialID]; ok {
+				// UPDATE business fields only
+				upd := tx.OrderItemMaterial.
+					UpdateOne(row).
+					SetQuantity(qty)
+
+				if opts.withRetailPrice {
+					upd.SetNillableRetailPrice(m.RetailPrice)
+				}
+				if opts.withStatus {
+					upd.SetNillableStatus(m.Status)
+				}
+
+				if _, err := upd.Save(ctx); err != nil {
+					return err
+				}
+			} else {
+				// INSERT NEW CLONE
+				create := tx.OrderItemMaterial.Create().
+					SetOrderID(orderID).
+					SetOrderItemID(derivedOID).
+					SetOriginalOrderItemID(sourceOrderItemID).
+					SetMaterialID(m.MaterialID).
+					SetQuantity(qty).
+					SetType(opts.materialType).
+					SetIsCloneable(true)
+
+				if opts.withRetailPrice {
+					create.SetNillableRetailPrice(m.RetailPrice)
+				}
+				if opts.withStatus {
+					create.SetNillableStatus(m.Status)
+				}
+
+				if _, err := create.Save(ctx); err != nil {
+					return err
+				}
+			}
+		}
+
+		// 4. DELETE removed clones
+		for _, row := range existing {
+			if _, ok := seen[row.MaterialID]; ok {
+				continue
+			}
+			if err := tx.OrderItemMaterial.DeleteOne(row).Exec(ctx); err != nil {
 				return err
 			}
 		}

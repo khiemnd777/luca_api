@@ -363,10 +363,31 @@ func (r *orderItemMaterialRepository) SyncConsumable(
 	cloneToParent := make(map[int64][]*model.OrderItemMaterialDTO)
 	cloneToChildren := make([]*model.OrderItemMaterialDTO, 0)
 
-	for _, m := range materials {
+	for i, m := range materials {
 		if m == nil || m.MaterialID == 0 {
 			continue
 		}
+
+		logger.Debug("SyncConsumableV2: input material",
+			"index", i,
+			"id", m.ID,
+			"materialID", m.MaterialID,
+			"orderID", m.OrderID,
+			"orderItemID", m.OrderItemID,
+			"originalOrderItemID", m.OriginalOrderItemID,
+			"quantity", m.Quantity,
+			"retailPrice", m.RetailPrice,
+			"type", m.Type,
+			"status", m.Status,
+			"isCloneable", m.IsCloneable,
+			"isCloneableValue",
+			func() any {
+				if m.IsCloneable == nil {
+					return nil
+				}
+				return *m.IsCloneable
+			}(),
+		)
 
 		current = append(current, m)
 
