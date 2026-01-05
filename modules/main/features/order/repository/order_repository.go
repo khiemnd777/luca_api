@@ -51,6 +51,7 @@ type orderRepository struct {
 	cfMgr                *customfields.Manager
 	orderItemRepo        OrderItemRepository
 	orderItemProcessRepo OrderItemProcessRepository
+	orderCodeRepo        OrderCodeRepository
 }
 
 func NewOrderRepository(
@@ -64,6 +65,7 @@ func NewOrderRepository(
 		cfMgr:                cfMgr,
 		orderItemRepo:        NewOrderItemRepository(db, deps, cfMgr),
 		orderItemProcessRepo: NewOrderItemProcessRepository(db, deps, cfMgr),
+		orderCodeRepo:        NewOrderCodeRepository(db),
 	}
 }
 
@@ -187,6 +189,11 @@ func (r *orderRepository) createNewOrder(
 	out.DeliveryDate = dlrDate
 	out.RemakeType = rmkType
 	out.RemakeCount = &rmkCount
+
+	err = r.orderCodeRepo.ConfirmReservation(ctx, tx, *dto.Code)
+	if err != nil {
+		return nil, err
+	}
 
 	// relation
 	// if err = relation.Upsert1(ctx, tx, "orders_customers", orderEnt, &input.DTO, out); err != nil {

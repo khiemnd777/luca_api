@@ -28,6 +28,7 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 
 	orderCodeSvc := service.NewOrderCodeService(deps.Ent.(*generated.Client))
 	cron.RegisterJob(jobs.NewClearExpiredOrderCodeJob(orderCodeSvc))
+	cron.RegisterJob(jobs.NewExpireOrderCodeJob(orderCodeSvc))
 	orderCodeHandler := handler.NewOrderCodeHandler(orderCodeSvc, deps)
 	orderCodeHandler.RegisterRoutes(router)
 

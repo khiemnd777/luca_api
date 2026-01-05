@@ -14,6 +14,10 @@ type OrderCodeService interface {
 		now time.Time,
 		ttl time.Duration,
 	) (code string, expiresAt time.Time, err error)
+	ExpireReservations(
+		ctx context.Context,
+		now time.Time,
+	) (deleted int64, err error)
 	CleanupExpiredReservations(
 		ctx context.Context,
 		now time.Time,
@@ -73,6 +77,25 @@ func (s *orderCodeService) CleanupExpiredReservations(
 	}()
 
 	return s.repo.CleanupExpiredReservations(ctx, tx, now)
+}
+
+func (s *orderCodeService) ExpireReservations(
+	ctx context.Context,
+	now time.Time,
+) (deleted int64, err error) {
+	tx, err := s.db.Tx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	return s.repo.ExpireReservations(ctx, tx, now)
 }
 
 func (s *orderCodeService) ConfirmReservation(

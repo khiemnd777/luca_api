@@ -17,7 +17,7 @@ func NewClearExpiredOrderCodeJob(svc service.OrderCodeService) *ClearExpiredOrde
 }
 
 func (j ClearExpiredOrderCodeJob) Name() string            { return "ClearExpiredOrderCode" }
-func (j ClearExpiredOrderCodeJob) DefaultSchedule() string { return "@every 30m" }
+func (j ClearExpiredOrderCodeJob) DefaultSchedule() string { return "0 0 * * *" }
 func (j ClearExpiredOrderCodeJob) ConfigKey() string       { return "cron.clear_expired_order_code" }
 
 func (j ClearExpiredOrderCodeJob) Run() error {

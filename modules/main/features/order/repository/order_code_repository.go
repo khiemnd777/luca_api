@@ -16,6 +16,11 @@ type OrderCodeRepository interface {
 		now time.Time,
 		ttl time.Duration,
 	) (code string, expiresAt time.Time, err error)
+	ExpireReservations(
+		ctx context.Context,
+		tx *generated.Tx,
+		now time.Time,
+	) (affected int64, err error)
 	CleanupExpiredReservations(
 		ctx context.Context,
 		tx *generated.Tx,
@@ -100,6 +105,32 @@ INSERT INTO order_code_reservations(
 	return code, expiresAt, nil
 }
 
+func (r *orderCodeRepository) ExpireReservations(
+	ctx context.Context,
+	tx *generated.Tx,
+	now time.Time,
+) (affected int64, err error) {
+
+	const cleanupSQL = `
+UPDATE order_code_reservations
+SET status = 'expired'
+WHERE status = 'reserved'
+  AND expires_at <= $1
+`
+
+	res, err := tx.ExecContext(ctx, cleanupSQL, now)
+	if err != nil {
+		return 0, err
+	}
+
+	affected, err = res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	return affected, nil
+}
+
 func (r *orderCodeRepository) CleanupExpiredReservations(
 	ctx context.Context,
 	tx *generated.Tx,
@@ -108,8 +139,7 @@ func (r *orderCodeRepository) CleanupExpiredReservations(
 
 	const cleanupSQL = `
 DELETE FROM order_code_reservations
-WHERE status = 'reserved'
-  AND expires_at <= $1;
+WHERE status = 'expired'
 `
 
 	res, err := tx.ExecContext(ctx, cleanupSQL, now)
