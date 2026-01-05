@@ -5,9 +5,11 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	"github.com/khiemnd777/andy_api/modules/main/features/order/handler"
+	"github.com/khiemnd777/andy_api/modules/main/features/order/jobs"
 	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	"github.com/khiemnd777/andy_api/modules/main/features/order/service"
 	"github.com/khiemnd777/andy_api/modules/main/registry"
+	"github.com/khiemnd777/andy_api/shared/cron"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -23,6 +25,12 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	ordSvc := service.NewOrderService(ordRepo, deps, cfMgr)
 	ordHandler := handler.NewOrderHandler(ordSvc, deps)
 	ordHandler.RegisterRoutes(router)
+
+	orderCodeSvc := service.NewOrderCodeService(deps.Ent.(*generated.Client))
+	cron.RegisterJob(jobs.NewClearExpiredOrderCodeJob(orderCodeSvc))
+	cron.RegisterJob(jobs.NewExpireOrderCodeJob(orderCodeSvc))
+	orderCodeHandler := handler.NewOrderCodeHandler(orderCodeSvc, deps)
+	orderCodeHandler.RegisterRoutes(router)
 
 	ordItemRepo := repository.NewOrderItemRepository(deps.Ent.(*generated.Client), deps, cfMgr)
 	ordItemSvc := service.NewOrderItemService(ordItemRepo, deps, cfMgr)
