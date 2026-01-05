@@ -739,6 +739,7 @@ func (r *orderRepository) GetAllOrderProducts(ctx context.Context, orderID int64
 			OriginalOrderItemID: it.OriginalOrderItemID,
 			OrderID:             it.OrderID,
 			Quantity:            it.Quantity,
+			Note:                it.Note,
 			RetailPrice:         it.RetailPrice,
 		}
 		if it.Edges.OrderItem != nil {
@@ -796,6 +797,7 @@ func (r *orderRepository) GetAllOrderMaterials(ctx context.Context, orderID int6
 			OrderItemID:  it.OrderItemID,
 			OrderID:      it.OrderID,
 			Quantity:     it.Quantity,
+			Note:         it.Note,
 			RetailPrice:  it.RetailPrice,
 			Type:         it.Type,
 		}

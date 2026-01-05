@@ -45,6 +45,10 @@ func (OrderItemMaterial) Fields() []ent.Field {
 		field.Bool("is_cloneable").
 			Optional().
 			Nillable(),
+
+		field.String("note").
+			Optional().
+			Nillable(),
 	}
 }
 

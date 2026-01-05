@@ -48,6 +48,7 @@ func (r *orderItemMaterialRepository) PrepareConsumableMaterials(dto *model.Orde
 			RetailPrice:         material.RetailPrice,
 			Type:                utils.Ptr("consumable"),
 			IsCloneable:         material.IsCloneable,
+			Note:                material.Note,
 		})
 	}
 
@@ -328,7 +329,8 @@ func (r *orderItemMaterialRepository) replaceConsumableCurrent(
 			SetType("consumable").
 			SetNillableRetailPrice(m.RetailPrice).
 			SetNillableStatus(m.Status).
-			SetNillableIsCloneable(m.IsCloneable)
+			SetNillableIsCloneable(m.IsCloneable).
+			SetNillableNote(m.Note)
 
 		// Optional fields if your Ent schema has them:
 		// c.SetNillableMaterialCode(m.MaterialCode)

@@ -44,6 +44,7 @@ func (r *orderItemMaterialRepository) GetLoanerMaterials(
 					orderitemmaterial.FieldType,
 					orderitemmaterial.FieldStatus,
 					orderitemmaterial.FieldRetailPrice,
+					orderitemmaterial.FieldNote,
 				).
 				WithOrderItem(func(oq *generated.OrderItemQuery) {
 					oq.Select(orderitem.FieldCode)
@@ -106,6 +107,7 @@ func (r *orderItemMaterialRepository) PrepareLoanerMaterials(dto *model.OrderIte
 			Type:                utils.Ptr("loaner"),
 			Status:              material.Status,
 			IsCloneable:         material.IsCloneable,
+			Note:                material.Note,
 		})
 	}
 
@@ -172,7 +174,8 @@ func (r *orderItemMaterialRepository) replaceLoanerCurrent(
 			SetQuantity(qty).
 			SetType("loaner").
 			SetNillableStatus(m.Status).
-			SetNillableIsCloneable(m.IsCloneable)
+			SetNillableIsCloneable(m.IsCloneable).
+			SetNillableNote(m.Note)
 
 		// Optional:
 		// c.SetNillableMaterialCode(m.MaterialCode)

@@ -88,7 +88,8 @@ func (r *orderItemMaterialRepository) buildMaterialBulk(
 			SetOriginalOrderItemID(originalOrderItemID).
 			SetMaterialID(m.MaterialID).
 			SetQuantity(qty).
-			SetType(opts.materialType)
+			SetType(opts.materialType).
+			SetNillableNote(m.Note)
 
 		if opts.withRetailPrice {
 			create.SetNillableRetailPrice(m.RetailPrice)
@@ -182,7 +183,8 @@ func (r *orderItemMaterialRepository) syncFromSource(
 					SetMaterialID(m.MaterialID).
 					SetQuantity(qty).
 					SetType(opts.materialType).
-					SetIsCloneable(true)
+					SetIsCloneable(true).
+					SetNillableNote(m.Note)
 
 				if opts.withRetailPrice {
 					create.SetNillableRetailPrice(m.RetailPrice)

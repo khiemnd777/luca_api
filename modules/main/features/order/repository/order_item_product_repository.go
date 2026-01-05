@@ -72,6 +72,7 @@ func (r *orderItemProductRepository) PrepareProducts(
 			OrderID:             product.OrderID,
 			Quantity:            qty,
 			RetailPrice:         product.RetailPrice,
+			Note:                product.Note,
 		})
 	}
 
@@ -298,6 +299,7 @@ func (r *orderItemProductRepository) replaceProductsForOrderItem(
 			SetOriginalOrderItemID(origOID).
 			SetProductID(p.ProductID).
 			SetQuantity(p.Quantity).
+			SetNillableNote(p.Note).
 			SetNillableRetailPrice(p.RetailPrice).
 			SetNillableIsCloneable(p.IsCloneable)
 
@@ -357,6 +359,7 @@ func (r *orderItemProductRepository) syncFromDerived(
 				SetProductID(p.ProductID).
 				SetOriginalOrderItemID(sourceOrderItemID).
 				SetQuantity(qty).
+				SetNillableNote(p.Note).
 				SetNillableProductCode(p.ProductCode).
 				SetNillableRetailPrice(p.RetailPrice),
 		)
@@ -428,6 +431,7 @@ func (r *orderItemProductRepository) syncFromSource(
 					UpdateOne(row).
 					SetQuantity(qty).
 					SetNillableRetailPrice(p.RetailPrice).
+					SetNillableNote(p.Note).
 					Save(ctx); err != nil {
 					return err
 				}
@@ -441,6 +445,7 @@ func (r *orderItemProductRepository) syncFromSource(
 					SetQuantity(qty).
 					SetNillableRetailPrice(p.RetailPrice).
 					SetIsCloneable(true).
+					SetNillableNote(p.Note).
 					Save(ctx); err != nil {
 					return err
 				}
@@ -477,6 +482,7 @@ func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, o
 			orderitemproduct.FieldProductCode,
 			orderitemproduct.FieldQuantity,
 			orderitemproduct.FieldRetailPrice,
+			orderitemproduct.FieldNote,
 		).
 		WithOrderItem(func(q *generated.OrderItemQuery) {
 			q.Select(orderitem.FieldID, orderitem.FieldCode)
@@ -502,6 +508,7 @@ func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, o
 			OriginalOrderItemID: it.OriginalOrderItemID,
 			OrderID:             it.OrderID,
 			Quantity:            it.Quantity,
+			Note:                it.Note,
 			RetailPrice:         it.RetailPrice,
 		}
 		if it.Edges.OrderItem != nil {
