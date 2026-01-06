@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	"github.com/khiemnd777/andy_api/modules/main/features/order/service"
 	"github.com/khiemnd777/andy_api/shared/logger"
@@ -23,8 +23,8 @@ func (j ClearExpiredOrderCodeJob) ConfigKey() string       { return "cron.clear_
 func (j ClearExpiredOrderCodeJob) Run() error {
 	logger.Debug("[ClearExpiredOrderCodeJob] Clear expired order code starting...")
 
-	if _, err := j.svc.CleanupExpiredReservations(context.Background(), time.Now()); err != nil {
-		logger.Error("[ClearExpiredOrderCodeJob] Clear expired order code failed", err)
+	if _, err := j.svc.CleanupExpiredReservations(context.Background()); err != nil {
+		logger.Error(fmt.Sprintf("[ClearExpiredOrderCodeJob] Clear expired order code failed: %v", err))
 		return err
 	}
 

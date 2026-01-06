@@ -24,7 +24,6 @@ type OrderCodeRepository interface {
 	CleanupExpiredReservations(
 		ctx context.Context,
 		tx *generated.Tx,
-		now time.Time,
 	) (deleted int64, err error)
 	ConfirmReservation(
 		ctx context.Context,
@@ -134,7 +133,6 @@ WHERE status = 'reserved'
 func (r *orderCodeRepository) CleanupExpiredReservations(
 	ctx context.Context,
 	tx *generated.Tx,
-	now time.Time,
 ) (deleted int64, err error) {
 
 	const cleanupSQL = `
@@ -142,7 +140,7 @@ DELETE FROM order_code_reservations
 WHERE status = 'expired'
 `
 
-	res, err := tx.ExecContext(ctx, cleanupSQL, now)
+	res, err := tx.ExecContext(ctx, cleanupSQL)
 	if err != nil {
 		return 0, err
 	}
