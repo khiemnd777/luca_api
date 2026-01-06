@@ -176,7 +176,7 @@ func (r *orderItemProductRepository) Sync(
 			ctx,
 			tx,
 			orderID,
-			orderItemID, // current as source for children
+			orderItemID,
 			cloneToChildren,
 		); err != nil {
 			return nil, err
