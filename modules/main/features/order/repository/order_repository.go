@@ -741,6 +741,7 @@ func (r *orderRepository) GetAllOrderProducts(ctx context.Context, orderID int64
 			Quantity:            it.Quantity,
 			Note:                it.Note,
 			RetailPrice:         it.RetailPrice,
+			TeethPosition:       it.TeethPosition,
 		}
 		if it.Edges.OrderItem != nil {
 			dto.OrderItemCode = it.Edges.OrderItem.Code

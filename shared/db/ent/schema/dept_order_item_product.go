@@ -33,6 +33,10 @@ func (OrderItemProduct) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.String("teeth_position").
+			Optional().
+			Nillable(),
+
 		field.String("note").
 			Optional().
 			Nillable(),

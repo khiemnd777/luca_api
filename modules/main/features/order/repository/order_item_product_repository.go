@@ -8,7 +8,6 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemproduct"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 )
 
@@ -70,8 +69,9 @@ func (r *orderItemProductRepository) PrepareProducts(
 			OriginalOrderItemID: product.OriginalOrderItemID,
 			IsCloneable:         product.IsCloneable,
 			OrderID:             product.OrderID,
-			Quantity:            qty,
 			RetailPrice:         product.RetailPrice,
+			TeethPosition:       product.TeethPosition,
+			Quantity:            qty,
 			Note:                product.Note,
 		})
 	}
@@ -99,15 +99,6 @@ func (r *orderItemProductRepository) CalculateTotalPrice(products []*model.Order
 	return &total
 }
 
-// Sync V2 rules:
-// 1) ALWAYS write to current orderItemID first (orderItemID owns its own rows)
-// 2) If IsCloneable == true  -> sync UP to parent (OriginalOrderItemID)
-// 3) If IsCloneable == false -> sync DOWN to children (find derived by OriginalOrderItemID == orderItemID)
-//
-// Notes:
-//   - IsCloneable nil is treated as false (sync down).
-//   - When writing current rows:
-//     OriginalOrderItemID = dto.OriginalOrderItemID if provided, else = orderItemID (self/source)
 func (r *orderItemProductRepository) Sync(
 	ctx context.Context,
 	tx *generated.Tx,
@@ -116,15 +107,7 @@ func (r *orderItemProductRepository) Sync(
 	products []*model.OrderItemProductDTO,
 ) ([]*model.OrderItemProductDTO, error) {
 
-	logger.Debug("SyncProductV2: start",
-		"orderID", orderID,
-		"orderItemID", orderItemID,
-		"inputCount", len(products),
-	)
-
-	// -----------------------------
 	// 1) Normalize + partition by IsCloneable policy
-	// -----------------------------
 	currentProducts := make([]*model.OrderItemProductDTO, 0, len(products))
 
 	// clone-to-parent grouped by parent OrderItemID
@@ -155,34 +138,13 @@ func (r *orderItemProductRepository) Sync(
 		}
 	}
 
-	logger.Debug("SyncProductV2: partition input",
-		"currentCount", len(currentProducts),
-		"cloneToParentGroups", len(cloneToParent),
-		"cloneToChildrenCount", len(cloneToChildren),
-	)
-
-	// -----------------------------
 	// 2) ALWAYS write CURRENT orderItemID
-	// -----------------------------
-	logger.Debug("SyncProductV2: write current (replace)",
-		"orderItemID", orderItemID,
-		"count", len(currentProducts),
-	)
-
 	if err := r.replaceProductsForOrderItem(ctx, tx, orderID, orderItemID, currentProducts); err != nil {
 		return nil, err
 	}
 
-	// -----------------------------
 	// 3) IsCloneable=true -> Sync UP to parent (fan-in)
-	// -----------------------------
 	for parentOID, items := range cloneToParent {
-		logger.Debug("SyncProductV2: clone UP to parent",
-			"fromOrderItemID", orderItemID,
-			"toParentOrderItemID", parentOID,
-			"count", len(items),
-		)
-
 		// Reuse your existing semantics: derived overrides parent
 		if err := r.syncFromDerived(
 			ctx,
@@ -196,11 +158,6 @@ func (r *orderItemProductRepository) Sync(
 		}
 
 		// SyncProductV2: parent -> all children
-		logger.Debug("SyncProductV2: parent -> all children",
-			"source", parentOID,
-			"count", len(items),
-		)
-
 		if err := r.syncFromSource(
 			ctx,
 			tx,
@@ -212,15 +169,8 @@ func (r *orderItemProductRepository) Sync(
 		}
 	}
 
-	// -----------------------------
 	// 4) IsCloneable=false -> Sync DOWN to children (fan-out)
-	// -----------------------------
 	if len(cloneToChildren) > 0 {
-		logger.Debug("SyncProductV2: clone DOWN to children",
-			"sourceOrderItemID", orderItemID,
-			"count", len(cloneToChildren),
-		)
-
 		// Reuse your existing semantics: source cascades to children
 		if err := r.syncFromSource(
 			ctx,
@@ -233,9 +183,7 @@ func (r *orderItemProductRepository) Sync(
 		}
 	}
 
-	// -----------------------------
 	// 5) Return CURRENT rows (must never be empty due to missing routing)
-	// -----------------------------
 	finalRows, err := tx.OrderItemProduct.
 		Query().
 		Where(orderitemproduct.OrderItemIDEQ(orderItemID)).
@@ -243,11 +191,6 @@ func (r *orderItemProductRepository) Sync(
 	if err != nil {
 		return nil, err
 	}
-
-	logger.Debug("SyncProductV2: completed",
-		"orderItemID", orderItemID,
-		"finalCount", len(finalRows),
-	)
 
 	out := make([]*model.OrderItemProductDTO, 0, len(finalRows))
 	for _, row := range finalRows {
@@ -301,6 +244,7 @@ func (r *orderItemProductRepository) replaceProductsForOrderItem(
 			SetQuantity(p.Quantity).
 			SetNillableNote(p.Note).
 			SetNillableRetailPrice(p.RetailPrice).
+			SetNillableTeethPosition(p.TeethPosition).
 			SetNillableIsCloneable(p.IsCloneable)
 
 		// Optional fields if your schema supports them (uncomment if applicable):
@@ -361,7 +305,8 @@ func (r *orderItemProductRepository) syncFromDerived(
 				SetQuantity(qty).
 				SetNillableNote(p.Note).
 				SetNillableProductCode(p.ProductCode).
-				SetNillableRetailPrice(p.RetailPrice),
+				SetNillableRetailPrice(p.RetailPrice).
+				SetNillableTeethPosition(p.TeethPosition),
 		)
 	}
 
@@ -431,6 +376,7 @@ func (r *orderItemProductRepository) syncFromSource(
 					UpdateOne(row).
 					SetQuantity(qty).
 					SetNillableRetailPrice(p.RetailPrice).
+					SetNillableTeethPosition(p.TeethPosition).
 					SetNillableNote(p.Note).
 					Save(ctx); err != nil {
 					return err
@@ -444,6 +390,7 @@ func (r *orderItemProductRepository) syncFromSource(
 					SetOriginalOrderItemID(sourceOrderItemID).
 					SetQuantity(qty).
 					SetNillableRetailPrice(p.RetailPrice).
+					SetNillableTeethPosition(p.TeethPosition).
 					SetIsCloneable(true).
 					SetNillableNote(p.Note).
 					Save(ctx); err != nil {
@@ -510,6 +457,7 @@ func (r *orderItemProductRepository) GetProductsByOrderID(ctx context.Context, o
 			Quantity:            it.Quantity,
 			Note:                it.Note,
 			RetailPrice:         it.RetailPrice,
+			TeethPosition:       it.TeethPosition,
 		}
 		if it.Edges.OrderItem != nil {
 			dto.OrderItemCode = it.Edges.OrderItem.Code
