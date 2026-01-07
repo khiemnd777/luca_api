@@ -17,4 +17,7 @@ type SectionDTO struct {
 	// Processes
 	ProcessIDs   []int   `json:"process_ids,omitempty"`
 	ProcessNames *string `json:"process_names,omitempty"`
+	// Leader
+	LeaderID   *int    `json:"leader_id,omitempty"`
+	LeaderName *string `json:"leader_name,omitempty"`
 }

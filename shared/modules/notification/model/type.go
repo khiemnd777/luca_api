@@ -1,4 +1,4 @@
-package notification_model
+package model
 
 type NotifyRequest struct {
 	UserID     int            `json:"user_id" validate:"required"`

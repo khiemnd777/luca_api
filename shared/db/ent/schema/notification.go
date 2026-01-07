@@ -23,25 +23,7 @@ func (Notification) Fields() []ent.Field {
 		field.String("type").NotEmpty().
 			Validate(func(s string) error {
 				switch s {
-				case "order_request:new":
-					return nil
-				case "order_request:accepted":
-					return nil
-				case "subscriber:new_product":
-					return nil
-				case "subscriber:updated_product":
-					return nil
-				case "credit:spend":
-					return nil
-				case "checkout:transfer":
-					return nil
-				case "credit:reserved":
-					return nil
-				case "credit:activated":
-					return nil
-				case "order:message":
-					return nil
-				case "order_request:message":
+				case "order:checkout":
 					return nil
 				default:
 					return errors.New("invalid notification type")

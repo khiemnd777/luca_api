@@ -50,6 +50,8 @@ func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*mode
 	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
 		q := r.db.Section.Create().
 			SetDepartmentID(input.DepartmentID).
+			SetNillableLeaderID(input.LeaderID).
+			SetNillableLeaderName(input.LeaderName).
 			SetActive(input.Active).
 			SetName(input.Name).
 			SetNillableCode(input.Code).
@@ -88,6 +90,8 @@ func (r *sectionRepo) Update(ctx context.Context, input model.SectionDTO) (*mode
 	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
 		q := r.db.Section.UpdateOneID(input.ID).
 			SetDepartmentID(input.DepartmentID).
+			SetNillableLeaderID(input.LeaderID).
+			SetNillableLeaderName(input.LeaderName).
 			SetActive(input.Active).
 			SetName(input.Name).
 			SetNillableCode(input.Code).

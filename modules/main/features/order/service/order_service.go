@@ -88,10 +88,6 @@ func kOrderSearch(q dbutils.SearchQuery) string {
 	return fmt.Sprintf("order:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-// ----------------------------------------------------------------------------
-// Create
-// ----------------------------------------------------------------------------
-
 func (s *orderService) Create(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
 	dto, err := s.repo.Create(ctx, input)
 	if err != nil {
@@ -107,10 +103,6 @@ func (s *orderService) Create(ctx context.Context, deptID int, input *model.Orde
 
 	return dto, nil
 }
-
-// ----------------------------------------------------------------------------
-// Update
-// ----------------------------------------------------------------------------
 
 func (s *orderService) Update(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
 	dto, err := s.repo.Update(ctx, input)
@@ -145,10 +137,6 @@ func (s *orderService) UpdateStatus(ctx context.Context, orderItemProcessID int6
 	return out, nil
 }
 
-// ----------------------------------------------------------------------------
-// upsertSearch
-// ----------------------------------------------------------------------------
-
 func (s *orderService) upsertSearch(ctx context.Context, deptID int, dto *model.OrderDTO) {
 	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "order", []any{dto.Code}, dto.CustomFields)
 
@@ -171,10 +159,6 @@ func (s *orderService) unlinkSearch(id int64) {
 		EntityID:   id,
 	})
 }
-
-// ----------------------------------------------------------------------------
-// GetByID
-// ----------------------------------------------------------------------------
 
 func (s *orderService) GetByID(ctx context.Context, id int64) (*model.OrderDTO, error) {
 	return s.repo.GetByID(ctx, id)
@@ -206,10 +190,6 @@ func (s *orderService) SyncPrice(ctx context.Context, orderID int64) (float64, e
 	return s.repo.SyncPrice(ctx, orderID)
 }
 
-// ----------------------------------------------------------------------------
-// List
-// ----------------------------------------------------------------------------
-
 func (s *orderService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
 	type boxed = table.TableListResult[model.OrderDTO]
 	key := kOrderList(q)
@@ -228,10 +208,6 @@ func (s *orderService) List(ctx context.Context, q table.TableQuery) (table.Tabl
 	return *ptr, nil
 }
 
-// ----------------------------------------------------------------------------
-// Delete
-// ----------------------------------------------------------------------------
-
 func (s *orderService) Delete(ctx context.Context, id int64) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
@@ -242,10 +218,6 @@ func (s *orderService) Delete(ctx context.Context, id int64) error {
 	s.unlinkSearch(id)
 	return nil
 }
-
-// ----------------------------------------------------------------------------
-// Search
-// ----------------------------------------------------------------------------
 
 func (s *orderService) Search(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error) {
 	type boxed = dbutils.SearchResult[model.OrderDTO]

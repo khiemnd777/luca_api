@@ -19,6 +19,14 @@ func (Section) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("department_id"),
 
+		field.Int("leader_id").
+			Optional().
+			Nillable(),
+
+		field.String("leader_name").
+			Optional().
+			Nillable(),
+
 		field.String("name").
 			NotEmpty(),
 
