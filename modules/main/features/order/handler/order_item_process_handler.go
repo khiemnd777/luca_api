@@ -188,7 +188,9 @@ func (h *OrderItemProcessHandler) CheckInOrOut(c *fiber.Ctx) error {
 		}
 	}
 
-	dto, err := h.svc.CheckInOrOut(c.UserContext(), checkInOrOutData)
+	userID, _ := utils.GetUserIDInt(c)
+
+	dto, err := h.svc.CheckInOrOut(c.UserContext(), userID, checkInOrOutData)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

@@ -13,6 +13,8 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocessinprogress"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/section"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/sectionprocess"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -31,6 +33,7 @@ type OrderItemProcessInProgressRepository interface {
 	GetInProgressesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetInProgressByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetInProgressesByAssignedID(ctx context.Context, tx *generated.Tx, assignedID int64, query table.TableQuery) (table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO], error)
+	ProcessInfoByProcessID(ctx context.Context, tx *generated.Tx, processID *int64) (*int, *string, *string, *string, error)
 }
 
 type orderItemProcessInProgressRepository struct {
@@ -489,11 +492,20 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 			return nil, err
 		}
 
+		leaderID, leaderName, sectionName, processName, err := r.ProcessInfoByProcessID(ctx, tx, checkInOrOutData.NextProcessID)
+		if err != nil {
+			return nil, err
+		}
+
 		completedAt := time.Now()
 		entity, err := r.inprogressClient(tx).
 			UpdateOneID(checkInOrOutData.ID).
 			SetProcessID(*checkInOrOutData.ProcessID).
 			SetNillableNextProcessID(checkInOrOutData.NextProcessID).
+			SetNillableNextProcessName(processName).
+			SetNillableNextSectionName(sectionName).
+			SetNillableNextLeaderID(leaderID).
+			SetNillableNextLeaderName(leaderName).
 			SetNillableOrderID(checkInOrOutData.OrderID).
 			SetNillableCheckOutNote(checkInOrOutData.CheckOutNote).
 			SetCompletedAt(completedAt).
@@ -988,6 +1000,102 @@ func (r *orderItemProcessInProgressRepository) checkoutWithData(ctx context.Cont
 
 	dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
 	return dto, nil
+}
+
+func (r *orderItemProcessInProgressRepository) ProcessInfoByProcessID1(ctx context.Context, tx *generated.Tx, processID *int64) (*int, *string, *string, *string, error) {
+	if processID == nil {
+		return nil, nil, nil, nil, nil
+	}
+
+	sectionClient := r.db.SectionProcess
+	if tx != nil {
+		sectionClient = tx.SectionProcess
+	}
+
+	sectionProc, err := sectionClient.
+		Query().
+		Where(sectionprocess.ProcessIDEQ(int(*processID))).
+		Select(sectionprocess.FieldSectionName).
+		WithSection(func(q *generated.SectionQuery) {
+			q.Select(section.FieldLeaderID)
+		}).
+		First(ctx)
+	if err != nil {
+		if generated.IsNotFound(err) {
+			return nil, nil, nil, nil, nil
+		}
+		return nil, nil, nil, nil, err
+	}
+
+	var leaderID *int
+	var leaderName *string
+	var sectionName *string
+	var processName *string
+	if sectionProc.Edges.Section != nil {
+		if sectionProc.Edges.Section.LeaderID != nil {
+			leaderID = sectionProc.Edges.Section.LeaderID
+		}
+		if sectionProc.Edges.Section.LeaderName != nil {
+			leaderName = sectionProc.Edges.Section.LeaderName
+		}
+		sectionName = &sectionProc.Edges.Section.Name
+		processName = sectionProc.ProcessName
+	}
+
+	return leaderID, leaderName, sectionName, processName, nil
+}
+
+func (r *orderItemProcessInProgressRepository) ProcessInfoByProcessID(
+	ctx context.Context,
+	tx *generated.Tx,
+	processID *int64,
+) (*int, *string, *string, *string, error) {
+
+	if processID == nil {
+		return nil, nil, nil, nil, nil
+	}
+
+	client := r.db.OrderItemProcess
+	if tx != nil {
+		client = tx.OrderItemProcess
+	}
+
+	oip, err := client.
+		Query().
+		Where(
+			orderitemprocess.IDEQ(*processID),
+		).
+		Order(generated.Desc(orderitemprocess.FieldID)).
+		First(ctx)
+
+	if err != nil {
+		if generated.IsNotFound(err) {
+			return nil, nil, nil, nil, nil
+		}
+		return nil, nil, nil, nil, err
+	}
+
+	var (
+		leaderID    *int
+		leaderName  *string
+		sectionName *string
+		processName *string
+	)
+
+	if oip.LeaderID != nil {
+		leaderID = oip.LeaderID
+	}
+	if oip.LeaderName != nil {
+		leaderName = oip.LeaderName
+	}
+	if oip.SectionName != nil {
+		sectionName = oip.SectionName
+	}
+	if oip.ProcessName != nil {
+		processName = oip.ProcessName
+	}
+
+	return leaderID, leaderName, sectionName, processName, nil
 }
 
 func (r *orderItemProcessInProgressRepository) inprogressClient(tx *generated.Tx) *generated.OrderItemProcessInProgressClient {

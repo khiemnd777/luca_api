@@ -9,8 +9,10 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/modules/notification"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -67,6 +69,7 @@ type OrderItemProcessService interface {
 
 	CheckInOrOut(
 		ctx context.Context,
+		userID int,
 		checkInOrOutData *model.OrderItemProcessInProgressDTO,
 	) (*model.OrderItemProcessInProgressDTO, error)
 	Assign(
@@ -197,7 +200,7 @@ func (s *orderItemProcessService) PrepareCheckInOrOutByCode(ctx context.Context,
 }
 
 // TODO: remove all orderID, orderItemID
-func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, error) {
+func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, error) {
 	var err error
 	dto, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
 	if err != nil {
@@ -242,6 +245,25 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, checkInOrOut
 
 	cache.InvalidateKeys(keys...)
 	cache.InvalidateKeys(kOrderAll()...)
+
+	// notify to next process's leader
+	if dto.CompletedAt != nil && dto.NextProcessID != nil {
+		logger.Debug(
+			"notify next process leader",
+			"nextLeaderID", dto.NextLeaderID,
+			"nextLeaderName", dto.NextLeaderName,
+			"nextSectionName", dto.NextSectionName,
+			"nextProcessName", dto.NextProcessName,
+		)
+		notification.Notify(*dto.NextLeaderID, userID, "order:checkout", map[string]any{
+			"leader_id":       dto.NextLeaderID,
+			"leader_name":     dto.NextLeaderName,
+			"order_item_id":   dto.OrderItemID,
+			"order_item_code": dto.OrderItemCode,
+			"section_name":    dto.NextSectionName,
+			"process_name":    dto.NextProcessName,
+		})
+	}
 
 	return dto, nil
 }

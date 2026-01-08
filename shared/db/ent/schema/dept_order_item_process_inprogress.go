@@ -23,7 +23,21 @@ func (OrderItemProcessInProgress) Fields() []ent.Field {
 			}),
 		field.Int64("process_id").Optional().Nillable(),
 		field.Int64("prev_process_id").Optional().Nillable(),
-		field.Int64("next_process_id").Optional().Nillable(),
+		field.Int64("next_process_id").
+			Optional().
+			Nillable(),
+		field.String("next_process_name").
+			Optional().
+			Nillable(),
+		field.String("next_section_name").
+			Optional().
+			Nillable(),
+		field.Int("next_leader_id").
+			Optional().
+			Nillable(),
+		field.String("next_leader_name").
+			Optional().
+			Nillable(),
 
 		field.String("check_in_note").
 			Optional().Nillable(),

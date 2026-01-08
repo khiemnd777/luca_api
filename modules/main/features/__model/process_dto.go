@@ -8,6 +8,8 @@ type ProcessDTO struct {
 	Name         *string        `json:"name,omitempty"`
 	Color        *string        `json:"color,omitempty"`
 	SectionName  *string        `json:"section_name,omitempty"`
+	LeaderID     *int           `json:"leader_id,omitempty"`
+	LeaderName   *string        `json:"leader_name,omitempty"`
 	CustomFields map[string]any `json:"custom_fields,omitempty"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`

@@ -44,6 +44,14 @@ func (OrderItemProcess) Fields() []ent.Field {
 		field.String("assigned_name").
 			Optional().Nillable(),
 
+		field.Int("leader_id").
+			Optional().
+			Nillable(),
+
+		field.String("leader_name").
+			Optional().
+			Nillable(),
+
 		field.String("status").
 			Default("pending"), // pending | in_progress | paused | qc | completed | rework | issue
 

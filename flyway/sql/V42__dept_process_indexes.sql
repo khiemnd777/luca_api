@@ -9,3 +9,6 @@ CREATE INDEX IF NOT EXISTS ix_process_code_not_deleted
 CREATE INDEX IF NOT EXISTS ix_process_name_not_deleted
   ON processes(name)
   WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_section_processes_process
+  ON section_processes(process_id, section_id);

@@ -18,6 +18,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/lib/pq"
 )
 
 type OrderItemProcessRepository interface {
@@ -132,12 +133,15 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 	priority *string,
 	productIDs []int,
 ) ([]*model.OrderItemProcessDTO, error) {
+	logger.Debug(
+		"create order item processes: start",
+		"productIDsLen", len(productIDs),
+	)
 	if len(productIDs) == 0 {
 		return []*model.OrderItemProcessDTO{}, nil
 	}
 
-	uniqueProcesses := make([]*model.ProcessDTO, 0)
-	seenProcessIDs := make(map[int]struct{})
+	uniqueProductIDs := make([]int, 0, len(productIDs))
 	seenProductIDs := make(map[int]struct{}, len(productIDs))
 
 	for _, pid := range productIDs {
@@ -148,11 +152,28 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 			continue
 		}
 		seenProductIDs[pid] = struct{}{}
+		uniqueProductIDs = append(uniqueProductIDs, pid)
+	}
 
-		processes, err := r.GetRawProcessesByProductID(ctx, pid)
-		if err != nil {
-			return nil, err
-		}
+	processMap, err := r.getRawProcessesByProductIDs(ctx, uniqueProductIDs)
+	if err != nil {
+		logger.Debug(
+			"create order item processes: load processes failed",
+			"productIDsLen", len(productIDs),
+			"error", err,
+		)
+		return nil, err
+	}
+
+	seenProcessIDs := make(map[int]struct{})
+	uniqueProcesses := make([]*model.ProcessDTO, 0)
+	processCounts := make(map[int]int, len(processMap))
+	totalProcesses := 0
+
+	for _, pid := range uniqueProductIDs {
+		processes := processMap[pid]
+		processCounts[pid] = len(processes)
+		totalProcesses += len(processes)
 
 		for _, p := range processes {
 			if p == nil {
@@ -166,8 +187,28 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 		}
 	}
 
+	logger.Debug(
+		"create order item processes: process map detail",
+		"processMapLen", len(processMap),
+		"totalProcesses", totalProcesses,
+		"processCountsByProductID", processCounts,
+	)
+
+	logger.Debug(
+		"create order item processes: len seenProcessIDs",
+		"seenProcessIDs:", len(seenProcessIDs),
+	)
+
+	logger.Debug(
+		"create order item processes: len uniqueProcesses",
+		"uniqueProcesses:", len(uniqueProcesses),
+	)
+
 	if len(uniqueProcesses) == 0 {
-		// Why uniqueProcesses == 0?
+		logger.Debug(
+			"create order item processes: len uniqueProcesses",
+			"uniqueProcesses:", len(uniqueProcesses),
+		)
 		return []*model.OrderItemProcessDTO{}, nil
 	}
 
@@ -199,6 +240,8 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 				OrderCode:    orderCode,
 				Color:        p.Color,
 				SectionName:  p.SectionName,
+				LeaderID:     p.LeaderID,
+				LeaderName:   p.LeaderName,
 				ProcessName:  pname,
 				StepNumber:   i + 1,
 				CustomFields: cf,
@@ -291,7 +334,9 @@ func (r *orderItemProcessRepository) Create(ctx context.Context, tx *generated.T
 		SetNillableAssignedID(dto.AssignedID).
 		SetNillableAssignedName(dto.AssignedName).
 		SetNillableColor(dto.Color).
-		SetNillableSectionName(dto.SectionName)
+		SetNillableSectionName(dto.SectionName).
+		SetNillableLeaderID(dto.LeaderID).
+		SetNillableLeaderName(dto.LeaderName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err := customfields.PrepareCustomFields(ctx,
@@ -400,7 +445,9 @@ func (r *orderItemProcessRepository) Update(
 		SetNillableStartedAt(dto.StartedAt).
 		SetNillableCompletedAt(dto.CompletedAt).
 		SetNillableColor(dto.Color).
-		SetNillableSectionName(dto.SectionName)
+		SetNillableSectionName(dto.SectionName).
+		SetNillableLeaderID(dto.LeaderID).
+		SetNillableLeaderName(dto.LeaderName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err := customfields.PrepareCustomFields(
@@ -578,6 +625,190 @@ func (r *orderItemProcessRepository) GetProcessesByOrderID(
 }
 
 func (r *orderItemProcessRepository) GetRawProcessesByProductID(
+	ctx context.Context,
+	productID int,
+) ([]*model.ProcessDTO, error) {
+
+	const q = `
+WITH product_category AS (
+    SELECT category_id
+    FROM products
+    WHERE id = $1
+      AND deleted_at IS NULL
+),
+ranked_sections AS (
+    SELECT
+        sp.process_id,
+        s.leader_id,
+        s.leader_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY sp.process_id
+            ORDER BY
+                s.is_primary DESC NULLS LAST,
+                s.id ASC
+        ) AS rn
+    FROM section_processes sp
+    JOIN sections s ON s.id = sp.section_id
+)
+SELECT
+    p.id,
+    p.code,
+    p.name,
+		p.color,
+		p.section_name,
+    rs.leader_id,
+    rs.leader_name
+FROM product_category pc
+JOIN category_processes cp
+    ON cp.category_id = pc.category_id
+JOIN processes p
+    ON p.id = cp.process_id
+LEFT JOIN ranked_sections rs
+    ON rs.process_id = p.id
+   AND rs.rn = 1
+WHERE p.deleted_at IS NULL
+ORDER BY cp.display_order ASC;
+`
+
+	rows, err := r.db.QueryContext(ctx, q, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []*model.ProcessDTO
+
+	for rows.Next() {
+		dto := &model.ProcessDTO{}
+
+		if err := rows.Scan(
+			&dto.ID,
+			&dto.Code,
+			&dto.Name,
+			&dto.Color,
+			&dto.SectionName,
+			&dto.LeaderID,
+			&dto.LeaderName,
+		); err != nil {
+			return nil, err
+		}
+
+		result = append(result, dto)
+	}
+
+	return result, rows.Err()
+}
+
+func (r *orderItemProcessRepository) getRawProcessesByProductIDs(
+	ctx context.Context,
+	productIDs []int,
+) (map[int][]*model.ProcessDTO, error) {
+	if len(productIDs) == 0 {
+		return map[int][]*model.ProcessDTO{}, nil
+	}
+
+	const q = `WITH product_categories AS (
+    SELECT
+        id AS product_id,
+        category_id
+    FROM products
+    WHERE id = ANY($1)
+      AND deleted_at IS NULL
+),
+ranked_sections AS (
+    SELECT
+        sp.process_id,
+        s.leader_id,
+        s.leader_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY sp.process_id
+            ORDER BY sp.id ASC
+        ) AS rn
+    FROM section_processes sp
+    JOIN sections s
+        ON s.id = sp.section_id
+       AND s.deleted_at IS NULL
+)
+SELECT
+		pc.product_id,
+    p.id,
+    p.code,
+    p.name,
+    p.color,
+    p.section_name,
+    rs.leader_id,
+    rs.leader_name
+FROM product_categories pc
+JOIN category_processes cp
+    ON cp.category_id = pc.category_id
+JOIN processes p
+    ON p.id = cp.process_id
+   AND p.deleted_at IS NULL
+LEFT JOIN ranked_sections rs
+    ON rs.process_id = p.id
+   AND rs.rn = 1
+ORDER BY pc.product_id, cp.display_order ASC;
+`
+
+	rows, err := r.db.QueryContext(ctx, q, pq.Array(productIDs))
+	if err != nil {
+		logger.Debug(
+			"get raw processes by product ids: query failed",
+			"productIDs", productIDs,
+			"error", err,
+		)
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[int][]*model.ProcessDTO)
+
+	for rows.Next() {
+		var (
+			productID int
+			dto       = &model.ProcessDTO{}
+		)
+
+		if err := rows.Scan(
+			&productID,
+			&dto.ID,
+			&dto.Code,
+			&dto.Name,
+			&dto.Color,
+			&dto.SectionName,
+			&dto.LeaderID,
+			&dto.LeaderName,
+		); err != nil {
+			logger.Debug(
+				"get raw processes by product ids: scan failed",
+				"productIDs", productIDs,
+				"error", err,
+			)
+			return nil, err
+		}
+
+		result[productID] = append(result[productID], dto)
+	}
+
+	if err := rows.Err(); err != nil {
+		logger.Debug(
+			"get raw processes by product ids: rows failed",
+			"productIDs", productIDs,
+			"error", err,
+		)
+		return nil, err
+	}
+
+	logger.Debug(
+		"get raw processes by product ids: finished",
+		"productIDs", productIDs,
+		"result", result,
+	)
+
+	return result, nil
+}
+
+func (r *orderItemProcessRepository) GetRawProcessesByProductID1(
 	ctx context.Context,
 	productID int,
 ) ([]*model.ProcessDTO, error) {

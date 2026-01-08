@@ -16,6 +16,9 @@ type OrderItemProcessDTO struct {
 	Color        *string    `json:"color,omitempty"`
 	AssignedID   *int64     `json:"assigned_id,omitempty"`
 	AssignedName *string    `json:"assigned_name,omitempty"`
+	// Leader
+	LeaderID   *int    `json:"leader_id,omitempty"`
+	LeaderName *string `json:"leader_name,omitempty"`
 	// CustomFields
 	// Status       string         `json:"status,omitempty"`
 	CustomFields map[string]any `json:"custom_fields,omitempty"`
