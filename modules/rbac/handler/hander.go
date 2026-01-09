@@ -109,7 +109,7 @@ func (h *RBACHandler) RenameRole(c *fiber.Ctx) error {
 	if err := h.svc.RenameRole(c.UserContext(), roleID, req.RoleName); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(http.StatusOK)
 }
 
 func (h *RBACHandler) UpdateRole(c *fiber.Ctx) error {
@@ -127,7 +127,7 @@ func (h *RBACHandler) UpdateRole(c *fiber.Ctx) error {
 	if err := h.svc.UpdateRole(c.UserContext(), roleID, req.RoleName, req.DisplayName, req.Brief); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(http.StatusOK)
 }
 
 func (h *RBACHandler) GetRole(c *fiber.Ctx) error {
@@ -156,7 +156,7 @@ func (h *RBACHandler) DeleteRole(c *fiber.Ctx) error {
 	if err := h.svc.DeleteRole(c.UserContext(), roleID); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(http.StatusOK)
 }
 
 func (h *RBACHandler) ListRoles(c *fiber.Ctx) error {
@@ -233,7 +233,7 @@ func (h *RBACHandler) DeletePermission(c *fiber.Ctx) error {
 	if err := h.svc.DeletePermission(c.UserContext(), id); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(http.StatusOK)
 }
 
 func (h *RBACHandler) ListPermissions(c *fiber.Ctx) error {
@@ -260,7 +260,7 @@ func (h *RBACHandler) ReplaceRolePermissions(c *fiber.Ctx) error {
 	if err := h.svc.ReplaceRolePermissions(c.UserContext(), req.RoleID, req.PermIDs); err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(http.StatusOK)
 }
 func (h *RBACHandler) AddRolePermissions(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
@@ -273,7 +273,7 @@ func (h *RBACHandler) AddRolePermissions(c *fiber.Ctx) error {
 	if err := h.svc.AddRolePermissions(c.UserContext(), req.RoleID, req.PermIDs); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(http.StatusOK)
 }
 func (h *RBACHandler) RemoveRolePermissions(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
@@ -286,7 +286,7 @@ func (h *RBACHandler) RemoveRolePermissions(c *fiber.Ctx) error {
 	if err := h.svc.RemoveRolePermissions(c.UserContext(), req.RoleID, req.PermIDs); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(http.StatusOK)
 }
 func (h *RBACHandler) GetRolePermissions(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.db, "rbac.manage"); err != nil {
