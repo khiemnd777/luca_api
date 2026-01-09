@@ -40,7 +40,7 @@ func (h *NotificationHandler) RegisterRoutesInternal(router fiber.Router) {
 }
 
 func (h *NotificationHandler) LatestNotification(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
@@ -53,7 +53,7 @@ func (h *NotificationHandler) LatestNotification(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) GetByMessage(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
@@ -67,7 +67,7 @@ func (h *NotificationHandler) GetByMessage(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) ListPaginated(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
@@ -81,13 +81,13 @@ func (h *NotificationHandler) ListPaginated(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"data":     items,
+		"items":    items,
 		"has_more": hasMore,
 	})
 }
 
 func (h *NotificationHandler) ShortList(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
@@ -102,7 +102,7 @@ func (h *NotificationHandler) ShortList(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
@@ -147,7 +147,7 @@ func (h *NotificationHandler) Create(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) CountUnread(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
@@ -164,7 +164,7 @@ func (h *NotificationHandler) CountUnread(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) Delete(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
@@ -183,7 +183,7 @@ func (h *NotificationHandler) Delete(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) DeleteAll(c *fiber.Ctx) error {
-	if err := rbac.GuardRole(c, "user", h.deps.Ent.(*generated.Client)); err != nil {
+	if err := rbac.GuardAnyRole(c, h.deps.Ent.(*generated.Client), "admin", "staff"); err != nil {
 		return err
 	}
 
