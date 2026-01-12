@@ -32,6 +32,7 @@ type OrderService interface {
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
 	NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
+	CompletedList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
 	SyncPrice(ctx context.Context, orderID int64) (float64, error)
@@ -67,6 +68,7 @@ func kOrderAll() []string {
 		"order:item:material:loaner:*",
 		"order:list:inprogress:*",
 		"order:list:newest:*",
+		"order:list:completed:*",
 	}
 }
 
@@ -92,6 +94,10 @@ func kOrderInProgressList(q table.TableQuery) string {
 
 func kOrderNewestList(q table.TableQuery) string {
 	return fmt.Sprintf("order:list:newest:l%d:p%d", q.Limit, q.Page)
+}
+
+func kOrderCompletedList(q table.TableQuery) string {
+	return fmt.Sprintf("order:list:completed:l%d:p%d", q.Limit, q.Page)
 }
 
 func kOrderSearch(q dbutils.SearchQuery) string {
@@ -216,6 +222,28 @@ func (s *orderService) NewestList(ctx context.Context, q table.TableQuery) (tabl
 
 	ptr, err := cache.Get(key, cache.TTLLong, func() (*boxed, error) {
 		list, err := s.repo.NewestList(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		return &list, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
+func (s *orderService) CompletedList(ctx context.Context, q table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error) {
+	type boxed = table.TableListResult[model.CompletedOrderDTO]
+
+	query := q
+	query.OrderBy = utils.Ptr("updated_at")
+	query.Direction = "desc"
+	key := kOrderCompletedList(query)
+
+	ptr, err := cache.Get(key, cache.TTLLong, func() (*boxed, error) {
+		list, err := s.repo.CompletedList(ctx, query)
 		if err != nil {
 			return nil, err
 		}

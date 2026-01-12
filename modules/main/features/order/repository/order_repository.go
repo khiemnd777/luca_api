@@ -43,6 +43,7 @@ type OrderRepository interface {
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
 	NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
+	CompletedList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
 }
@@ -678,13 +679,14 @@ func (r *orderRepository) InProgressList(ctx context.Context, query table.TableQ
 			out := make([]*model.InProcessOrderDTO, 0, len(src))
 			for _, item := range src {
 				out = append(out, &model.InProcessOrderDTO{
-					ID:             item.ID,
-					Code:           item.Code,
-					CodeLatest:     item.CodeLatest,
-					DeliveryDate:   item.DeliveryDate,
-					TotalPrice:     item.TotalPrice,
-					StatusLatest:   item.StatusLatest,
-					PriorityLatest: item.PriorityLatest,
+					ID:                item.ID,
+					Code:              item.Code,
+					CodeLatest:        item.CodeLatest,
+					DeliveryDate:      item.DeliveryDate,
+					TotalPrice:        item.TotalPrice,
+					ProcessNameLatest: item.ProcessNameLatest,
+					StatusLatest:      item.StatusLatest,
+					PriorityLatest:    item.PriorityLatest,
 				})
 			}
 			return out
@@ -726,6 +728,40 @@ func (r *orderRepository) NewestList(ctx context.Context, query table.TableQuery
 	)
 	if err != nil {
 		var zero table.TableListResult[model.NewestOrderDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *orderRepository) CompletedList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Order.Query().
+			Where(
+				order.DeletedAtIsNil(),
+				order.StatusLatestEQ("completed"),
+			),
+		query,
+		order.Table,
+		order.FieldID,
+		order.FieldUpdatedAt,
+		func(src []*generated.Order) []*model.CompletedOrderDTO {
+			out := make([]*model.CompletedOrderDTO, 0, len(src))
+			for _, item := range src {
+				out = append(out, &model.CompletedOrderDTO{
+					ID:             item.ID,
+					Code:           item.Code,
+					CodeLatest:     item.CodeLatest,
+					CreatedAt:      item.CreatedAt,
+					StatusLatest:   item.StatusLatest,
+					PriorityLatest: item.PriorityLatest,
+				})
+			}
+			return out
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.CompletedOrderDTO]
 		return zero, err
 	}
 	return list, nil
