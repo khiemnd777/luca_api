@@ -36,3 +36,38 @@ func Send(receiverID int, eventType string, data any) {
 		Message: envelope,
 	})
 }
+
+func BroadcastTo(receiverID int, eventType string, data any) {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		logger.Error(fmt.Sprintf("❌ Failed to marshal realtime payload: %v", err))
+		return
+	}
+
+	envelope := realtime_model.RealtimeEnvelope{
+		Type:    eventType,
+		Payload: raw,
+	}
+
+	pubsub.Publish("realtime:send", realtime_model.RealtimeRequest{
+		UserID:  receiverID,
+		Message: envelope,
+	})
+}
+
+func BroadcastAll(eventType string, data any) {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		logger.Error(fmt.Sprintf("❌ Failed to marshal realtime payload: %v", err))
+		return
+	}
+
+	envelope := realtime_model.RealtimeEnvelope{
+		Type:    eventType,
+		Payload: raw,
+	}
+
+	pubsub.Publish("realtime:broadcast:all", realtime_model.RealtimeAllRequest{
+		Message: envelope,
+	})
+}

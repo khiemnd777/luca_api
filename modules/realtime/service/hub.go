@@ -55,10 +55,31 @@ func (h *Hub) Run() {
 	}
 }
 
+// [obsoleted] use BroadcastTo
 func (h *Hub) SendToUser(userID int, msg []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if conns, ok := h.clients[userID]; ok {
+		for _, conn := range conns {
+			conn.WriteMessage(websocket.TextMessage, msg)
+		}
+	}
+}
+
+func (h *Hub) BroadcastTo(userID int, msg []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if conns, ok := h.clients[userID]; ok {
+		for _, conn := range conns {
+			conn.WriteMessage(websocket.TextMessage, msg)
+		}
+	}
+}
+
+func (h *Hub) BroadcastAll(msg []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, conns := range h.clients {
 		for _, conn := range conns {
 			conn.WriteMessage(websocket.TextMessage, msg)
 		}

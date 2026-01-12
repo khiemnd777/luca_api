@@ -12,6 +12,7 @@ import (
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/modules/realtime"
 	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
 	"github.com/khiemnd777/andy_api/shared/pubsub"
 	searchutils "github.com/khiemnd777/andy_api/shared/search"
@@ -113,6 +114,8 @@ func (s *orderService) Create(ctx context.Context, deptID int, input *model.Orde
 	cache.InvalidateKeys(kOrderAll()...)
 
 	s.upsertSearch(ctx, deptID, dto)
+
+	realtime.BroadcastAll("order:newest", nil)
 
 	return dto, nil
 }

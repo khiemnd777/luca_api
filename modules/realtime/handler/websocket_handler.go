@@ -76,7 +76,7 @@ func (h *Handler) RegisterInternalRoutes(router fiber.Router) {
 		}
 
 		msg, _ := json.Marshal(req.Message)
-		h.hub.SendToUser(req.UserID, msg)
+		h.hub.BroadcastTo(req.UserID, msg)
 		return c.SendStatus(200)
 	})
 }

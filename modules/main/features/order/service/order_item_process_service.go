@@ -12,6 +12,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/modules/notification"
+	"github.com/khiemnd777/andy_api/shared/modules/realtime"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -256,6 +257,8 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, 
 			"process_name":    dto.NextProcessName,
 		})
 	}
+
+	realtime.BroadcastAll("order:inprogress", nil)
 
 	return dto, nil
 }
