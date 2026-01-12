@@ -9,7 +9,6 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/modules/notification"
@@ -248,13 +247,6 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, 
 
 	// notify to next process's leader
 	if dto.CompletedAt != nil && dto.NextProcessID != nil {
-		logger.Debug(
-			"notify next process leader",
-			"nextLeaderID", dto.NextLeaderID,
-			"nextLeaderName", dto.NextLeaderName,
-			"nextSectionName", dto.NextSectionName,
-			"nextProcessName", dto.NextProcessName,
-		)
 		notification.Notify(*dto.NextLeaderID, userID, "order:checkout", map[string]any{
 			"leader_id":       dto.NextLeaderID,
 			"leader_name":     dto.NextLeaderName,

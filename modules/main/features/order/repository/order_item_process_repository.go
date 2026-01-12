@@ -133,10 +133,6 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 	priority *string,
 	productIDs []int,
 ) ([]*model.OrderItemProcessDTO, error) {
-	logger.Debug(
-		"create order item processes: start",
-		"productIDsLen", len(productIDs),
-	)
 	if len(productIDs) == 0 {
 		return []*model.OrderItemProcessDTO{}, nil
 	}
@@ -157,11 +153,7 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 
 	processMap, err := r.getRawProcessesByProductIDs(ctx, uniqueProductIDs)
 	if err != nil {
-		logger.Debug(
-			"create order item processes: load processes failed",
-			"productIDsLen", len(productIDs),
-			"error", err,
-		)
+		logger.Error(fmt.Sprintf("[ERROR] %v", err))
 		return nil, err
 	}
 
@@ -187,28 +179,7 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 		}
 	}
 
-	logger.Debug(
-		"create order item processes: process map detail",
-		"processMapLen", len(processMap),
-		"totalProcesses", totalProcesses,
-		"processCountsByProductID", processCounts,
-	)
-
-	logger.Debug(
-		"create order item processes: len seenProcessIDs",
-		"seenProcessIDs:", len(seenProcessIDs),
-	)
-
-	logger.Debug(
-		"create order item processes: len uniqueProcesses",
-		"uniqueProcesses:", len(uniqueProcesses),
-	)
-
 	if len(uniqueProcesses) == 0 {
-		logger.Debug(
-			"create order item processes: len uniqueProcesses",
-			"uniqueProcesses:", len(uniqueProcesses),
-		)
 		return []*model.OrderItemProcessDTO{}, nil
 	}
 
@@ -252,24 +223,9 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 
 	out, err := r.CreateMany(ctx, tx, inputs)
 	if err != nil {
-		logger.Debug(
-			"create order item processes: bulk create failed",
-			"orderItemID", orderItemID,
-			"orderID", orderID,
-			"processCount", len(inputs),
-			"error", err,
-		)
+		logger.Error(fmt.Sprintf("[ERROR] %v", err))
 		return nil, err
 	}
-
-	logger.Debug(
-		"create order item processes: finished",
-		"productIDs", productIDs,
-		"seenProductIDs", seenProductIDs,
-		"seenProcessIDs", seenProcessIDs,
-		"uniqueProcesses", uniqueProcesses,
-		"out", out,
-	)
 
 	return out, nil
 }
@@ -752,11 +708,7 @@ ORDER BY pc.product_id, cp.display_order ASC;
 
 	rows, err := r.db.QueryContext(ctx, q, pq.Array(productIDs))
 	if err != nil {
-		logger.Debug(
-			"get raw processes by product ids: query failed",
-			"productIDs", productIDs,
-			"error", err,
-		)
+		logger.Error(fmt.Sprintf("[ERROR] %v", err))
 		return nil, err
 	}
 	defer rows.Close()
@@ -779,11 +731,7 @@ ORDER BY pc.product_id, cp.display_order ASC;
 			&dto.LeaderID,
 			&dto.LeaderName,
 		); err != nil {
-			logger.Debug(
-				"get raw processes by product ids: scan failed",
-				"productIDs", productIDs,
-				"error", err,
-			)
+			logger.Error(fmt.Sprintf("[ERROR] %v", err))
 			return nil, err
 		}
 
@@ -791,19 +739,9 @@ ORDER BY pc.product_id, cp.display_order ASC;
 	}
 
 	if err := rows.Err(); err != nil {
-		logger.Debug(
-			"get raw processes by product ids: rows failed",
-			"productIDs", productIDs,
-			"error", err,
-		)
+		logger.Error(fmt.Sprintf("[ERROR] %v", err))
 		return nil, err
 	}
-
-	logger.Debug(
-		"get raw processes by product ids: finished",
-		"productIDs", productIDs,
-		"result", result,
-	)
 
 	return result, nil
 }

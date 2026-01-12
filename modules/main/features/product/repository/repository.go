@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -132,12 +133,7 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 			productTreeCfg,
 			entity.ID,
 		); err != nil {
-			logger.Debug(
-				"product.create: upsert ancestor collections failed",
-				"product_id", entity.ID,
-				"is_template", entity.IsTemplate,
-				"error", err,
-			)
+			logger.Error(fmt.Sprintf("[ERROR] %v", err))
 			return nil, err
 		}
 	}

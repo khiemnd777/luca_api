@@ -53,8 +53,6 @@ func ResponseError(c *fiber.Ctx, statusCode int, err error, extraMessage ...stri
 		location,
 	))
 
-	// logger.Debug(string(debug.Stack()))
-
 	errResp := ErrorResponse{
 		Code:    statusCode,
 		Message: message,

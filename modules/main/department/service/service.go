@@ -8,7 +8,6 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/department/model"
 	"github.com/khiemnd777/andy_api/modules/main/department/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
-	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/module"
 )
@@ -71,13 +70,11 @@ func (s *departmentService) Create(ctx context.Context, input model.DepartmentDT
 }
 
 func (s *departmentService) Update(ctx context.Context, input model.DepartmentDTO, userID int) (*model.DepartmentDTO, error) {
-	logger.Debug("HERE 1")
 	res, err := s.repo.Update(ctx, input)
 	if err == nil {
 		invalidateDept(res.ID, *res.Slug)
 		cache.InvalidateKeys(keyMyFirstDept(userID))
 	}
-	logger.Debug("HERE 2")
 	return res, err
 }
 
