@@ -42,6 +42,7 @@ type OrderRepository interface {
 	) (*model.OrderDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
+	NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
 }
@@ -691,6 +692,40 @@ func (r *orderRepository) InProgressList(ctx context.Context, query table.TableQ
 	)
 	if err != nil {
 		var zero table.TableListResult[model.InProcessOrderDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *orderRepository) NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Order.Query().
+			Where(
+				order.DeletedAtIsNil(),
+				order.StatusLatestEQ("received"),
+			),
+		query,
+		order.Table,
+		order.FieldID,
+		order.FieldCreatedAt,
+		func(src []*generated.Order) []*model.NewestOrderDTO {
+			out := make([]*model.NewestOrderDTO, 0, len(src))
+			for _, item := range src {
+				out = append(out, &model.NewestOrderDTO{
+					ID:             item.ID,
+					Code:           item.Code,
+					CodeLatest:     item.CodeLatest,
+					CreatedAt:      item.CreatedAt,
+					StatusLatest:   item.StatusLatest,
+					PriorityLatest: item.PriorityLatest,
+				})
+			}
+			return out
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.NewestOrderDTO]
 		return zero, err
 	}
 	return list, nil

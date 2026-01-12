@@ -29,6 +29,7 @@ type OrderService interface {
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
+	NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
 	SyncPrice(ctx context.Context, orderID int64) (float64, error)
@@ -63,6 +64,7 @@ func kOrderAll() []string {
 		"order:assigned:*",
 		"order:item:material:loaner:*",
 		"order:list:inprogress:*",
+		"order:list:newest:*",
 	}
 }
 
@@ -84,6 +86,10 @@ func kOrderList(q table.TableQuery) string {
 
 func kOrderInProgressList(q table.TableQuery) string {
 	return fmt.Sprintf("order:list:inprogress:l%d:p%d", q.Limit, q.Page)
+}
+
+func kOrderNewestList(q table.TableQuery) string {
+	return fmt.Sprintf("order:list:newest:l%d:p%d", q.Limit, q.Page)
 }
 
 func kOrderSearch(q dbutils.SearchQuery) string {
@@ -194,6 +200,28 @@ func (s *orderService) GetAllOrderMaterials(ctx context.Context, orderID int64) 
 
 func (s *orderService) SyncPrice(ctx context.Context, orderID int64) (float64, error) {
 	return s.repo.SyncPrice(ctx, orderID)
+}
+
+func (s *orderService) NewestList(ctx context.Context, q table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error) {
+	type boxed = table.TableListResult[model.NewestOrderDTO]
+
+	query := q
+	query.OrderBy = utils.Ptr("created_at")
+	query.Direction = "desc"
+	key := kOrderNewestList(query)
+
+	ptr, err := cache.Get(key, cache.TTLShort, func() (*boxed, error) {
+		list, err := s.repo.NewestList(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		return &list, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
 }
 
 func (s *orderService) InProgressList(ctx context.Context, q table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error) {
