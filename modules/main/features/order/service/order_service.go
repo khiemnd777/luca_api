@@ -214,7 +214,7 @@ func (s *orderService) NewestList(ctx context.Context, q table.TableQuery) (tabl
 	query.Direction = "desc"
 	key := kOrderNewestList(query)
 
-	ptr, err := cache.Get(key, cache.TTLShort, func() (*boxed, error) {
+	ptr, err := cache.Get(key, cache.TTLLong, func() (*boxed, error) {
 		list, err := s.repo.NewestList(ctx, query)
 		if err != nil {
 			return nil, err
@@ -236,7 +236,7 @@ func (s *orderService) InProgressList(ctx context.Context, q table.TableQuery) (
 	query.Direction = "desc"
 	key := kOrderInProgressList(query)
 
-	ptr, err := cache.Get(key, cache.TTLShort, func() (*boxed, error) {
+	ptr, err := cache.Get(key, cache.TTLLong, func() (*boxed, error) {
 		list, err := s.repo.InProgressList(ctx, query)
 		if err != nil {
 			return nil, err
