@@ -7,6 +7,7 @@ type InProcessOrderDTO struct {
 	Code           *string    `json:"code,omitempty"`
 	CodeLatest     *string    `json:"code_latest,omitempty"`
 	DeliveryDate   *time.Time `json:"delivery_date,omitempty"`
+	Now            *time.Time `json:"now,omitempty"`
 	TotalPrice     *float64   `json:"total_price,omitempty"`
 	StatusLatest   *string    `json:"status_latest,omitempty"`
 	PriorityLatest *string    `json:"priority_latest,omitempty"`

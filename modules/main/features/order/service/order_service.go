@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
@@ -243,7 +244,20 @@ func (s *orderService) InProgressList(ctx context.Context, q table.TableQuery) (
 		var zero boxed
 		return zero, err
 	}
-	return *ptr, nil
+	now := time.Now()
+	items := make([]*model.InProcessOrderDTO, 0, len(ptr.Items))
+	for _, item := range ptr.Items {
+		if item == nil {
+			items = append(items, nil)
+			continue
+		}
+		itemCopy := *item
+		itemCopy.Now = &now
+		items = append(items, &itemCopy)
+	}
+	res := *ptr
+	res.Items = items
+	return res, nil
 }
 
 func (s *orderService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
