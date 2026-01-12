@@ -28,6 +28,7 @@ type OrderService interface {
 	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
+	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
 	SyncPrice(ctx context.Context, orderID int64) (float64, error)
@@ -61,6 +62,7 @@ func kOrderAll() []string {
 		kOrderSearchAll(),
 		"order:assigned:*",
 		"order:item:material:loaner:*",
+		"order:list:inprogress:*",
 	}
 }
 
@@ -78,6 +80,10 @@ func kOrderList(q table.TableQuery) string {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("order:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kOrderInProgressList(q table.TableQuery) string {
+	return fmt.Sprintf("order:list:inprogress:l%d:p%d", q.Limit, q.Page)
 }
 
 func kOrderSearch(q dbutils.SearchQuery) string {
@@ -188,6 +194,28 @@ func (s *orderService) GetAllOrderMaterials(ctx context.Context, orderID int64) 
 
 func (s *orderService) SyncPrice(ctx context.Context, orderID int64) (float64, error) {
 	return s.repo.SyncPrice(ctx, orderID)
+}
+
+func (s *orderService) InProgressList(ctx context.Context, q table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error) {
+	type boxed = table.TableListResult[model.InProcessOrderDTO]
+
+	query := q
+	query.OrderBy = utils.Ptr("delivery_date")
+	query.Direction = "desc"
+	key := kOrderInProgressList(query)
+
+	ptr, err := cache.Get(key, cache.TTLShort, func() (*boxed, error) {
+		list, err := s.repo.InProgressList(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		return &list, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
 }
 
 func (s *orderService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
