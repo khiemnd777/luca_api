@@ -18,6 +18,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemproduct"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -193,6 +194,26 @@ func (r *orderRepository) createNewOrder(
 	out.RemakeType = rmkType
 	out.RemakeCount = &rmkCount
 
+	processes, err := r.orderItemProcessRepo.GetProcessesByOrderItemID(ctx, tx, out.LatestOrderItem.ID)
+
+	if err != nil {
+		logger.Error(
+			"failed to get processes by order item",
+			"orderItemID", out.LatestOrderItem.ID,
+			"err", err,
+		)
+		return nil, err
+	}
+
+	if len(processes) > 0 {
+		stProc := processes[0]
+		out.ProcessIDLatest = utils.Ptr(int(stProc.ID))
+		out.ProcessNameLatest = stProc.ProcessName
+		out.SectionNameLatest = stProc.SectionName
+		out.LeaderIDLatest = stProc.LeaderID
+		out.LeaderNameLatest = stProc.LeaderName
+	}
+
 	err = r.orderCodeRepo.ConfirmReservation(ctx, tx, *dto.Code)
 	if err != nil {
 		return nil, err
@@ -322,6 +343,7 @@ func (r *orderRepository) Create(ctx context.Context, input *model.OrderUpsertDT
 	}
 	defer func() {
 		if err != nil {
+			logger.Error(fmt.Sprintf("[ERROR] %v", err))
 			_ = tx.Rollback()
 		} else {
 			_ = tx.Commit()

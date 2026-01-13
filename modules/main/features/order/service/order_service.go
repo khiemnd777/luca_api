@@ -12,6 +12,7 @@ import (
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/modules/notification"
 	"github.com/khiemnd777/andy_api/shared/modules/realtime"
 	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
 	"github.com/khiemnd777/andy_api/shared/pubsub"
@@ -21,7 +22,7 @@ import (
 )
 
 type OrderService interface {
-	Create(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	Create(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
@@ -108,7 +109,7 @@ func kOrderSearch(q dbutils.SearchQuery) string {
 	return fmt.Sprintf("order:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func (s *orderService) Create(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
+func (s *orderService) Create(ctx context.Context, deptID int, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
 	dto, err := s.repo.Create(ctx, input)
 	if err != nil {
 		return nil, err
@@ -121,6 +122,16 @@ func (s *orderService) Create(ctx context.Context, deptID int, input *model.Orde
 
 	s.upsertSearch(ctx, deptID, dto)
 
+	if dto.LeaderIDLatest != nil {
+		notification.Notify(*dto.LeaderIDLatest, userID, "order:checkin", map[string]any{
+			"leader_id":       dto.LeaderIDLatest,
+			"leader_name":     dto.LeaderNameLatest,
+			"order_item_id":   dto.LatestOrderItem.ID,
+			"order_item_code": dto.LatestOrderItem.Code,
+			"section_name":    dto.SectionNameLatest,
+			"process_name":    dto.ProcessNameLatest,
+		})
+	}
 	realtime.BroadcastAll("order:newest", nil)
 
 	return dto, nil

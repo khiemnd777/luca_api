@@ -221,7 +221,9 @@ func (h *OrderHandler) Create(c *fiber.Ctx) error {
 
 	deptID, _ := utils.GetDeptIDInt(c)
 
-	dto, err := h.svc.Create(c.UserContext(), deptID, payload)
+	userID, _ := utils.GetUserIDInt(c)
+
+	dto, err := h.svc.Create(c.UserContext(), deptID, userID, payload)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

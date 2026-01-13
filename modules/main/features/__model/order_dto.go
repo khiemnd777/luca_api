@@ -31,6 +31,10 @@ type OrderDTO struct {
 	PriorityLatest        *string             `json:"priority_latest,omitempty"`
 	ProcessIDLatest       *int                `json:"process_id_latest,omitempty"`
 	ProcessNameLatest     *string             `json:"process_name_latest,omitempty"`
+	SectionNameLatest     *string             `json:"section_name_latest,omitempty"`
+	LeaderIDLatest        *int                `json:"leader_id_latest,omitempty"`
+	LeaderNameLatest      *string             `json:"leader_name_latest,omitempty"`
+
 	// Product props
 	ProductID   int      `json:"product_id,omitempty"`
 	ProductName *string  `json:"product_name,omitempty"`
