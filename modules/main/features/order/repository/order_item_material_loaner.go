@@ -109,7 +109,10 @@ func (r *orderItemMaterialRepository) PrepareLoanerMaterials(dto *model.OrderIte
 		out = append(out, &model.OrderItemMaterialDTO{
 			ID:                  material.ID,
 			MaterialID:          material.MaterialID,
+			MaterialCode:        material.MaterialCode,
+			MaterialName:        material.MaterialName,
 			OrderItemID:         material.OrderItemID,
+			OrderItemCode:       material.OrderItemCode,
 			OriginalOrderItemID: material.OriginalOrderItemID,
 			OrderID:             material.OrderID,
 			Quantity:            qty,
@@ -119,6 +122,12 @@ func (r *orderItemMaterialRepository) PrepareLoanerMaterials(dto *model.OrderIte
 			Note:                material.Note,
 			ReturnedAt:          material.ReturnedAt,
 			OnLoanAt:            material.OnLoanAt,
+			PatientID:           material.PatientID,
+			PatientName:         material.PatientName,
+			ClinicID:            material.ClinicID,
+			ClinicName:          material.ClinicName,
+			DentistID:           material.DentistID,
+			DentistName:         material.DentistName,
 		})
 	}
 
