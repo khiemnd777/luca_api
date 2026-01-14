@@ -22,7 +22,8 @@ func (r *orderItemMaterialRepository) GetLoanerMaterials(
 		Query().
 		Where(
 			orderitemmaterial.TypeEQ("loaner"),
-			orderitemmaterial.StatusEQ("on_loan"),
+			orderitemmaterial.StatusIn("on_loan", "partial_returned"),
+			orderitemmaterial.IsCloneableIsNil(),
 		)
 
 	list, err := table.TableListV2(
@@ -45,6 +46,14 @@ func (r *orderItemMaterialRepository) GetLoanerMaterials(
 					orderitemmaterial.FieldStatus,
 					orderitemmaterial.FieldRetailPrice,
 					orderitemmaterial.FieldNote,
+					orderitemmaterial.FieldClinicID,
+					orderitemmaterial.FieldClinicName,
+					orderitemmaterial.FieldDentistID,
+					orderitemmaterial.FieldDentistName,
+					orderitemmaterial.FieldPatientID,
+					orderitemmaterial.FieldPatientName,
+					orderitemmaterial.FieldOnLoanAt,
+					orderitemmaterial.FieldReturnedAt,
 				).
 				WithOrderItem(func(oq *generated.OrderItemQuery) {
 					oq.Select(orderitem.FieldCode)
@@ -175,6 +184,14 @@ func (r *orderItemMaterialRepository) replaceLoanerCurrent(
 			SetType("loaner").
 			SetNillableStatus(m.Status).
 			SetNillableIsCloneable(m.IsCloneable).
+			SetNillableClinicID(m.ClinicID).
+			SetNillableClinicName(m.ClinicName).
+			SetNillableDentistID(m.DentistID).
+			SetNillableDentistName(m.DentistName).
+			SetNillablePatientID(m.PatientID).
+			SetNillablePatientName(m.PatientName).
+			SetNillableOnLoanAt(m.OnLoanAt).
+			SetNillableReturnedAt(m.ReturnedAt).
 			SetNillableNote(m.Note)
 
 		// Optional:

@@ -120,8 +120,24 @@ func (r *orderRepository) createNewOrder(
 
 	dto := &input.DTO
 
+	logger.Debug(
+		"create order: dto fields",
+		"clinic_id", utils.DerefInt(dto.ClinicID),
+		"clinic_name", utils.DerefString(dto.ClinicName),
+		"dentist_id", utils.DerefInt(dto.DentistID),
+		"dentist_name", utils.DerefString(dto.DentistName),
+		"patient_id", utils.DerefInt(dto.PatientID),
+		"patient_name", utils.DerefString(dto.PatientName),
+	)
+
 	q := tx.Order.Create().
-		SetNillableCode(dto.Code)
+		SetNillableCode(dto.Code).
+		SetNillableClinicID(dto.ClinicID).
+		SetNillableClinicName(dto.ClinicName).
+		SetNillableDentistID(dto.DentistID).
+		SetNillableDentistName(dto.DentistName).
+		SetNillablePatientID(dto.PatientID).
+		SetNillablePatientName(dto.PatientName)
 
 	// custom fields
 	if input.Collections != nil && len(*input.Collections) > 0 {
@@ -137,16 +153,35 @@ func (r *orderRepository) createNewOrder(
 	if err != nil {
 		return nil, err
 	}
+	logger.Debug(
+		"create order: saved fields",
+		"clinic_id", utils.DerefInt(orderEnt.ClinicID),
+		"clinic_name", utils.DerefString(orderEnt.ClinicName),
+		"dentist_id", utils.DerefInt(orderEnt.DentistID),
+		"dentist_name", utils.DerefString(orderEnt.DentistName),
+		"patient_id", utils.DerefInt(orderEnt.PatientID),
+		"patient_name", utils.DerefString(orderEnt.PatientName),
+	)
 
 	// map back
 	out := mapper.MapAs[*generated.Order, *model.OrderDTO](orderEnt)
+
+	logger.Debug(
+		"after saving dto: saved fields",
+		"clinic_id", utils.DerefInt(out.ClinicID),
+		"clinic_name", utils.DerefString(out.ClinicName),
+		"dentist_id", utils.DerefInt(out.DentistID),
+		"dentist_name", utils.DerefString(out.DentistName),
+		"patient_id", utils.DerefInt(out.PatientID),
+		"patient_name", utils.DerefString(out.PatientName),
+	)
 
 	// create first-latest order item
 	loi := input.DTO.LatestOrderItemUpsert
 	loi.DTO.OrderID = out.ID
 	loi.DTO.CodeOriginal = out.Code
 
-	latest, err := r.orderItemRepo.Create(ctx, tx, loi)
+	latest, err := r.orderItemRepo.Create(ctx, tx, out, loi)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +311,7 @@ func (r *orderRepository) upsertExistingOrder(
 	loi.DTO.OrderID = out.ID
 	loi.DTO.CodeOriginal = out.Code
 
-	latest, err := r.orderItemRepo.Create(ctx, tx, loi)
+	latest, err := r.orderItemRepo.Create(ctx, tx, out, loi)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +424,13 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 
 	output := &input.DTO
 
-	q := tx.Order.UpdateOneID(output.ID)
+	q := tx.Order.UpdateOneID(output.ID).
+		SetNillableClinicID(output.ClinicID).
+		SetNillableClinicName(output.ClinicName).
+		SetNillableDentistID(output.DentistID).
+		SetNillableDentistName(output.DentistName).
+		SetNillablePatientID(output.PatientID).
+		SetNillablePatientName(output.PatientName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(ctx,
@@ -412,7 +453,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	output = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
 
 	// latest order item
-	latest, err := r.orderItemRepo.Update(ctx, tx, input.DTO.LatestOrderItemUpsert)
+	latest, err := r.orderItemRepo.Update(ctx, tx, output, input.DTO.LatestOrderItemUpsert)
 	if err != nil {
 		return nil, err
 	}

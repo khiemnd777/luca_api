@@ -31,3 +31,16 @@ ON order_item_materials (order_id);
 
 CREATE INDEX IF NOT EXISTS idx_order_item_materials_order_id_order_item_id
 ON order_item_materials (order_id, order_item_id);
+
+CREATE INDEX IF NOT EXISTS idx_oim_loaner_onloan_root_id
+ON order_item_materials (id)
+WHERE type = 'loaner'
+  AND status IN ('on_loan', 'partial_returned')
+  AND is_cloneable IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_oim_order_item_id
+  ON order_item_materials (order_item_id);
+
+CREATE INDEX IF NOT EXISTS idx_oim_material_id
+  ON order_item_materials (material_id);
+

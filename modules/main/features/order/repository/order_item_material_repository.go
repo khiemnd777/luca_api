@@ -89,6 +89,14 @@ func (r *orderItemMaterialRepository) buildMaterialBulk(
 			SetMaterialID(m.MaterialID).
 			SetQuantity(qty).
 			SetType(opts.materialType).
+			SetNillableClinicID(m.ClinicID).
+			SetNillableClinicName(m.ClinicName).
+			SetNillableDentistID(m.DentistID).
+			SetNillableDentistName(m.DentistName).
+			SetNillablePatientID(m.PatientID).
+			SetNillablePatientName(m.PatientName).
+			SetNillableOnLoanAt(m.OnLoanAt).
+			SetNillableReturnedAt(m.ReturnedAt).
 			SetNillableNote(m.Note)
 
 		if opts.withRetailPrice {
@@ -162,7 +170,15 @@ func (r *orderItemMaterialRepository) syncFromSource(
 				// UPDATE business fields only
 				upd := tx.OrderItemMaterial.
 					UpdateOne(row).
-					SetQuantity(qty)
+					SetQuantity(qty).
+					SetNillableClinicID(m.ClinicID).
+					SetNillableClinicName(m.ClinicName).
+					SetNillableDentistID(m.DentistID).
+					SetNillableDentistName(m.DentistName).
+					SetNillablePatientID(m.PatientID).
+					SetNillablePatientName(m.PatientName).
+					SetNillableOnLoanAt(m.OnLoanAt).
+					SetNillableReturnedAt(m.ReturnedAt)
 
 				if opts.withRetailPrice {
 					upd.SetNillableRetailPrice(m.RetailPrice)
@@ -184,6 +200,14 @@ func (r *orderItemMaterialRepository) syncFromSource(
 					SetQuantity(qty).
 					SetType(opts.materialType).
 					SetIsCloneable(true).
+					SetNillableClinicID(m.ClinicID).
+					SetNillableClinicName(m.ClinicName).
+					SetNillableDentistID(m.DentistID).
+					SetNillableDentistName(m.DentistName).
+					SetNillablePatientID(m.PatientID).
+					SetNillablePatientName(m.PatientName).
+					SetNillableOnLoanAt(m.OnLoanAt).
+					SetNillableReturnedAt(m.ReturnedAt).
 					SetNillableNote(m.Note)
 
 				if opts.withRetailPrice {

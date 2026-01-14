@@ -118,9 +118,23 @@ func Ptr[T any](v T) *T {
 	return &v
 }
 
-func Deref(s *string) string {
+func DerefString(s *string) string {
 	if s != nil {
 		return *s
 	}
 	return ""
+}
+
+func DerefInt(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func DerefInt64(v *int64) int64 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }

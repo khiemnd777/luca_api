@@ -31,7 +31,7 @@ func (OrderItemMaterial) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
-		// type: returned, on_loan
+		// type: on_loan, partial_returned, returned
 		field.String("status").
 			MaxLen(16).
 			Optional().
@@ -43,6 +43,34 @@ func (OrderItemMaterial) Fields() []ent.Field {
 			Nillable(),
 
 		field.Bool("is_cloneable").
+			Optional().
+			Nillable(),
+
+		field.Int("clinic_id").
+			Optional().
+			Nillable(),
+		field.String("clinic_name").
+			Optional().
+			Nillable(),
+
+		field.Int("dentist_id").
+			Optional().
+			Nillable(),
+		field.String("dentist_name").
+			Optional().
+			Nillable(),
+
+		field.Int("patient_id").
+			Optional().
+			Nillable(),
+		field.String("patient_name").
+			Optional().
+			Nillable(),
+
+		field.Time("on_loan_at").
+			Optional().
+			Nillable(),
+		field.Time("returned_at").
 			Optional().
 			Nillable(),
 

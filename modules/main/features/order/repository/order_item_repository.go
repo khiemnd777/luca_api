@@ -31,8 +31,8 @@ type OrderItemRepository interface {
 	GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
 	GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error)
 	// -- general functions
-	Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
-	Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
+	Create(ctx context.Context, tx *generated.Tx, order *model.OrderDTO, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
+	Update(ctx context.Context, tx *generated.Tx, order *model.OrderDTO, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
 	GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderItemDTO, error)
 	PrepareLatestForRemakeByOrderID(
@@ -362,7 +362,7 @@ func (r *orderItemRepository) applyTotalPrice(dto *model.OrderItemDTO, totalPric
 }
 
 // -- general functions
-func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
+func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, order *model.OrderDTO, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	in := &input.DTO
 
 	products := r.orderItemProductRepo.PrepareProducts(in)
@@ -457,6 +457,27 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 	// Loaner Materials
 	loanerMaterials := r.orderItemMaterialRepo.PrepareLoanerMaterials(in)
 	loanerMaterials = r.orderItemMaterialRepo.PrepareLoanerForCreate(loanerMaterials)
+
+	// Loaner snapshot fields
+	now := time.Now()
+
+	for _, m := range loanerMaterials {
+		if m == nil {
+			continue
+		}
+
+		m.ClinicID = order.ClinicID
+		m.ClinicName = order.ClinicName
+		m.DentistID = order.DentistID
+		m.DentistName = order.DentistName
+		m.PatientID = order.PatientID
+		m.PatientName = order.PatientName
+
+		if m.Status != nil && *m.Status == "on_loan" && m.OnLoanAt == nil {
+			m.OnLoanAt = &now
+		}
+	}
+
 	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
 		return nil, err
@@ -483,7 +504,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, inpu
 	return out, nil
 }
 
-func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
+func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, order *model.OrderDTO, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	dto := &input.DTO
 	products := r.orderItemProductRepo.PrepareProducts(dto)
 	totalPriceProduct := r.orderItemProductRepo.CalculateTotalPrice(products)
@@ -536,6 +557,25 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, inpu
 
 	// Loaner Materials
 	loanerMaterials := r.orderItemMaterialRepo.PrepareLoanerMaterials(dto)
+	// Loaner snapshot fields
+	now := time.Now()
+
+	for _, m := range loanerMaterials {
+		if m == nil {
+			continue
+		}
+
+		m.ClinicID = order.ClinicID
+		m.ClinicName = order.ClinicName
+		m.DentistID = order.DentistID
+		m.DentistName = order.DentistName
+		m.PatientID = order.PatientID
+		m.PatientName = order.PatientName
+
+		if m.Status != nil && *m.Status == "returned" && m.ReturnedAt == nil {
+			m.ReturnedAt = &now
+		}
+	}
 	createdLoanerMaterials, err := r.orderItemMaterialRepo.SyncLoaner(ctx, tx, entity.OrderID, entity.ID, loanerMaterials)
 	if err != nil {
 		return nil, err
