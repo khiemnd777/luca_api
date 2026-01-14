@@ -473,7 +473,9 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 		m.PatientID = order.PatientID
 		m.PatientName = order.PatientName
 
-		if m.Status != nil && *m.Status == "on_loan" && m.OnLoanAt == nil {
+		if m.Status != nil &&
+			(*m.Status == "on_loan" || *m.Status == "partial_returned") &&
+			m.OnLoanAt == nil {
 			m.OnLoanAt = &now
 		}
 	}

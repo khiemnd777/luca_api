@@ -117,6 +117,8 @@ func (r *orderItemMaterialRepository) PrepareLoanerMaterials(dto *model.OrderIte
 			Status:              material.Status,
 			IsCloneable:         material.IsCloneable,
 			Note:                material.Note,
+			ReturnedAt:          material.ReturnedAt,
+			OnLoanAt:            material.OnLoanAt,
 		})
 	}
 
