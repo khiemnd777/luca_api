@@ -60,6 +60,9 @@ func (OrderItemProcess) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.Int("section_id").
+			Optional().
+			Nillable(),
 		field.String("section_name").
 			Optional().
 			Nillable(),

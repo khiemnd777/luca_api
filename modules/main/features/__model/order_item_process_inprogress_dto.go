@@ -8,6 +8,7 @@ type OrderItemProcessInProgressDTO struct {
 	PrevProcessID   *int64     `json:"prev_process_id,omitempty"`
 	NextProcessID   *int64     `json:"next_process_id,omitempty"`
 	NextProcessName *string    `json:"next_process_name,omitempty"`
+	NextSectionID   *int       `json:"next_section_id,omitempty"`
 	NextSectionName *string    `json:"next_section_name,omitempty"`
 	NextLeaderID    *int       `json:"next_leader_id,omitempty"`
 	NextLeaderName  *string    `json:"next_leader_name,omitempty"`
@@ -16,6 +17,7 @@ type OrderItemProcessInProgressDTO struct {
 	OrderItemID     int64      `json:"order_item_id,omitempty"`
 	OrderID         *int64     `json:"order_id,omitempty"`
 	OrderItemCode   *string    `json:"order_item_code,omitempty"`
+	SectionID       *int       `json:"section_id,omitempty"`
 	SectionName     *string    `json:"section_name,omitempty"`
 	AssignedID      *int64     `json:"assigned_id,omitempty"`
 	AssignedName    *string    `json:"assigned_name,omitempty"`

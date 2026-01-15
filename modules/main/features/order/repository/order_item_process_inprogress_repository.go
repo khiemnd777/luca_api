@@ -291,6 +291,7 @@ func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOut(ctx context.C
 			AssignedID:    targetProcess.AssignedID,
 			AssignedName:  targetProcess.AssignedName,
 			SectionName:   targetProcess.SectionName,
+			SectionID:     targetProcess.SectionID,
 			CheckInNote:   latest.CheckInNote,
 			CheckOutNote:  latest.CheckOutNote,
 			StartedAt:     latest.StartedAt,
@@ -339,6 +340,7 @@ func (r *orderItemProcessInProgressRepository) PrepareCheckInOrOut(ctx context.C
 		AssignedID:    targetProcess.AssignedID,
 		AssignedName:  targetProcess.AssignedName,
 		SectionName:   targetProcess.SectionName,
+		SectionID:     targetProcess.SectionID,
 	}, nil
 }
 
@@ -546,6 +548,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		return nil, err
 	}
 	checkInOrOutData.SectionName = proc.SectionName
+	checkInOrOutData.SectionID = proc.SectionID
 
 	// ---	Checkin
 	startedAt := time.Now()
@@ -559,6 +562,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		SetNillableAssignedID(checkInOrOutData.AssignedID).
 		SetNillableAssignedName(checkInOrOutData.AssignedName).
 		SetNillableSectionName(checkInOrOutData.SectionName).
+		SetNillableSectionID(checkInOrOutData.SectionID).
 		SetNillableCheckInNote(checkInOrOutData.CheckInNote).
 		SetStartedAt(startedAt).
 		Save(ctx)

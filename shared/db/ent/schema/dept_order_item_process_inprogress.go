@@ -29,6 +29,9 @@ func (OrderItemProcessInProgress) Fields() []ent.Field {
 		field.String("next_process_name").
 			Optional().
 			Nillable(),
+		field.Int("next_section_id").
+			Optional().
+			Nillable(),
 		field.String("next_section_name").
 			Optional().
 			Nillable(),
@@ -56,12 +59,18 @@ func (OrderItemProcessInProgress) Fields() []ent.Field {
 
 		// assignee
 		field.Int64("assigned_id").
-			Optional().Nillable(),
+			Optional().
+			Nillable(),
 		field.String("assigned_name").
-			Optional().Nillable(),
+			Optional().
+			Nillable(),
 
+		field.Int("section_id").
+			Optional().
+			Nillable(),
 		field.String("section_name").
-			Optional().Nillable(),
+			Optional().
+			Nillable(),
 
 		// timing
 		field.Time("created_at").

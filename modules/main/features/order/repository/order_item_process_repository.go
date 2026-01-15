@@ -211,6 +211,7 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 				OrderCode:    orderCode,
 				Color:        p.Color,
 				SectionName:  p.SectionName,
+				SectionID:    p.SectionID,
 				LeaderID:     p.LeaderID,
 				LeaderName:   p.LeaderName,
 				ProcessName:  pname,
@@ -290,6 +291,7 @@ func (r *orderItemProcessRepository) Create(ctx context.Context, tx *generated.T
 		SetNillableAssignedID(dto.AssignedID).
 		SetNillableAssignedName(dto.AssignedName).
 		SetNillableColor(dto.Color).
+		SetNillableSectionID(dto.SectionID).
 		SetNillableSectionName(dto.SectionName).
 		SetNillableLeaderID(dto.LeaderID).
 		SetNillableLeaderName(dto.LeaderName)
@@ -401,6 +403,7 @@ func (r *orderItemProcessRepository) Update(
 		SetNillableStartedAt(dto.StartedAt).
 		SetNillableCompletedAt(dto.CompletedAt).
 		SetNillableColor(dto.Color).
+		SetNillableSectionID(dto.SectionID).
 		SetNillableSectionName(dto.SectionName).
 		SetNillableLeaderID(dto.LeaderID).
 		SetNillableLeaderName(dto.LeaderName)
@@ -643,6 +646,7 @@ ORDER BY cp.display_order ASC;
 			&dto.Name,
 			&dto.Color,
 			&dto.SectionName,
+			&dto.SectionID,
 			&dto.LeaderID,
 			&dto.LeaderName,
 		); err != nil {
@@ -673,7 +677,8 @@ func (r *orderItemProcessRepository) getRawProcessesByProductIDs(
 ),
 ranked_sections AS (
     SELECT
-        sp.process_id,
+				sp.process_id,
+				s.id AS section_id
         s.leader_id,
         s.leader_name,
         ROW_NUMBER() OVER (
@@ -692,6 +697,7 @@ SELECT
     p.name,
     p.color,
     p.section_name,
+		rs.section_id
     rs.leader_id,
     rs.leader_name
 FROM product_categories pc
@@ -728,6 +734,7 @@ ORDER BY pc.product_id, cp.display_order ASC;
 			&dto.Name,
 			&dto.Color,
 			&dto.SectionName,
+			&dto.SectionID,
 			&dto.LeaderID,
 			&dto.LeaderName,
 		); err != nil {
