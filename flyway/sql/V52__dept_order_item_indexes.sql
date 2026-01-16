@@ -14,6 +14,9 @@ CREATE INDEX IF NOT EXISTS ix_order_items_latest_by_order_id_not_deleted
   ON order_items(order_id, created_at)
   WHERE deleted_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id
+  ON order_items (order_id);
+
 CREATE INDEX IF NOT EXISTS ix_order_items_parent_order_id_not_deleted
   ON order_items(parent_item_id)
   WHERE deleted_at IS NULL;
@@ -43,4 +46,8 @@ CREATE INDEX IF NOT EXISTS idx_oim_order_item_id
 
 CREATE INDEX IF NOT EXISTS idx_oim_material_id
   ON order_item_materials (material_id);
+
+-- order_item_processes indexes
+CREATE INDEX IF NOT EXISTS idx_oip_section_order_item
+ON order_item_processes (section_id, order_item_id);
 

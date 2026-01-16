@@ -88,6 +88,7 @@ func (r *orderItemProcessInProgressRepository) GetInProgressesByProcessID(ctx co
 			CompletedAt:  item.CompletedAt,
 			ProcessName:  proc.ProcessName,
 			SectionName:  proc.SectionName,
+			SectionID:    proc.SectionID,
 			Color:        proc.Color,
 		})
 	}
@@ -144,6 +145,7 @@ func (r *orderItemProcessInProgressRepository) GetInProgressesByOrderItemID(ctx 
 			CompletedAt:   item.CompletedAt,
 			ProcessName:   proc.ProcessName,
 			SectionName:   proc.SectionName,
+			SectionID:     proc.SectionID,
 			Color:         proc.Color,
 		})
 	}
@@ -183,6 +185,7 @@ func (r *orderItemProcessInProgressRepository) GetInProgressByID(ctx context.Con
 		CompletedAt:  entity.CompletedAt,
 		ProcessName:  proc.ProcessName,
 		SectionName:  proc.SectionName,
+		SectionID:    proc.SectionID,
 		Color:        proc.Color,
 	}, nil
 }
@@ -701,6 +704,7 @@ func (r *orderItemProcessInProgressRepository) GetCheckoutLatest(ctx context.Con
 		CompletedAt:   entity.CompletedAt,
 		ProcessName:   proc.ProcessName,
 		SectionName:   proc.SectionName,
+		SectionID:     proc.SectionID,
 		Color:         proc.Color,
 	}, nil
 }
@@ -1201,6 +1205,7 @@ func (r *orderItemProcessInProgressRepository) GetInProgressesByAssignedID(
 			CompletedAt:   item.CompletedAt,
 			ProcessName:   proc.ProcessName,
 			SectionName:   proc.SectionName,
+			SectionID:     proc.SectionID,
 			Color:         proc.Color,
 		})
 	}

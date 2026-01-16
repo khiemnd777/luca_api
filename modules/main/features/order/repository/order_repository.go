@@ -42,6 +42,7 @@ type OrderRepository interface {
 		orderID int64,
 	) (*model.OrderDTO, error)
 	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
+	GetOrdersBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
 	NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
 	CompletedList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
@@ -153,28 +154,9 @@ func (r *orderRepository) createNewOrder(
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug(
-		"create order: saved fields",
-		"clinic_id", utils.DerefInt(orderEnt.ClinicID),
-		"clinic_name", utils.DerefString(orderEnt.ClinicName),
-		"dentist_id", utils.DerefInt(orderEnt.DentistID),
-		"dentist_name", utils.DerefString(orderEnt.DentistName),
-		"patient_id", utils.DerefInt(orderEnt.PatientID),
-		"patient_name", utils.DerefString(orderEnt.PatientName),
-	)
 
 	// map back
 	out := mapper.MapAs[*generated.Order, *model.OrderDTO](orderEnt)
-
-	logger.Debug(
-		"after saving dto: saved fields",
-		"clinic_id", utils.DerefInt(out.ClinicID),
-		"clinic_name", utils.DerefString(out.ClinicName),
-		"dentist_id", utils.DerefInt(out.DentistID),
-		"dentist_name", utils.DerefString(out.DentistName),
-		"patient_id", utils.DerefInt(out.PatientID),
-		"patient_name", utils.DerefString(out.PatientName),
-	)
 
 	// create first-latest order item
 	loi := input.DTO.LatestOrderItemUpsert
@@ -711,6 +693,37 @@ func (r *orderRepository) List(ctx context.Context, query table.TableQuery) (tab
 		ctx,
 		r.db.Order.Query().
 			Where(order.DeletedAtIsNil()),
+		query,
+		order.Table,
+		order.FieldID,
+		order.FieldID,
+		func(src []*generated.Order) []*model.OrderDTO {
+			return mapper.MapListAs[*generated.Order, *model.OrderDTO](src)
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.OrderDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *orderRepository) GetOrdersBySectionID(
+	ctx context.Context,
+	sectionID int,
+	query table.TableQuery,
+) (table.TableListResult[model.OrderDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Order.Query().
+			Where(
+				order.DeletedAtIsNil(),
+				order.HasItemsWith(
+					orderitem.HasProcessesWith(
+						orderitemprocess.SectionIDEQ(sectionID),
+					),
+				),
+			),
 		query,
 		order.Table,
 		order.FieldID,

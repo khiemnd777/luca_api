@@ -32,6 +32,7 @@ func (h *OrderHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/in-progress/list", h.InProgressList)
 	app.RouterGet(router, "/:dept_id<int>/order/newest/list", h.NewestList)
 	app.RouterGet(router, "/:dept_id<int>/order/completed/list", h.CompletedList)
+	app.RouterGet(router, "/:dept_id<int>/section/:section_id<int>/orders", h.GetOrdersBySectionID)
 	app.RouterGet(router, "/:dept_id<int>/order/search", h.Search)
 	app.RouterGet(router, "/:dept_id<int>/order/:id<int>", h.GetByID)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/remake/prepare", h.PrepareForRemakeByOrderID)
@@ -87,6 +88,19 @@ func (h *OrderHandler) CompletedList(c *fiber.Ctx) error {
 	}
 	q := table.ParseTableQuery(c, 20)
 	res, err := h.svc.CompletedList(c.UserContext(), q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderHandler) GetOrdersBySectionID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	q := table.ParseTableQuery(c, 20)
+	sectionID, _ := utils.GetParamAsInt(c, "section_id")
+	res, err := h.svc.GetOrdersBySectionID(c.UserContext(), sectionID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

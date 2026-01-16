@@ -14,6 +14,7 @@ type OrderItemProcessInProgressAndProcessDTO struct {
 	StartedAt     *time.Time `json:"started_at,omitempty"`
 	CompletedAt   *time.Time `json:"completed_at,omitempty"`
 	ProcessName   *string    `json:"process_name,omitempty"`
+	SectionID     *int       `json:"section_id,omitempty"`
 	SectionName   *string    `json:"section_name,omitempty"`
 	Color         *string    `json:"color,omitempty"`
 }
