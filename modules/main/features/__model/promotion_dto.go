@@ -35,26 +35,26 @@ type PromotionCodeDTO struct {
 }
 
 type CreatePromotionInput struct {
-	Code              string
-	DiscountType      promotioncode.DiscountType
-	DiscountValue     int
-	MaxDiscountAmount *int
-	MinOrderValue     *int
-	TotalUsageLimit   *int
-	UsagePerUser      *int
-	StartAt           *time.Time
-	EndAt             *time.Time
-	IsActive          bool
+	Code              string                     `json:"code"`
+	DiscountType      promotioncode.DiscountType `json:"discount_type"`
+	DiscountValue     int                        `json:"discount_value"`
+	MaxDiscountAmount *int                       `json:"max_discount_amount"`
+	MinOrderValue     *int                       `json:"min_order_value"`
+	TotalUsageLimit   *int                       `json:"total_usage_limit"`
+	UsagePerUser      *int                       `json:"usage_per_user"`
+	StartAt           *time.Time                 `json:"start_at"`
+	EndAt             *time.Time                 `json:"end_at"`
+	IsActive          bool                       `json:"is_active"`
 }
 
 type UpdatePromotionInput struct {
-	DiscountType      promotioncode.DiscountType
-	DiscountValue     int
-	MaxDiscountAmount *int
-	MinOrderValue     *int
-	TotalUsageLimit   *int
-	UsagePerUser      *int
-	StartAt           *time.Time
-	EndAt             *time.Time
-	IsActive          *bool
+	DiscountType      promotioncode.DiscountType `json:"discount_type"`
+	DiscountValue     int                        `json:"discount_value"`
+	MaxDiscountAmount *int                       `json:"max_discount_amount"`
+	MinOrderValue     *int                       `json:"min_order_value"`
+	TotalUsageLimit   *int                       `json:"total_usage_limit"`
+	UsagePerUser      *int                       `json:"usage_per_user"`
+	StartAt           *time.Time                 `json:"start_at"`
+	EndAt             *time.Time                 `json:"end_at"`
+	IsActive          *bool                      `json:"is_active"`
 }

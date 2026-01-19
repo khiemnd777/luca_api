@@ -46,8 +46,8 @@ func IsPromotionApplyError(err error) (string, bool) {
 type PromotionService interface {
 	ApplyPromotion(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, error)
 	ApplyPromotionAndSnapshot(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, *model.PromotionSnapshot, error)
-	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*generated.PromotionCode, error)
-	UpdatePromotion(ctx context.Context, id int, input *model.UpdatePromotionInput) (*generated.PromotionCode, error)
+	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*model.PromotionCodeDTO, error)
+	UpdatePromotion(ctx context.Context, id int, input *model.UpdatePromotionInput) (*model.PromotionCodeDTO, error)
 	DeletePromotion(ctx context.Context, id int) error
 	GetPromotionByID(ctx context.Context, id int) (*generated.PromotionCode, error)
 	ListPromotions(ctx context.Context, query table.TableQuery) (table.TableListResult[model.PromotionCodeDTO], error)
@@ -176,7 +176,7 @@ func (s *promotionService) ApplyPromotionAndSnapshot(
 		AppliedAt:         time.Now(),
 	}
 
-	if err := s.repo.CreateOrderPromotionSnapshot(ctx, order.ID, snapshot); err != nil {
+	if err := s.repo.CreatePromotionUsageFromSnapshot(ctx, result.Promotion.ID, int(order.ID), userID, snapshot); err != nil {
 		return nil, nil, err
 	}
 

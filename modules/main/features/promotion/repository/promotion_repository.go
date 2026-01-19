@@ -3,13 +3,14 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"math"
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotioncode"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotioncondition"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotionscope"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotionusage"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
@@ -22,7 +23,7 @@ type PromotionRepository interface {
 	CountTotalUsage(ctx context.Context, promoCodeID int) (int, error)
 	CreateUsage(ctx context.Context, tx *generated.Tx, usage *generated.PromotionUsage) error
 	LockPromotionForUpdate(ctx context.Context, tx *generated.Tx, promoCodeID int) (*generated.PromotionCode, error)
-	CreateOrderPromotionSnapshot(ctx context.Context, orderID int64, snapshot *model.PromotionSnapshot) error
+	CreatePromotionUsageFromSnapshot(ctx context.Context, promoCodeID int, orderID int, userID int, snapshot *model.PromotionSnapshot) error
 
 	// ===== Admin CRUD =====
 	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*generated.PromotionCode, error)
@@ -146,52 +147,34 @@ FOR UPDATE
 	return &p, nil
 }
 
-func (r *promotionRepository) CreateOrderPromotionSnapshot(
+func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 	ctx context.Context,
-	orderID int64,
+	promoCodeID int,
+	orderID int,
+	userID int,
 	snapshot *model.PromotionSnapshot,
 ) error {
-	if r.sqlDB == nil {
-		return errors.New("sql db is required")
-	}
 	if snapshot == nil {
 		return errors.New("snapshot is required")
 	}
 
-	appliedJSON, err := json.Marshal(snapshot.AppliedConditions)
-	if err != nil {
-		return err
-	}
-
 	discountAmount := int(math.Round(snapshot.DiscountAmount))
 
-	const insertSQL = `
-INSERT INTO order_promotions(
-  order_id,
-  promo_code,
-  discount_type,
-  discount_value,
-  discount_amount,
-  is_remake,
-  remake_count,
-  applied_conditions,
-  applied_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-`
-
-	_, err = r.sqlDB.ExecContext(
-		ctx,
-		insertSQL,
-		orderID,
-		snapshot.PromoCode,
-		snapshot.DiscountType,
-		snapshot.DiscountValue,
-		discountAmount,
-		snapshot.IsRemake,
-		snapshot.RemakeCount,
-		appliedJSON,
-		snapshot.AppliedAt,
-	)
+	_, err := r.db.PromotionUsage.
+		Create().
+		SetPromoCodeID(promoCodeID).
+		SetOrderID(orderID).
+		SetUserID(userID).
+		SetPromoCode(snapshot.PromoCode).
+		SetDiscountType(snapshot.DiscountType).
+		SetDiscountValue(snapshot.DiscountValue).
+		SetDiscountAmount(discountAmount).
+		SetIsRemake(snapshot.IsRemake).
+		SetRemakeCount(snapshot.RemakeCount).
+		SetAppliedConditions(snapshot.AppliedConditions).
+		SetAppliedAt(snapshot.AppliedAt).
+		SetUsedAt(snapshot.AppliedAt).
+		Save(ctx)
 	return err
 }
 
@@ -276,9 +259,48 @@ func (r *promotionRepository) UpdatePromotion(
 }
 
 func (r *promotionRepository) DeletePromotion(ctx context.Context, id int) error {
-	return r.db.PromotionCode.
+	hasUsage, err := r.db.PromotionUsage.
+		Query().
+		Where(promotionusage.PromoCodeID(id)).
+		Exist(ctx)
+	if err != nil {
+		return err
+	}
+	if hasUsage {
+		return nil
+	}
+
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, err = tx.PromotionScope.
+		Delete().
+		Where(promotionscope.PromoCodeID(id)).
+		Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err = tx.PromotionCondition.
+		Delete().
+		Where(promotioncondition.PromoCodeID(id)).
+		Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err = tx.PromotionCode.
 		DeleteOneID(id).
-		Exec(ctx)
+		Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return nil
 }
 
 func (r *promotionRepository) GetPromotionByID(
