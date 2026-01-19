@@ -11,6 +11,7 @@ import (
 	_ "github.com/khiemnd777/andy_api/modules/main/features/patient"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/process"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/product"
+	_ "github.com/khiemnd777/andy_api/modules/main/features/promotion"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/section"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/staff"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/supplier"
