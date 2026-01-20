@@ -423,10 +423,19 @@ func (r *promotionRepository) ListPromotions(
 		promotioncode.FieldID,
 		promotioncode.FieldCreatedAt,
 		func(q *generated.PromotionCodeQuery) *generated.PromotionCodeQuery {
-			return q
+			return q.
+				WithScopes().
+				WithConditions()
 		},
 		func(src []*generated.PromotionCode) []*model.PromotionCodeDTO {
-			return mapper.MapListAs[*generated.PromotionCode, *model.PromotionCodeDTO](src)
+			out := make([]*model.PromotionCodeDTO, 0, len(src))
+			for _, promo := range src {
+				if promo == nil {
+					continue
+				}
+				out = append(out, mapPromotionCodeDTO(promo))
+			}
+			return out
 		},
 	)
 	if err != nil {
