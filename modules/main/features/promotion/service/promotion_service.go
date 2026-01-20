@@ -11,6 +11,7 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	promotionmodel "github.com/khiemnd777/andy_api/modules/main/features/promotion/model"
 	"github.com/khiemnd777/andy_api/modules/main/features/promotion/repository"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
@@ -49,7 +50,7 @@ type PromotionService interface {
 	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*model.PromotionCodeDTO, error)
 	UpdatePromotion(ctx context.Context, id int, input *model.UpdatePromotionInput) (*model.PromotionCodeDTO, error)
 	DeletePromotion(ctx context.Context, id int) error
-	GetPromotionByID(ctx context.Context, id int) (*generated.PromotionCode, error)
+	GetPromotionByID(ctx context.Context, id int) (*model.PromotionCodeDTO, error)
 	ListPromotions(ctx context.Context, query table.TableQuery) (table.TableListResult[model.PromotionCodeDTO], error)
 }
 
@@ -287,7 +288,7 @@ func (s *promotionService) matchScopes(
 
 	hasCategoryScope := false
 	for _, scope := range scopes {
-		if scope.ScopeType == "CATEGORY" {
+		if scope.ScopeType == promotionmodel.PromotionScopeCategory {
 			hasCategoryScope = true
 			break
 		}
@@ -304,9 +305,9 @@ func (s *promotionService) matchScopes(
 
 	for _, scope := range scopes {
 		switch scope.ScopeType {
-		case "ALL":
+		case promotionmodel.PromotionScopeAll:
 			return true, nil
-		case "USER":
+		case promotionmodel.PromotionScopeUser:
 			ids, err := parseIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
@@ -314,7 +315,7 @@ func (s *promotionService) matchScopes(
 			if containsInt(ids, userID) {
 				return true, nil
 			}
-		case "SELLER":
+		case promotionmodel.PromotionScopeSeller:
 			ids, err := parseIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
@@ -322,7 +323,7 @@ func (s *promotionService) matchScopes(
 			if orderCtx.SellerID != 0 && containsInt(ids, orderCtx.SellerID) {
 				return true, nil
 			}
-		case "PRODUCT":
+		case promotionmodel.PromotionScopeProduct:
 			ids, err := parseIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
@@ -330,7 +331,7 @@ func (s *promotionService) matchScopes(
 			if anyInSet(orderCtx.ProductIDs, ids) {
 				return true, nil
 			}
-		case "CATEGORY":
+		case promotionmodel.PromotionScopeCategory:
 			ids, err := parseIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
@@ -379,12 +380,12 @@ func (s *promotionService) matchConditions(
 	var applied []string
 	for _, cond := range promo.Edges.Conditions {
 		switch cond.ConditionType {
-		case "ORDER_IS_REMAKE":
+		case promotionmodel.PromotionConditionOrderIsRemake:
 			if !orderCtx.IsRemake {
 				return nil, PromotionApplyError{Reason: "condition_order_is_remake_not_met"}
 			}
 			applied = append(applied, string(cond.ConditionType))
-		case "REMAKE_COUNT_LTE":
+		case promotionmodel.PromotionConditionRemakeCountLTE:
 			value, err := parseIntValue(cond.ConditionValue)
 			if err != nil {
 				return nil, err
@@ -393,7 +394,7 @@ func (s *promotionService) matchConditions(
 				return nil, PromotionApplyError{Reason: "condition_remake_count_lte_not_met"}
 			}
 			applied = append(applied, string(cond.ConditionType))
-		case "REMAKE_WITHIN_DAYS":
+		case promotionmodel.PromotionConditionRemakeWithinDays:
 			value, err := parseIntValue(cond.ConditionValue)
 			if err != nil {
 				return nil, err
@@ -406,7 +407,7 @@ func (s *promotionService) matchConditions(
 				return nil, PromotionApplyError{Reason: "condition_remake_within_days_not_met"}
 			}
 			applied = append(applied, string(cond.ConditionType))
-		case "REMAKE_REASON":
+		case promotionmodel.PromotionConditionRemakeReason:
 			values, err := parseStringList(cond.ConditionValue)
 			if err != nil {
 				return nil, err
@@ -432,11 +433,11 @@ func (s *promotionService) calculateDiscount(
 
 	var discount float64
 	switch promo.DiscountType {
-	case "fixed":
+	case promotionmodel.PromotionDiscountFixed:
 		discount = float64(promo.DiscountValue)
-	case "percent":
+	case promotionmodel.PromotionDiscountPercent:
 		discount = orderCtx.TotalPrice * float64(promo.DiscountValue) / 100
-	case "free_shipping":
+	case promotionmodel.PromotionDiscountFreeShipping:
 		discount = orderCtx.ShippingAmount
 	default:
 		return 0, fmt.Errorf("unsupported discount type: %s", promo.DiscountType)

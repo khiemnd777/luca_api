@@ -7,11 +7,13 @@ import (
 	"math"
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	promotionmodel "github.com/khiemnd777/andy_api/modules/main/features/promotion/model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotioncode"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotioncondition"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotionscope"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/promotionusage"
+	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
@@ -26,10 +28,10 @@ type PromotionRepository interface {
 	CreatePromotionUsageFromSnapshot(ctx context.Context, promoCodeID int, orderID int, userID int, snapshot *model.PromotionSnapshot) error
 
 	// ===== Admin CRUD =====
-	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*generated.PromotionCode, error)
-	UpdatePromotion(ctx context.Context, id int, input *model.UpdatePromotionInput) (*generated.PromotionCode, error)
+	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*model.PromotionCodeDTO, error)
+	UpdatePromotion(ctx context.Context, id int, input *model.UpdatePromotionInput) (*model.PromotionCodeDTO, error)
 	DeletePromotion(ctx context.Context, id int) error
-	GetPromotionByID(ctx context.Context, id int) (*generated.PromotionCode, error)
+	GetPromotionByID(ctx context.Context, id int) (*model.PromotionCodeDTO, error)
 	ListPromotions(ctx context.Context, query table.TableQuery) (table.TableListResult[model.PromotionCodeDTO], error)
 }
 
@@ -181,81 +183,166 @@ func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 func (r *promotionRepository) CreatePromotion(
 	ctx context.Context,
 	input *model.CreatePromotionInput,
-) (*generated.PromotionCode, error) {
+) (*model.PromotionCodeDTO, error) {
+	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.PromotionCodeDTO, error) {
+		if input == nil {
+			return nil, errors.New("input is required")
+		}
 
-	if input == nil {
-		return nil, errors.New("input is required")
-	}
+		q := tx.PromotionCode.
+			Create().
+			SetCode(input.Code).
+			SetDiscountType(input.DiscountType).
+			SetDiscountValue(input.DiscountValue).
+			SetIsActive(input.IsActive).
+			SetStartAt(input.StartAt).
+			SetEndAt(input.EndAt)
 
-	q := r.db.PromotionCode.
-		Create().
-		SetCode(input.Code).
-		SetDiscountType(input.DiscountType).
-		SetDiscountValue(input.DiscountValue).
-		SetIsActive(input.IsActive)
+		if input.MaxDiscountAmount != nil {
+			q.SetMaxDiscountAmount(*input.MaxDiscountAmount)
+		}
+		if input.MinOrderValue != nil {
+			q.SetMinOrderValue(*input.MinOrderValue)
+		}
+		if input.TotalUsageLimit != nil {
+			q.SetTotalUsageLimit(*input.TotalUsageLimit)
+		}
+		if input.UsagePerUser != nil {
+			q.SetUsagePerUser(*input.UsagePerUser)
+		}
 
-	if input.MaxDiscountAmount != nil {
-		q.SetMaxDiscountAmount(*input.MaxDiscountAmount)
-	}
-	if input.MinOrderValue != nil {
-		q.SetMinOrderValue(*input.MinOrderValue)
-	}
-	if input.TotalUsageLimit != nil {
-		q.SetTotalUsageLimit(*input.TotalUsageLimit)
-	}
-	if input.UsagePerUser != nil {
-		q.SetUsagePerUser(*input.UsagePerUser)
-	}
-	if input.StartAt != nil {
-		q.SetStartAt(*input.StartAt)
-	}
-	if input.EndAt != nil {
-		q.SetEndAt(*input.EndAt)
-	}
+		promo, err := q.Save(ctx)
+		if err != nil {
+			return nil, err
+		}
 
-	return q.Save(ctx)
+		// ===== Create Scopes =====
+		for _, s := range input.Scopes {
+			if err := promotionmodel.ValidateScopeInput(s.ScopeType); err != nil {
+				_ = tx.Rollback()
+				return nil, err
+			}
+
+			if _, err := tx.PromotionScope.
+				Create().
+				SetPromoCodeID(promo.ID).
+				SetScopeType(s.ScopeType).
+				SetScopeValue(s.ScopeValue).
+				Save(ctx); err != nil {
+				return nil, err
+			}
+		}
+
+		// ===== Create Conditions =====
+		for _, c := range input.Conditions {
+			if err := promotionmodel.ValidateConditionInput(c.ConditionType); err != nil {
+				return nil, err
+			}
+
+			if _, err := tx.PromotionCondition.
+				Create().
+				SetPromoCodeID(promo.ID).
+				SetConditionType(c.ConditionType).
+				SetConditionValue(c.ConditionValue).
+				Save(ctx); err != nil {
+
+				return nil, err
+			}
+		}
+
+		return mapPromotionCodeDTOFromInput(promo, input.Scopes, input.Conditions), nil
+
+	})
 }
 
 func (r *promotionRepository) UpdatePromotion(
 	ctx context.Context,
 	id int,
 	input *model.UpdatePromotionInput,
-) (*generated.PromotionCode, error) {
+) (*model.PromotionCodeDTO, error) {
+	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.PromotionCodeDTO, error) {
+		if input == nil {
+			return nil, errors.New("input is required")
+		}
+		if id <= 0 {
+			return nil, errors.New("invalid id")
+		}
 
-	if input == nil {
-		return nil, errors.New("input is required")
-	}
+		q := tx.PromotionCode.
+			UpdateOneID(id).
+			SetDiscountType(input.DiscountType).
+			SetDiscountValue(input.DiscountValue)
 
-	q := r.db.PromotionCode.
-		UpdateOneID(id)
+		if input.MaxDiscountAmount != nil {
+			q.SetMaxDiscountAmount(*input.MaxDiscountAmount)
+		}
+		if input.MinOrderValue != nil {
+			q.SetMinOrderValue(*input.MinOrderValue)
+		}
+		if input.TotalUsageLimit != nil {
+			q.SetTotalUsageLimit(*input.TotalUsageLimit)
+		}
+		if input.UsagePerUser != nil {
+			q.SetUsagePerUser(*input.UsagePerUser)
+		}
 
-	q.SetDiscountType(input.DiscountType)
+		q.SetStartAt(input.StartAt)
+		q.SetEndAt(input.EndAt)
+		q.SetIsActive(input.IsActive)
 
-	q.SetDiscountValue(input.DiscountValue)
+		promo, err := q.Save(ctx)
+		if err != nil {
+			return nil, err
+		}
 
-	if input.MaxDiscountAmount != nil {
-		q.SetMaxDiscountAmount(*input.MaxDiscountAmount)
-	}
-	if input.MinOrderValue != nil {
-		q.SetMinOrderValue(*input.MinOrderValue)
-	}
-	if input.TotalUsageLimit != nil {
-		q.SetTotalUsageLimit(*input.TotalUsageLimit)
-	}
-	if input.UsagePerUser != nil {
-		q.SetUsagePerUser(*input.UsagePerUser)
-	}
-	if input.StartAt != nil {
-		q.SetStartAt(*input.StartAt)
-	}
-	if input.EndAt != nil {
-		q.SetEndAt(*input.EndAt)
-	}
-	if input.IsActive != nil {
-		q.SetIsActive(*input.IsActive)
-	}
+		// ===== Replace Scopes =====
+		if _, err := tx.PromotionScope.
+			Delete().
+			Where(promotionscope.PromoCodeID(id)).
+			Exec(ctx); err != nil {
+			return nil, err
+		}
 
-	return q.Save(ctx)
+		for _, s := range input.Scopes {
+			if err := promotionmodel.ValidateScopeInput(s.ScopeType); err != nil {
+				return nil, err
+			}
+
+			if _, err := tx.PromotionScope.
+				Create().
+				SetPromoCodeID(id).
+				SetScopeType(s.ScopeType).
+				SetScopeValue(s.ScopeValue).
+				Save(ctx); err != nil {
+				return nil, err
+			}
+		}
+
+		// ===== Replace Conditions =====
+		if _, err := tx.PromotionCondition.
+			Delete().
+			Where(promotioncondition.PromoCodeID(id)).
+			Exec(ctx); err != nil {
+			return nil, err
+		}
+
+		for _, c := range input.Conditions {
+			if err := promotionmodel.ValidateConditionInput(c.ConditionType); err != nil {
+				return nil, err
+			}
+
+			if _, err := tx.PromotionCondition.
+				Create().
+				SetPromoCodeID(id).
+				SetConditionType(c.ConditionType).
+				SetConditionValue(c.ConditionValue).
+				Save(ctx); err != nil {
+				return nil, err
+			}
+		}
+
+		return mapPromotionCodeDTOFromInput(promo, input.Scopes, input.Conditions), nil
+	})
 }
 
 func (r *promotionRepository) DeletePromotion(ctx context.Context, id int) error {
@@ -306,14 +393,17 @@ func (r *promotionRepository) DeletePromotion(ctx context.Context, id int) error
 func (r *promotionRepository) GetPromotionByID(
 	ctx context.Context,
 	id int,
-) (*generated.PromotionCode, error) {
-
-	return r.db.PromotionCode.
+) (*model.PromotionCodeDTO, error) {
+	promo, err := r.db.PromotionCode.
 		Query().
 		Where(promotioncode.ID(id)).
 		WithScopes().
 		WithConditions().
 		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapPromotionCodeDTO(promo), nil
 }
 
 func (r *promotionRepository) ListPromotions(
@@ -344,4 +434,62 @@ func (r *promotionRepository) ListPromotions(
 		return zero, err
 	}
 	return list, nil
+}
+
+func mapPromotionCodeDTOFromInput(
+	promo *generated.PromotionCode,
+	scopes []model.PromotionScopeInput,
+	conditions []model.PromotionConditionInput,
+) *model.PromotionCodeDTO {
+	dto := mapper.MapAs[*generated.PromotionCode, *model.PromotionCodeDTO](promo)
+	dto.Scopes = scopes
+	dto.Conditions = conditions
+	return dto
+}
+
+func mapPromotionCodeDTO(promo *generated.PromotionCode) *model.PromotionCodeDTO {
+	dto := mapper.MapAs[*generated.PromotionCode, *model.PromotionCodeDTO](promo)
+	dto.Scopes = mapPromotionScopes(promo.Edges.Scopes)
+	dto.Conditions = mapPromotionConditions(promo.Edges.Conditions)
+	return dto
+}
+
+func mapPromotionScopes(scopes []*generated.PromotionScope) []model.PromotionScopeInput {
+	if len(scopes) == 0 {
+		if scopes == nil {
+			return nil
+		}
+		return []model.PromotionScopeInput{}
+	}
+	out := make([]model.PromotionScopeInput, 0, len(scopes))
+	for _, scope := range scopes {
+		if scope == nil {
+			continue
+		}
+		out = append(out, model.PromotionScopeInput{
+			ScopeType:  scope.ScopeType,
+			ScopeValue: scope.ScopeValue,
+		})
+	}
+	return out
+}
+
+func mapPromotionConditions(conditions []*generated.PromotionCondition) []model.PromotionConditionInput {
+	if len(conditions) == 0 {
+		if conditions == nil {
+			return nil
+		}
+		return []model.PromotionConditionInput{}
+	}
+	out := make([]model.PromotionConditionInput, 0, len(conditions))
+	for _, condition := range conditions {
+		if condition == nil {
+			continue
+		}
+		out = append(out, model.PromotionConditionInput{
+			ConditionType:  condition.ConditionType,
+			ConditionValue: condition.ConditionValue,
+		})
+	}
+	return out
 }

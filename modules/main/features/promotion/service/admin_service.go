@@ -5,8 +5,6 @@ import (
 	"errors"
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
-	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -17,11 +15,14 @@ func (s *promotionService) CreatePromotion(
 	if input == nil {
 		return nil, errors.New("input is required")
 	}
+	if err := validatePromotionInput(input); err != nil {
+		return nil, err
+	}
 	item, err := s.repo.CreatePromotion(ctx, input)
 	if err != nil {
 		return nil, err
 	}
-	return mapper.MapAs[*generated.PromotionCode, *model.PromotionCodeDTO](item), nil
+	return item, nil
 }
 
 func (s *promotionService) UpdatePromotion(
@@ -35,11 +36,21 @@ func (s *promotionService) UpdatePromotion(
 	if id <= 0 {
 		return nil, errors.New("invalid id")
 	}
+
+	tmp := &model.CreatePromotionInput{
+		Scopes:     input.Scopes,
+		Conditions: input.Conditions,
+	}
+
+	if err := validatePromotionInput(tmp); err != nil {
+		return nil, err
+	}
+
 	item, err := s.repo.UpdatePromotion(ctx, id, input)
 	if err != nil {
 		return nil, err
 	}
-	return mapper.MapAs[*generated.PromotionCode, *model.PromotionCodeDTO](item), nil
+	return item, nil
 }
 
 func (s *promotionService) DeletePromotion(ctx context.Context, id int) error {
@@ -52,7 +63,7 @@ func (s *promotionService) DeletePromotion(ctx context.Context, id int) error {
 func (s *promotionService) GetPromotionByID(
 	ctx context.Context,
 	id int,
-) (*generated.PromotionCode, error) {
+) (*model.PromotionCodeDTO, error) {
 	if id <= 0 {
 		return nil, errors.New("invalid id")
 	}
