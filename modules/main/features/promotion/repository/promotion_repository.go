@@ -189,6 +189,17 @@ func (r *promotionRepository) CreatePromotion(
 			return nil, errors.New("input is required")
 		}
 
+		exists, err := tx.PromotionCode.
+			Query().
+			Where(promotioncode.CodeEQ(input.Code)).
+			Exist(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, errors.New("promotion code already exists")
+		}
+
 		q := tx.PromotionCode.
 			Create().
 			SetCode(input.Code).
