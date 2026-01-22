@@ -6,12 +6,14 @@ import (
 
 type OrderDTO struct {
 	// General
-	ID           int64          `json:"id,omitempty"`
-	Code         *string        `json:"code,omitempty"`
-	CustomFields map[string]any `json:"custom_fields,omitempty"`
-	CreatedAt    time.Time      `json:"created_at,omitempty"`
-	UpdatedAt    time.Time      `json:"updated_at,omitempty"`
-	DeliveryDate *time.Time     `json:"delivery_date,omitempty"`
+	ID              int64          `json:"id,omitempty"`
+	Code            *string        `json:"code,omitempty"`
+	PromotionCodeID *int           `json:"promotion_code_id,omitempty"`
+	PromotionCode   *string        `json:"promotion_code,omitempty"`
+	CustomFields    map[string]any `json:"custom_fields,omitempty"`
+	CreatedAt       time.Time      `json:"created_at,omitempty"`
+	UpdatedAt       time.Time      `json:"updated_at,omitempty"`
+	DeliveryDate    *time.Time     `json:"delivery_date,omitempty"`
 	// Customer
 	// deprecated
 	CustomerID *int64 `json:"customer_id,omitempty"`

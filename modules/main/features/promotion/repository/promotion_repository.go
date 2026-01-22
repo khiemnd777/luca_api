@@ -20,12 +20,13 @@ import (
 
 type PromotionRepository interface {
 	// ===== Checkout / Business =====
+	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error)
 	GetByCode(ctx context.Context, code string) (*generated.PromotionCode, error)
 	CountUsageByUser(ctx context.Context, promoCodeID, userID int) (int, error)
 	CountTotalUsage(ctx context.Context, promoCodeID int) (int, error)
 	CreateUsage(ctx context.Context, tx *generated.Tx, usage *generated.PromotionUsage) error
 	LockPromotionForUpdate(ctx context.Context, tx *generated.Tx, promoCodeID int) (*generated.PromotionCode, error)
-	CreatePromotionUsageFromSnapshot(ctx context.Context, promoCodeID int, orderID int, userID int, snapshot *model.PromotionSnapshot) error
+	CreatePromotionUsageFromSnapshot(ctx context.Context, tx *generated.Tx, promoCodeID int, orderID int, userID int, snapshot *model.PromotionSnapshot) error
 
 	// ===== Admin CRUD =====
 	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*model.PromotionCodeDTO, error)
@@ -53,7 +54,7 @@ func (r *promotionRepository) GetByCode(ctx context.Context, code string) (*gene
 		Only(ctx)
 }
 
-func (r *promotionRepository) CountUsageByUser(ctx context.Context, promoCodeID, userID int) (int, error) {
+func (r *promotionRepository) CountUsageByUserV1(ctx context.Context, promoCodeID, userID int) (int, error) {
 	return r.db.PromotionUsage.
 		Query().
 		Where(
@@ -63,11 +64,73 @@ func (r *promotionRepository) CountUsageByUser(ctx context.Context, promoCodeID,
 		Count(ctx)
 }
 
-func (r *promotionRepository) CountTotalUsage(ctx context.Context, promoCodeID int) (int, error) {
+func (r *promotionRepository) CountUsageByUser(
+	ctx context.Context,
+	promoCodeID int,
+	userID int,
+) (int, error) {
+	const q = `
+SELECT COUNT(DISTINCT order_id)
+FROM promotion_usages
+WHERE promo_code_id = $1
+  AND user_id = $2
+`
+	var count int
+	if err := r.sqlDB.QueryRowContext(ctx, q, promoCodeID, userID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *promotionRepository) CountTotalUsageV1(ctx context.Context, promoCodeID int) (int, error) {
 	return r.db.PromotionUsage.
 		Query().
 		Where(promotionusage.PromoCodeID(promoCodeID)).
 		Count(ctx)
+}
+
+func (r *promotionRepository) CountTotalUsage(
+	ctx context.Context,
+	promoCodeID int,
+) (int, error) {
+	const q = `
+SELECT COUNT(DISTINCT order_id)
+FROM promotion_usages
+WHERE promo_code_id = $1
+`
+	var count int
+	if err := r.sqlDB.QueryRowContext(ctx, q, promoCodeID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *promotionRepository) GetPromotionCodesInUsageByOrderID(
+	ctx context.Context,
+	orderID int,
+) ([]model.PromotionCodeDTO, error) {
+	promos, err := r.db.PromotionCode.
+		Query().
+		Where(promotioncode.HasUsagesWith(promotionusage.OrderID(orderID))).
+		WithScopes().
+		WithConditions().
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]model.PromotionCodeDTO, 0, len(promos))
+	for _, promo := range promos {
+		if promo == nil {
+			continue
+		}
+		dto := mapPromotionCodeDTO(promo)
+		if dto == nil {
+			continue
+		}
+		out = append(out, *dto)
+	}
+	return out, nil
 }
 
 func (r *promotionRepository) CreateUsage(ctx context.Context, tx *generated.Tx, usage *generated.PromotionUsage) error {
@@ -151,6 +214,7 @@ FOR UPDATE
 
 func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 	ctx context.Context,
+	tx *generated.Tx,
 	promoCodeID int,
 	orderID int,
 	userID int,
@@ -162,8 +226,12 @@ func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 
 	discountAmount := int(math.Round(snapshot.DiscountAmount))
 
-	_, err := r.db.PromotionUsage.
-		Create().
+	q := r.db.PromotionUsage.Create()
+	if tx != nil {
+		q = tx.PromotionUsage.Create()
+	}
+
+	_, err := q.
 		SetPromoCodeID(promoCodeID).
 		SetOrderID(orderID).
 		SetUserID(userID).
@@ -207,20 +275,11 @@ func (r *promotionRepository) CreatePromotion(
 			SetDiscountValue(input.DiscountValue).
 			SetIsActive(input.IsActive).
 			SetStartAt(input.StartAt).
-			SetEndAt(input.EndAt)
-
-		if input.MaxDiscountAmount != nil {
-			q.SetMaxDiscountAmount(*input.MaxDiscountAmount)
-		}
-		if input.MinOrderValue != nil {
-			q.SetMinOrderValue(*input.MinOrderValue)
-		}
-		if input.TotalUsageLimit != nil {
-			q.SetTotalUsageLimit(*input.TotalUsageLimit)
-		}
-		if input.UsagePerUser != nil {
-			q.SetUsagePerUser(*input.UsagePerUser)
-		}
+			SetEndAt(input.EndAt).
+			SetNillableMaxDiscountAmount(input.MaxDiscountAmount).
+			SetNillableMinOrderValue(input.MinOrderValue).
+			SetNillableTotalUsageLimit(input.TotalUsageLimit).
+			SetNillableUsagePerUser(input.UsagePerUser)
 
 		promo, err := q.Save(ctx)
 		if err != nil {
@@ -282,24 +341,14 @@ func (r *promotionRepository) UpdatePromotion(
 		q := tx.PromotionCode.
 			UpdateOneID(id).
 			SetDiscountType(input.DiscountType).
-			SetDiscountValue(input.DiscountValue)
-
-		if input.MaxDiscountAmount != nil {
-			q.SetMaxDiscountAmount(*input.MaxDiscountAmount)
-		}
-		if input.MinOrderValue != nil {
-			q.SetMinOrderValue(*input.MinOrderValue)
-		}
-		if input.TotalUsageLimit != nil {
-			q.SetTotalUsageLimit(*input.TotalUsageLimit)
-		}
-		if input.UsagePerUser != nil {
-			q.SetUsagePerUser(*input.UsagePerUser)
-		}
-
-		q.SetStartAt(input.StartAt)
-		q.SetEndAt(input.EndAt)
-		q.SetIsActive(input.IsActive)
+			SetDiscountValue(input.DiscountValue).
+			SetNillableMaxDiscountAmount(input.MaxDiscountAmount).
+			SetNillableMinOrderValue(input.MinOrderValue).
+			SetNillableTotalUsageLimit(input.TotalUsageLimit).
+			SetNillableUsagePerUser(input.UsagePerUser).
+			SetStartAt(input.StartAt).
+			SetEndAt(input.EndAt).
+			SetIsActive(input.IsActive)
 
 		promo, err := q.Save(ctx)
 		if err != nil {

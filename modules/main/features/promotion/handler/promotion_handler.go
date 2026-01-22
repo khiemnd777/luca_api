@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
+	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/order/service"
 	promotionservice "github.com/khiemnd777/andy_api/modules/main/features/promotion/service"
 	"github.com/khiemnd777/andy_api/shared/app"
@@ -31,6 +32,7 @@ func NewPromotionHandler(
 func (h *PromotionHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterPost(router, "/:dept_id<int>/promotions/validate", h.Validate)
 	app.RouterPost(router, "/:dept_id<int>/promotions/apply", h.Apply)
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/promotions", h.GetPromotionCodesInUsageByOrderID)
 }
 
 func (h *PromotionHandler) Validate(c *fiber.Ctx) error {
@@ -39,14 +41,14 @@ func (h *PromotionHandler) Validate(c *fiber.Ctx) error {
 	}
 
 	payload, err := app.ParseBody[struct {
-		PromoCode string `json:"promo_code"`
-		OrderID   int64  `json:"order_id"`
+		PromoCode string          `json:"promo_code"`
+		Order     *model.OrderDTO `json:"order"`
 	}](c)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
-	if payload.OrderID <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	if payload.Order == nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order")
 	}
 
 	userID, ok := utils.GetUserIDInt(c)
@@ -54,12 +56,7 @@ func (h *PromotionHandler) Validate(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "unauthorized")
 	}
 
-	order, err := h.orderSvc.GetByID(c.UserContext(), payload.OrderID)
-	if err != nil {
-		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
-	}
-
-	result, err := h.svc.ApplyPromotion(c.UserContext(), userID, order, payload.PromoCode)
+	result, err := h.svc.ApplyPromotion(c.UserContext(), userID, payload.Order, payload.PromoCode)
 	if err != nil {
 		if reason, ok := promotionservice.IsPromotionApplyError(err); ok {
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -83,14 +80,14 @@ func (h *PromotionHandler) Apply(c *fiber.Ctx) error {
 	}
 
 	payload, err := app.ParseBody[struct {
-		PromoCode string `json:"promo_code"`
-		OrderID   int64  `json:"order_id"`
+		PromoCode string          `json:"promo_code"`
+		Order     *model.OrderDTO `json:"order"`
 	}](c)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
-	if payload.OrderID <= 0 {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	if payload.Order == nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order")
 	}
 
 	userID, ok := utils.GetUserIDInt(c)
@@ -98,12 +95,11 @@ func (h *PromotionHandler) Apply(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "unauthorized")
 	}
 
-	order, err := h.orderSvc.GetByID(c.UserContext(), payload.OrderID)
-	if err != nil {
-		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	if payload.Order.ID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
 	}
 
-	result, snapshot, err := h.svc.ApplyPromotionAndSnapshot(c.UserContext(), userID, order, payload.PromoCode)
+	result, snapshot, err := h.svc.ApplyPromotionAndSnapshot(c.UserContext(), userID, payload.Order, payload.PromoCode)
 	if err != nil {
 		if reason, ok := promotionservice.IsPromotionApplyError(err); ok {
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -119,4 +115,22 @@ func (h *PromotionHandler) Apply(c *fiber.Ctx) error {
 		"applied_discount": result.DiscountAmount,
 		"promo_snapshot":   snapshot,
 	})
+}
+
+func (h *PromotionHandler) GetPromotionCodesInUsageByOrderID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "promotion.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	items, err := h.svc.GetPromotionCodesInUsageByOrderID(c.UserContext(), orderID)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(items)
 }

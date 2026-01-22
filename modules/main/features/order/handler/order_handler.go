@@ -261,7 +261,12 @@ func (h *OrderHandler) Update(c *fiber.Ctx) error {
 
 	deptID, _ := utils.GetDeptIDInt(c)
 
-	dto, err := h.svc.Update(c.UserContext(), deptID, payload)
+	userID, ok := utils.GetUserIDInt(c)
+	if !ok {
+		return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "unauthorized")
+	}
+
+	dto, err := h.svc.Update(c.UserContext(), deptID, userID, payload)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

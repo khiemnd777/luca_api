@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	relation "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
+	promotionrepo "github.com/khiemnd777/andy_api/modules/main/features/promotion/repository"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/material"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
@@ -35,7 +37,7 @@ type OrderRepository interface {
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	// -- general functions
 	Create(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
-	Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	Update(ctx context.Context, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	PrepareForRemakeByOrderID(
 		ctx context.Context,
@@ -56,7 +58,9 @@ type orderRepository struct {
 	cfMgr                *customfields.Manager
 	orderItemRepo        OrderItemRepository
 	orderItemProcessRepo OrderItemProcessRepository
+	orderItemProductRepo OrderItemProductRepository
 	orderCodeRepo        OrderCodeRepository
+	promotionRepo        promotionrepo.PromotionRepository
 }
 
 func NewOrderRepository(
@@ -71,6 +75,8 @@ func NewOrderRepository(
 		orderItemRepo:        NewOrderItemRepository(db, deps, cfMgr),
 		orderItemProcessRepo: NewOrderItemProcessRepository(db, deps, cfMgr),
 		orderCodeRepo:        NewOrderCodeRepository(db),
+		orderItemProductRepo: NewOrderItemProductRepository(db),
+		promotionRepo:        promotionrepo.NewPromotionRepository(db, deps.DB),
 	}
 }
 
@@ -133,6 +139,8 @@ func (r *orderRepository) createNewOrder(
 
 	q := tx.Order.Create().
 		SetNillableCode(dto.Code).
+		SetNillablePromotionCode(dto.PromotionCode).
+		SetNillablePromotionCodeID(dto.PromotionCodeID).
 		SetNillableClinicID(dto.ClinicID).
 		SetNillableClinicName(dto.ClinicName).
 		SetNillableDentistID(dto.DentistID).
@@ -391,7 +399,11 @@ func (r *orderRepository) Create(ctx context.Context, input *model.OrderUpsertDT
 	return new, nil
 }
 
-func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
+func (r *orderRepository) Update(
+	ctx context.Context,
+	userID int,
+	input *model.OrderUpsertDTO,
+) (*model.OrderDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -409,13 +421,16 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	q := tx.Order.UpdateOneID(output.ID).
 		SetNillableClinicID(output.ClinicID).
 		SetNillableClinicName(output.ClinicName).
+		SetNillablePromotionCode(output.PromotionCode).
+		SetNillablePromotionCodeID(output.PromotionCodeID).
 		SetNillableDentistID(output.DentistID).
 		SetNillableDentistName(output.DentistName).
 		SetNillablePatientID(output.PatientID).
 		SetNillablePatientName(output.PatientName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
-		_, err = customfields.PrepareCustomFields(ctx,
+		_, err = customfields.PrepareCustomFields(
+			ctx,
 			r.cfMgr,
 			*input.Collections,
 			output.CustomFields,
@@ -434,17 +449,35 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 
 	output = mapper.MapAs[*generated.Order, *model.OrderDTO](entity)
 
-	// latest order item
-	latest, err := r.orderItemRepo.Update(ctx, tx, output, input.DTO.LatestOrderItemUpsert)
+	// ===== Update latest order item
+	latest, err := r.orderItemRepo.Update(
+		ctx,
+		tx,
+		output,
+		input.DTO.LatestOrderItemUpsert,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	// reassign latest order item -> order as cache to appear them on the table
-	isLatest, err := r.orderItemRepo.IsLatestIfOrderID(ctx, entity.ID, latest.ID)
+	isLatest, err := r.orderItemRepo.IsLatestIfOrderID(
+		ctx,
+		entity.ID,
+		latest.ID,
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	output.LatestOrderItem = latest
+
+	// ===== Promotion handling
+	var (
+		discountAmount float64
+		promoSnapshot  *model.PromotionSnapshot
+	)
+
+	// ===== Update order cache fields & total price
 	if isLatest {
 		lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
 		lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
@@ -452,11 +485,59 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 		rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 		rmkCount := latest.RemakeCount
 
-		// total price
-		totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(ctx, tx, output.ID)
+		totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(
+			ctx,
+			tx,
+			output.ID,
+		)
 		if err != nil {
 			return nil, err
 		}
+
+		if output.PromotionCode != nil && output.PromotionCodeID != nil {
+			result, err := r.applyPromotionForSnapshot(
+				ctx,
+				userID,
+				output,
+				*output.PromotionCode,
+			)
+			if err != nil {
+				discountAmount = 0
+			} else {
+				discountAmount = result.DiscountAmount
+			}
+
+			remakeCount := 0
+			if output.RemakeCount != nil {
+				remakeCount = *output.RemakeCount
+			} else if output.LatestOrderItem != nil {
+				remakeCount = output.LatestOrderItem.RemakeCount
+			}
+
+			isRemake := remakeCount > 0
+			if output.RemakeType != nil && *output.RemakeType != "" {
+				isRemake = true
+			}
+
+			if err == nil {
+				promoSnapshot = &model.PromotionSnapshot{
+					PromoCode:         result.Promo.Code,
+					DiscountType:      string(result.Promo.DiscountType),
+					DiscountValue:     result.Promo.DiscountValue,
+					DiscountAmount:    discountAmount,
+					IsRemake:          isRemake,
+					RemakeCount:       remakeCount,
+					AppliedConditions: result.AppliedConditions,
+					AppliedAt:         time.Now(),
+				}
+			}
+		}
+
+		// subtract promotion discount
+		if discountAmount > 0 {
+			totalPrice = math.Max(0, totalPrice-discountAmount)
+		}
+
 		prdTotalPrice := totalPrice
 
 		_, err = entity.
@@ -469,12 +550,10 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 			SetNillableRemakeType(rmkType).
 			SetNillableRemakeCount(&rmkCount).
 			Save(ctx)
-
 		if err != nil {
 			return nil, err
 		}
 
-		// Assign latest ones to output
 		output.CodeLatest = latest.Code
 		output.StatusLatest = lstStatus
 		output.PriorityLatest = lstPriority
@@ -484,13 +563,7 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 		output.RemakeCount = &rmkCount
 	}
 
-	output.LatestOrderItem = latest
-
-	// relation
-	// err = relation.Upsert1(ctx, tx, "orders_customers", entity, &input.DTO, output)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	// ===== Relations
 	if err = relation.Upsert1(ctx, tx, "orders_clinics", entity, &input.DTO, output); err != nil {
 		return nil, err
 	}
@@ -499,6 +572,20 @@ func (r *orderRepository) Update(ctx context.Context, input *model.OrderUpsertDT
 	}
 	if err = relation.Upsert1(ctx, tx, "orders_patients", entity, &input.DTO, output); err != nil {
 		return nil, err
+	}
+
+	// ===== Persist promotion usage snapshot
+	if promoSnapshot != nil {
+		if err := r.promotionRepo.CreatePromotionUsageFromSnapshot(
+			ctx,
+			tx,
+			*output.PromotionCodeID,
+			int(output.ID),
+			userID,
+			promoSnapshot,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	return output, nil

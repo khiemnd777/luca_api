@@ -1,4 +1,4 @@
-package service
+package repository
 
 import (
 	"context"
@@ -9,192 +9,94 @@ import (
 	"strings"
 	"time"
 
-	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	orderrepo "github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	promotionmodel "github.com/khiemnd777/andy_api/modules/main/features/promotion/model"
-	"github.com/khiemnd777/andy_api/modules/main/features/promotion/repository"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
-	"github.com/khiemnd777/andy_api/shared/logger"
-	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
-	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
-type PromotionApplyResult struct {
-	DiscountAmount    float64                  `json:"discount_amount"`
-	FinalPrice        float64                  `json:"final_price"`
-	AppliedConditions []string                 `json:"applied_conditions"`
-	PromoCode         string                   `json:"promo_code"`
-	Promotion         *generated.PromotionCode `json:"-"`
+type promotionApplyResult struct {
+	DiscountAmount    float64
+	AppliedConditions []string
+	Promo             *generated.PromotionCode
 }
 
-type PromotionApplyError struct {
-	Reason string
-}
-
-func (e PromotionApplyError) Error() string {
-	return e.Reason
-}
-
-func IsPromotionApplyError(err error) (string, bool) {
-	var perr PromotionApplyError
-	if errors.As(err, &perr) {
-		return perr.Reason, true
-	}
-	return "", false
-}
-
-type PromotionService interface {
-	ApplyPromotion(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, error)
-	ApplyPromotionAndSnapshot(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, *model.PromotionSnapshot, error)
-	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error)
-	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*model.PromotionCodeDTO, error)
-	UpdatePromotion(ctx context.Context, id int, input *model.UpdatePromotionInput) (*model.PromotionCodeDTO, error)
-	DeletePromotion(ctx context.Context, id int) error
-	GetPromotionByID(ctx context.Context, id int) (*model.PromotionCodeDTO, error)
-	ListPromotions(ctx context.Context, query table.TableQuery) (table.TableListResult[model.PromotionCodeDTO], error)
-}
-
-type promotionService struct {
-	repo                 repository.PromotionRepository
-	orderItemProductRepo orderrepo.OrderItemProductRepository
-	deps                 *module.ModuleDeps[config.ModuleConfig]
-}
-
-func NewPromotionService(repo repository.PromotionRepository, deps *module.ModuleDeps[config.ModuleConfig]) PromotionService {
-	orderItemProductRepo := orderrepo.NewOrderItemProductRepository(deps.Ent.(*generated.Client))
-	return &promotionService{
-		repo:                 repo,
-		orderItemProductRepo: orderItemProductRepo,
-		deps:                 deps,
-	}
-}
-
-func (s *promotionService) ApplyPromotion(
+func (r *orderRepository) applyPromotionForSnapshot(
 	ctx context.Context,
 	userID int,
 	order *model.OrderDTO,
 	promoCodeString string,
-) (*PromotionApplyResult, error) {
+) (*promotionApplyResult, error) {
 	if strings.TrimSpace(promoCodeString) == "" {
-		return nil, PromotionApplyError{Reason: "promo_code_required"}
+		return nil, fmt.Errorf("promo_code_required")
 	}
 	if order == nil {
-		return nil, PromotionApplyError{Reason: "order_required"}
+		return nil, fmt.Errorf("order_required")
 	}
 
-	promo, err := s.repo.GetByCode(ctx, promoCodeString)
+	promo, err := r.promotionRepo.GetByCode(ctx, promoCodeString)
 	if err != nil {
-		if generated.IsNotFound(err) {
-			return nil, PromotionApplyError{Reason: "promotion_not_found"}
-		}
 		return nil, err
 	}
 
 	if !promo.IsActive {
-		return nil, PromotionApplyError{Reason: "promotion_inactive"}
+		return nil, fmt.Errorf("promotion_inactive")
 	}
 
 	now := time.Now()
 	if promo.StartAt.After(now) {
-		return nil, PromotionApplyError{Reason: "promotion_not_started"}
+		return nil, fmt.Errorf("promotion_not_started")
 	}
 	if promo.EndAt.Before(now) {
-		return nil, PromotionApplyError{Reason: "promotion_expired"}
+		return nil, fmt.Errorf("promotion_expired")
 	}
 
 	if promo.TotalUsageLimit != nil && *promo.TotalUsageLimit != 0 {
-		totalUsage, err := s.repo.CountTotalUsage(ctx, promo.ID)
+		totalUsage, err := r.promotionRepo.CountTotalUsage(ctx, promo.ID)
 		if err != nil {
 			return nil, err
 		}
 		if totalUsage >= *promo.TotalUsageLimit {
-			return nil, PromotionApplyError{Reason: "promotion_total_usage_limit_reached"}
+			return nil, fmt.Errorf("promotion_total_usage_limit_reached")
 		}
 	}
 
 	// if promo.UsagePerUser != nil && *promo.UsagePerUser != 0 {
-	// 	userUsage, err := s.repo.CountUsageByUser(ctx, promo.ID, userID)
+	// 	userUsage, err := r.promotionRepo.CountUsageByUser(ctx, promo.ID, userID)
 	// 	if err != nil {
 	// 		return nil, err
 	// 	}
 	// 	if userUsage >= *promo.UsagePerUser {
-	// 		return nil, PromotionApplyError{Reason: "promotion_user_usage_limit_reached"}
+	// 		return nil, fmt.Errorf("promotion_user_usage_limit_reached")
 	// 	}
 	// }
 
-	orderCtx := s.buildOrderPromotionContext(order)
+	orderCtx := r.buildOrderPromotionContext(order)
 
-	scopeMatched, err := s.matchScopes(ctx, promo, userID, orderCtx)
+	scopeMatched, err := r.matchPromotionScopes(ctx, promo, userID, orderCtx)
 	if err != nil {
 		return nil, err
 	}
 	if !scopeMatched {
-		return nil, PromotionApplyError{Reason: "promotion_scope_not_matched"}
+		return nil, fmt.Errorf("promotion_scope_not_matched")
 	}
 
-	appliedConditions, err := s.matchConditions(promo, orderCtx, now)
+	appliedConditions, err := matchPromotionConditions(promo, orderCtx, now)
 	if err != nil {
 		return nil, err
 	}
 
-	discountAmount, err := s.calculateDiscount(promo, orderCtx)
+	discountAmount, err := calculatePromotionDiscount(promo, orderCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	finalPrice := orderCtx.TotalPrice - discountAmount
-	if finalPrice < 0 {
-		finalPrice = 0
-	}
-
-	return &PromotionApplyResult{
+	return &promotionApplyResult{
 		DiscountAmount:    discountAmount,
-		FinalPrice:        finalPrice,
 		AppliedConditions: appliedConditions,
-		PromoCode:         promo.Code,
-		Promotion:         promo,
+		Promo:             promo,
 	}, nil
-}
-
-func (s *promotionService) ApplyPromotionAndSnapshot(
-	ctx context.Context,
-	userID int,
-	order *model.OrderDTO,
-	promoCodeString string,
-) (*PromotionApplyResult, *model.PromotionSnapshot, error) {
-	result, err := s.ApplyPromotion(ctx, userID, order, promoCodeString)
-	if err != nil {
-		return nil, nil, err
-	}
-	if order == nil || order.ID == 0 {
-		return nil, nil, errors.New("order is required")
-	}
-
-	orderCtx := s.buildOrderPromotionContext(order)
-
-	snapshot := &model.PromotionSnapshot{
-		PromoCode:         result.PromoCode,
-		DiscountType:      string(result.Promotion.DiscountType),
-		DiscountValue:     result.Promotion.DiscountValue,
-		DiscountAmount:    result.DiscountAmount,
-		IsRemake:          orderCtx.IsRemake,
-		RemakeCount:       orderCtx.RemakeCount,
-		AppliedConditions: result.AppliedConditions,
-		AppliedAt:         time.Now(),
-	}
-
-	if err := s.repo.CreatePromotionUsageFromSnapshot(ctx, nil, result.Promotion.ID, int(order.ID), userID, snapshot); err != nil {
-		return nil, nil, err
-	}
-
-	return result, snapshot, nil
-}
-
-func (s *promotionService) GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error) {
-	return s.repo.GetPromotionCodesInUsageByOrderID(ctx, orderID)
 }
 
 type orderPromotionContext struct {
@@ -208,8 +110,8 @@ type orderPromotionContext struct {
 	SellerID       int
 }
 
-func (s *promotionService) buildOrderPromotionContext(order *model.OrderDTO) orderPromotionContext {
-	totalPrice := s.orderItemProductRepo.CalculateTotalPrice(order.LatestOrderItem.Products)
+func (r *orderRepository) buildOrderPromotionContext(order *model.OrderDTO) orderPromotionContext {
+	totalPrice := r.orderItemProductRepo.CalculateTotalPrice(order.LatestOrderItem.Products)
 
 	remakeCount := 0
 	if order.RemakeCount != nil {
@@ -283,7 +185,7 @@ func collectOrderProductIDs(order *model.OrderDTO) []int {
 	return out
 }
 
-func (s *promotionService) matchScopes(
+func (r *orderRepository) matchPromotionScopes(
 	ctx context.Context,
 	promo *generated.PromotionCode,
 	userID int,
@@ -304,7 +206,7 @@ func (s *promotionService) matchScopes(
 
 	var categoryIDs map[int]struct{}
 	if hasCategoryScope && len(orderCtx.ProductIDs) > 0 {
-		ids, err := s.loadCategoryIDs(ctx, orderCtx.ProductIDs)
+		ids, err := r.loadPromotionCategoryIDs(ctx, orderCtx.ProductIDs)
 		if err != nil {
 			return false, err
 		}
@@ -316,35 +218,35 @@ func (s *promotionService) matchScopes(
 		case promotionmodel.PromotionScopeAll:
 			return true, nil
 		case promotionmodel.PromotionScopeUser:
-			ids, err := parseIntList(scope.ScopeValue)
+			ids, err := parsePromotionIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
 			}
-			if containsInt(ids, userID) {
+			if containsPromotionInt(ids, userID) {
 				return true, nil
 			}
 		case promotionmodel.PromotionScopeSeller:
-			ids, err := parseIntList(scope.ScopeValue)
+			ids, err := parsePromotionIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
 			}
-			if orderCtx.SellerID != 0 && containsInt(ids, orderCtx.SellerID) {
+			if orderCtx.SellerID != 0 && containsPromotionInt(ids, orderCtx.SellerID) {
 				return true, nil
 			}
 		case promotionmodel.PromotionScopeProduct:
-			ids, err := parseIntList(scope.ScopeValue)
+			ids, err := parsePromotionIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
 			}
-			if anyInSet(orderCtx.ProductIDs, ids) {
+			if anyPromotionInSet(orderCtx.ProductIDs, ids) {
 				return true, nil
 			}
 		case promotionmodel.PromotionScopeCategory:
-			ids, err := parseIntList(scope.ScopeValue)
+			ids, err := parsePromotionIntList(scope.ScopeValue)
 			if err != nil {
 				return false, err
 			}
-			if anyInMap(ids, categoryIDs) {
+			if anyPromotionInMap(ids, categoryIDs) {
 				return true, nil
 			}
 		}
@@ -353,69 +255,31 @@ func (s *promotionService) matchScopes(
 	return false, nil
 }
 
-func (s *promotionService) loadCategoryIDs(ctx context.Context, productIDs []int) (map[int]struct{}, error) {
-	logger.Debug("loadCategoryIDs: start",
-		"productIDs", productIDs,
-		"productCount", len(productIDs),
-	)
-
-	client, ok := s.deps.Ent.(*generated.Client)
-	if !ok || client == nil {
-		logger.Debug("loadCategoryIDs: invalid ent client")
-		return nil, errors.New("invalid ent client")
-	}
-
+func (r *orderRepository) loadPromotionCategoryIDs(ctx context.Context, productIDs []int) (map[int]struct{}, error) {
 	if len(productIDs) == 0 {
-		logger.Debug("loadCategoryIDs: empty productIDs, return empty result")
 		return map[int]struct{}{}, nil
 	}
 
-	products, err := client.Product.Query().
+	products, err := r.db.Product.Query().
 		Where(product.IDIn(productIDs...)).
 		Select(product.FieldCategoryID).
 		All(ctx)
 	if err != nil {
-		logger.Debug("loadCategoryIDs: query failed",
-			"error", err,
-			"productIDs", productIDs,
-		)
 		return nil, err
 	}
 
-	logger.Debug("loadCategoryIDs: products loaded",
-		"productsCount", len(products),
-	)
-
 	out := map[int]struct{}{}
 	for _, p := range products {
-		if p == nil {
-			logger.Debug("loadCategoryIDs: skip nil product")
-			continue
-		}
-		if p.CategoryID == nil {
-			logger.Debug("loadCategoryIDs: product has nil CategoryID",
-				"product", p,
-			)
+		if p == nil || p.CategoryID == nil {
 			continue
 		}
 		out[*p.CategoryID] = struct{}{}
 	}
 
-	logger.Debug("loadCategoryIDs: result",
-		"uniqueCategoryCount", len(out),
-		"categoryIDs", func() []int {
-			ids := make([]int, 0, len(out))
-			for id := range out {
-				ids = append(ids, id)
-			}
-			return ids
-		}(),
-	)
-
 	return out, nil
 }
 
-func (s *promotionService) matchConditions(
+func matchPromotionConditions(
 	promo *generated.PromotionCode,
 	orderCtx orderPromotionContext,
 	now time.Time,
@@ -425,38 +289,38 @@ func (s *promotionService) matchConditions(
 		switch cond.ConditionType {
 		case promotionmodel.PromotionConditionOrderIsRemake:
 			if !orderCtx.IsRemake {
-				return nil, PromotionApplyError{Reason: "condition_order_is_remake_not_met"}
+				return nil, fmt.Errorf("condition_order_is_remake_not_met")
 			}
 			applied = append(applied, string(cond.ConditionType))
 		case promotionmodel.PromotionConditionRemakeCountLTE:
-			value, err := parseIntValue(cond.ConditionValue)
+			value, err := parsePromotionIntValue(cond.ConditionValue)
 			if err != nil {
 				return nil, err
 			}
 			if orderCtx.RemakeCount > value {
-				return nil, PromotionApplyError{Reason: "condition_remake_count_lte_not_met"}
+				return nil, fmt.Errorf("condition_remake_count_lte_not_met")
 			}
 			applied = append(applied, string(cond.ConditionType))
 		case promotionmodel.PromotionConditionRemakeWithinDays:
-			value, err := parseIntValue(cond.ConditionValue)
+			value, err := parsePromotionIntValue(cond.ConditionValue)
 			if err != nil {
 				return nil, err
 			}
 			if orderCtx.OriginalTime.IsZero() {
-				return nil, PromotionApplyError{Reason: "condition_remake_within_days_not_met"}
+				return nil, fmt.Errorf("condition_remake_within_days_not_met")
 			}
 			days := int(now.Sub(orderCtx.OriginalTime).Hours() / 24)
 			if days > value {
-				return nil, PromotionApplyError{Reason: "condition_remake_within_days_not_met"}
+				return nil, fmt.Errorf("condition_remake_within_days_not_met")
 			}
 			applied = append(applied, string(cond.ConditionType))
 		case promotionmodel.PromotionConditionRemakeReason:
-			values, err := parseStringList(cond.ConditionValue)
+			values, err := parsePromotionStringList(cond.ConditionValue)
 			if err != nil {
 				return nil, err
 			}
-			if orderCtx.RemakeReason == "" || !containsString(values, orderCtx.RemakeReason) {
-				return nil, PromotionApplyError{Reason: "condition_remake_reason_not_met"}
+			if orderCtx.RemakeReason == "" || !containsPromotionString(values, orderCtx.RemakeReason) {
+				return nil, fmt.Errorf("condition_remake_reason_not_met")
 			}
 			applied = append(applied, string(cond.ConditionType))
 		default:
@@ -466,12 +330,12 @@ func (s *promotionService) matchConditions(
 	return applied, nil
 }
 
-func (s *promotionService) calculateDiscount(
+func calculatePromotionDiscount(
 	promo *generated.PromotionCode,
 	orderCtx orderPromotionContext,
 ) (float64, error) {
 	if promo.MinOrderValue != nil && *promo.MinOrderValue != 0 && orderCtx.TotalPrice < float64(*promo.MinOrderValue) {
-		return 0, PromotionApplyError{Reason: "min_order_value_not_met"}
+		return 0, fmt.Errorf("min_order_value_not_met")
 	}
 
 	var discount float64
@@ -499,7 +363,7 @@ func (s *promotionService) calculateDiscount(
 	return discount, nil
 }
 
-func parseIntValue(raw json.RawMessage) (int, error) {
+func parsePromotionIntValue(raw json.RawMessage) (int, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return 0, errors.New("missing value")
 	}
@@ -521,7 +385,7 @@ func parseIntValue(raw json.RawMessage) (int, error) {
 	return 0, errors.New("invalid int value")
 }
 
-func parseIntList(raw json.RawMessage) ([]int, error) {
+func parsePromotionIntList(raw json.RawMessage) ([]int, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
 	}
@@ -557,7 +421,7 @@ func parseIntList(raw json.RawMessage) ([]int, error) {
 	return nil, errors.New("invalid int list")
 }
 
-func parseStringList(raw json.RawMessage) ([]string, error) {
+func parsePromotionStringList(raw json.RawMessage) ([]string, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
 	}
@@ -585,7 +449,7 @@ func parseStringList(raw json.RawMessage) ([]string, error) {
 	return nil, errors.New("invalid string list")
 }
 
-func containsInt(list []int, target int) bool {
+func containsPromotionInt(list []int, target int) bool {
 	for _, v := range list {
 		if v == target {
 			return true
@@ -594,7 +458,7 @@ func containsInt(list []int, target int) bool {
 	return false
 }
 
-func containsString(list []string, target string) bool {
+func containsPromotionString(list []string, target string) bool {
 	for _, v := range list {
 		if v == target {
 			return true
@@ -603,16 +467,16 @@ func containsString(list []string, target string) bool {
 	return false
 }
 
-func anyInSet(orderIDs []int, allowed []int) bool {
+func anyPromotionInSet(orderIDs []int, allowed []int) bool {
 	for _, id := range orderIDs {
-		if containsInt(allowed, id) {
+		if containsPromotionInt(allowed, id) {
 			return true
 		}
 	}
 	return false
 }
 
-func anyInMap(ids []int, allowed map[int]struct{}) bool {
+func anyPromotionInMap(ids []int, allowed map[int]struct{}) bool {
 	if len(allowed) == 0 {
 		return false
 	}

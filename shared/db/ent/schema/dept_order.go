@@ -45,6 +45,13 @@ func (Order) Fields() []ent.Field {
 			Nillable().
 			Optional(),
 
+		field.Int("promotion_code_id").
+			Nillable().
+			Optional(),
+		field.String("promotion_code").
+			Nillable().
+			Optional(),
+
 		field.Int("dentist_id").
 			Optional().
 			Nillable(),

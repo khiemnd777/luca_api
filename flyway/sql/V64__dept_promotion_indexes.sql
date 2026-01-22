@@ -7,6 +7,9 @@ CREATE INDEX IF NOT EXISTS idx_promotion_usages_promo_user
 CREATE INDEX IF NOT EXISTS idx_promotion_usages_promo
   ON promotion_usages (promo_code_id);
 
+CREATE INDEX IF NOT EXISTS idx_promotion_usages_promo_for_order
+  ON promotion_usages (order_id, promo_code_id);
+
 CREATE INDEX IF NOT EXISTS idx_promotion_codes_created_at
   ON promotion_codes (created_at DESC);
 
