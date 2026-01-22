@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,6 +18,20 @@ type RetryOptions struct {
 	MaxAttempts int
 	Delay       time.Duration
 	ShouldRetry func(error) bool
+}
+
+func isWebSocketRequest(c *fiber.Ctx) bool {
+	// RFC 6455
+	if c.Method() != fiber.MethodGet {
+		return false
+	}
+	if strings.ToLower(c.Get("Upgrade")) != "websocket" {
+		return false
+	}
+	if !strings.Contains(strings.ToLower(c.Get("Connection")), "upgrade") {
+		return false
+	}
+	return true
 }
 
 // WrapHandler applies Circuit Breaker + Retry logic to a single handler
@@ -41,6 +56,11 @@ func WrapHandler(name string, h fiber.Handler, opts ...RetryOptions) fiber.Handl
 	}
 
 	return func(c *fiber.Ctx) error {
+		if isWebSocketRequest(c) {
+			logger.Info("🔌 WS bypass circuit: " + name)
+			return h(c)
+		}
+
 		var err error
 		for i := 0; i < retry.MaxAttempts; i++ {
 			_, err = circuitbreaker.Run(name, func(ctx context.Context) (interface{}, error) {

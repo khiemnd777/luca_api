@@ -23,7 +23,7 @@ import (
 
 type OrderService interface {
 	Create(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
-	Update(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	Update(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
@@ -151,8 +151,8 @@ func (s *orderService) Create(ctx context.Context, deptID int, userID int, input
 	return dto, nil
 }
 
-func (s *orderService) Update(ctx context.Context, deptID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
-	dto, err := s.repo.Update(ctx, input)
+func (s *orderService) Update(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
+	dto, err := s.repo.Update(ctx, userID, input)
 	if err != nil {
 		return nil, err
 	}

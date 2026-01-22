@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/khiemnd777/andy_api/modules/realtime/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/logger"
@@ -25,10 +25,35 @@ var (
 type Handler struct {
 	hub       *service.Hub
 	jwtSecret string
+
+	// Heartbeat (message-level for proxy compatibility)
+	pongWait   time.Duration // max duration allowed without receiving "pong"
+	pingPeriod time.Duration // server sends "ping" every pingPeriod
+	writeWait  time.Duration // write deadline for sending ping/pong/messages
 }
 
 func NewHandler(hub *service.Hub, jwtSecret string) *Handler {
-	return &Handler{hub: hub, jwtSecret: jwtSecret}
+	return &Handler{
+		hub:       hub,
+		jwtSecret: jwtSecret,
+
+		pongWait:   60 * time.Second,
+		pingPeriod: 25 * time.Second, // < pongWait
+		writeWait:  5 * time.Second,
+	}
+}
+
+func (h *Handler) WithHeartbeat(pongWait, pingPeriod, writeWait time.Duration) *Handler {
+	if pongWait > 0 {
+		h.pongWait = pongWait
+	}
+	if pingPeriod > 0 {
+		h.pingPeriod = pingPeriod
+	}
+	if writeWait > 0 {
+		h.writeWait = writeWait
+	}
+	return h
 }
 
 func (h *Handler) RegisterRoutes(router fiber.Router) {
@@ -43,22 +68,47 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 			return
 		}
 
-		h.hub.Register <- service.ClientConn{UserID: userID, Conn: c}
+		client := service.ClientConn{UserID: userID, Conn: c}
+
+		h.hub.Register <- client
 		defer func() {
-			h.hub.Unregister <- service.ClientConn{UserID: userID, Conn: c}
-			c.Close()
+			h.hub.Unregister <- client
+			_ = c.Close()
 		}()
+
+		// Message-level heartbeat for proxy/gateway environments
+		h.setupMessageHeartbeat(c)
+
+		stopPing := make(chan struct{})
+		defer close(stopPing)
+		go h.pingLoopMessage(c, stopPing)
 
 		for {
 			mt, msg, err := c.ReadMessage()
 			if err != nil {
 				break
 			}
-			if string(msg) == "ping" {
-				_ = c.WriteMessage(mt, []byte("pong"))
+			if mt != websocket.TextMessage && mt != websocket.BinaryMessage {
 				continue
 			}
-			log.Printf("📨 From user %d: %s", userID, msg)
+
+			// We expect heartbeat as plain text: "pong" (and optionally client "ping")
+			if mt == websocket.TextMessage {
+				switch string(msg) {
+				case "pong":
+					// refresh read deadline (client is alive)
+					_ = c.SetReadDeadline(time.Now().Add(h.pongWait))
+					continue
+				case "ping":
+					// client-initiated ping; reply immediately
+					_ = h.writeText(c, "pong")
+					_ = c.SetReadDeadline(time.Now().Add(h.pongWait))
+					continue
+				}
+			}
+
+			// ignore other client messages for now
+			_ = msg
 		}
 	}))
 }
@@ -75,10 +125,41 @@ func (h *Handler) RegisterInternalRoutes(router fiber.Router) {
 			return fiber.ErrBadRequest
 		}
 
-		msg, _ := json.Marshal(req.Message)
+		msg, err := json.Marshal(req.Message)
+		if err != nil {
+			logger.Debug(fmt.Sprintf("ERROR: %v", err))
+			return fiber.ErrBadRequest
+		}
+
 		h.hub.BroadcastTo(req.UserID, msg)
 		return c.SendStatus(200)
 	})
+}
+
+func (h *Handler) setupMessageHeartbeat(c *websocket.Conn) {
+	// deadline = if we don't see "pong" within pongWait -> ReadMessage fails -> disconnect
+	_ = c.SetReadDeadline(time.Now().Add(h.pongWait))
+}
+
+func (h *Handler) pingLoopMessage(c *websocket.Conn, stop <-chan struct{}) {
+	ticker := time.NewTicker(h.pingPeriod)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			if err := h.writeText(c, "ping"); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func (h *Handler) writeText(c *websocket.Conn, s string) error {
+	_ = c.SetWriteDeadline(time.Now().Add(h.writeWait))
+	return c.WriteMessage(websocket.TextMessage, []byte(s))
 }
 
 func (h *Handler) parseUserIDFromJWT(c *websocket.Conn) (int, error) {
@@ -103,14 +184,12 @@ func (h *Handler) parseUserIDFromJWT(c *websocket.Conn) (int, error) {
 		return -1, ErrTokenInvalid
 	}
 
-	// check exp
 	if exp, ok := claims["exp"].(float64); ok {
 		if time.Now().Unix() > int64(exp) {
 			return -1, ErrTokenExpired
 		}
 	}
 
-	// extract user_id
 	switch v := claims["user_id"].(type) {
 	case string:
 		id, err := strconv.Atoi(v)
@@ -118,7 +197,6 @@ func (h *Handler) parseUserIDFromJWT(c *websocket.Conn) (int, error) {
 			return -1, ErrTokenInvalid
 		}
 		return id, nil
-
 	case float64:
 		return int(v), nil
 	}
@@ -129,10 +207,7 @@ func (h *Handler) parseUserIDFromJWT(c *websocket.Conn) (int, error) {
 func (h *Handler) closeWithReason(c *websocket.Conn, reason string) {
 	_ = c.WriteControl(
 		websocket.CloseMessage,
-		websocket.FormatCloseMessage(
-			websocket.ClosePolicyViolation,
-			reason,
-		),
+		websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason),
 		time.Now().Add(time.Second),
 	)
 	_ = c.Close()
