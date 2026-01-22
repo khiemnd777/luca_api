@@ -23,7 +23,9 @@ func (feature) Priority() int { return 70 }
 func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) error {
 	entClient := deps.Ent.(*generated.Client)
 	repo := promotionrepo.NewPromotionRepository(entClient, deps.DB)
+	adminrepo := promotionrepo.NewPromotionAdminRepository(entClient, deps.DB)
 	svc := promotionservice.NewPromotionService(repo, deps)
+	adminsvc := promotionservice.NewPromotionAdminService(adminrepo, deps)
 
 	orderRepo := repository.NewOrderRepository(entClient, deps, cfMgr)
 	orderSvc := orderservice.NewOrderService(orderRepo, deps, cfMgr)
@@ -31,7 +33,7 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	h := handler.NewPromotionHandler(svc, orderSvc, deps)
 	h.RegisterRoutes(router)
 
-	adminHandler := handler.NewPromotionAdminHandler(svc, deps)
+	adminHandler := handler.NewPromotionAdminHandler(adminsvc, deps)
 	adminHandler.RegisterRoutes(router)
 	return nil
 }

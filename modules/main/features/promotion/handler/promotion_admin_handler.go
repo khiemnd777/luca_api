@@ -18,12 +18,12 @@ import (
 )
 
 type PromotionAdminHandler struct {
-	svc  promotionservice.PromotionService
+	svc  promotionservice.PromotionAdminService
 	deps *module.ModuleDeps[config.ModuleConfig]
 }
 
 func NewPromotionAdminHandler(
-	svc promotionservice.PromotionService,
+	svc promotionservice.PromotionAdminService,
 	deps *module.ModuleDeps[config.ModuleConfig],
 ) *PromotionAdminHandler {
 	return &PromotionAdminHandler{svc: svc, deps: deps}

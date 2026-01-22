@@ -19,7 +19,6 @@ import (
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
-	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type PromotionApplyResult struct {
@@ -50,11 +49,6 @@ type PromotionService interface {
 	ApplyPromotion(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, error)
 	ApplyPromotionAndSnapshot(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, *model.PromotionSnapshot, error)
 	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error)
-	CreatePromotion(ctx context.Context, input *model.CreatePromotionInput) (*model.PromotionCodeDTO, error)
-	UpdatePromotion(ctx context.Context, id int, input *model.UpdatePromotionInput) (*model.PromotionCodeDTO, error)
-	DeletePromotion(ctx context.Context, id int) error
-	GetPromotionByID(ctx context.Context, id int) (*model.PromotionCodeDTO, error)
-	ListPromotions(ctx context.Context, query table.TableQuery) (table.TableListResult[model.PromotionCodeDTO], error)
 }
 
 type promotionService struct {
