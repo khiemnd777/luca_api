@@ -10,9 +10,11 @@ import (
 	"time"
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	"github.com/khiemnd777/andy_api/modules/main/features/promotion/engine"
 	promotionmodel "github.com/khiemnd777/andy_api/modules/main/features/promotion/model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -20,6 +22,131 @@ type promotionApplyResult struct {
 	DiscountAmount    float64
 	AppliedConditions []string
 	Promo             *generated.PromotionCode
+}
+
+func (r *orderRepository) applyPromotion(
+	ctx context.Context,
+	userID int,
+	order *model.OrderDTO,
+) (*engine.PromotionApplyResult, *model.PromotionSnapshot) {
+
+	if order == nil || order.PromotionCode == nil || order.PromotionCodeID == nil {
+		logger.Debug(
+			"skip promotion apply: missing promotion info",
+		)
+		return nil, nil
+	}
+
+	logger.Debug(
+		"start apply promotion",
+		"order_id", order.ID,
+		"user_id", userID,
+		"promo_code", *order.PromotionCode,
+	)
+
+	promo, err := r.promotionRepo.GetByCode(ctx, *order.PromotionCode)
+	if err != nil {
+		logger.Warn(
+			"promotion not found or failed to load",
+			"order_id", order.ID,
+			"promo_code", *order.PromotionCode,
+			"err", err,
+		)
+		return nil, nil
+	}
+
+	orderCtx := r.promoctxbuilder.BuildFromOrderDTO(order)
+
+	logger.Debug(
+		"promotion order context built",
+		"order_id", order.ID,
+		"total_price", orderCtx.TotalPrice,
+		"is_remake", orderCtx.IsRemake,
+		"remake_count", orderCtx.RemakeCount,
+		"product_ids", orderCtx.ProductIDs,
+		"seller_id", orderCtx.SellerID,
+		"shipping_amount", orderCtx.ShippingAmount,
+	)
+
+	result, err := r.promoengine.Apply(
+		ctx,
+		promo,
+		userID,
+		orderCtx,
+		time.Now(),
+	)
+	if err != nil {
+		logger.Info(
+			"promotion apply failed",
+			"order_id", order.ID,
+			"promo_code", promo.Code,
+			"user_id", userID,
+			"reason", err,
+		)
+		return nil, nil
+	}
+
+	logger.Info(
+		"promotion applied successfully",
+		"order_id", order.ID,
+		"promo_code", result.PromoCode,
+		"discount_amount", result.DiscountAmount,
+		"applied_conditions", result.AppliedConditions,
+	)
+
+	snapshot := &model.PromotionSnapshot{
+		PromoCode:         result.PromoCode,
+		DiscountType:      string(result.Promotion.DiscountType),
+		DiscountValue:     result.Promotion.DiscountValue,
+		DiscountAmount:    result.DiscountAmount,
+		IsRemake:          orderCtx.IsRemake,
+		RemakeCount:       orderCtx.RemakeCount,
+		AppliedConditions: result.AppliedConditions,
+		AppliedAt:         time.Now(),
+	}
+
+	return result, snapshot
+}
+
+func (r *orderRepository) buildPromotionSnapshot(
+	ctx context.Context,
+	userID int,
+	order *model.OrderDTO,
+) (float64, *model.PromotionSnapshot) {
+	if order == nil || order.PromotionCode == nil || order.PromotionCodeID == nil {
+		return 0, nil
+	}
+
+	result, _ := r.applyPromotion(
+		ctx,
+		userID,
+		order,
+	)
+
+	remakeCount := 0
+	if order.RemakeCount != nil {
+		remakeCount = *order.RemakeCount
+	} else if order.LatestOrderItem != nil {
+		remakeCount = order.LatestOrderItem.RemakeCount
+	}
+
+	isRemake := remakeCount > 0
+	if order.RemakeType != nil && *order.RemakeType != "" {
+		isRemake = true
+	}
+
+	promoSnapshot := &model.PromotionSnapshot{
+		PromoCode:         result.Promotion.Code,
+		DiscountType:      string(result.Promotion.DiscountType),
+		DiscountValue:     result.Promotion.DiscountValue,
+		DiscountAmount:    result.DiscountAmount,
+		IsRemake:          isRemake,
+		RemakeCount:       remakeCount,
+		AppliedConditions: result.AppliedConditions,
+		AppliedAt:         time.Now(),
+	}
+
+	return result.DiscountAmount, promoSnapshot
 }
 
 func (r *orderRepository) applyPromotionForSnapshot(

@@ -12,6 +12,8 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	orderrepo "github.com/khiemnd777/andy_api/modules/main/features/order/repository"
+	"github.com/khiemnd777/andy_api/modules/main/features/promotion/contextbuilder"
+	"github.com/khiemnd777/andy_api/modules/main/features/promotion/engine"
 	promotionmodel "github.com/khiemnd777/andy_api/modules/main/features/promotion/model"
 	"github.com/khiemnd777/andy_api/modules/main/features/promotion/repository"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -46,32 +48,39 @@ func IsPromotionApplyError(err error) (string, bool) {
 }
 
 type PromotionService interface {
-	ApplyPromotion(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, error)
-	ApplyPromotionAndSnapshot(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*PromotionApplyResult, *model.PromotionSnapshot, error)
+	ApplyPromotion(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, error)
+	ApplyPromotionAndSnapshot(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, *model.PromotionSnapshot, error)
 	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error)
 }
 
 type promotionService struct {
 	repo                 repository.PromotionRepository
 	orderItemProductRepo orderrepo.OrderItemProductRepository
+	promoengine          *engine.Engine
+	promoctxbuilder      *contextbuilder.Builder
 	deps                 *module.ModuleDeps[config.ModuleConfig]
 }
 
 func NewPromotionService(repo repository.PromotionRepository, deps *module.ModuleDeps[config.ModuleConfig]) PromotionService {
 	orderItemProductRepo := orderrepo.NewOrderItemProductRepository(deps.Ent.(*generated.Client))
+	engine := engine.NewEngine(deps)
+	promoctxbuilder := contextbuilder.NewBuilder(orderItemProductRepo)
 	return &promotionService{
 		repo:                 repo,
 		orderItemProductRepo: orderItemProductRepo,
+		promoengine:          engine,
+		promoctxbuilder:      promoctxbuilder,
 		deps:                 deps,
 	}
 }
 
-func (s *promotionService) ApplyPromotion(
+func (s *promotionService) ApplyPromotionV1(
 	ctx context.Context,
 	userID int,
 	order *model.OrderDTO,
 	promoCodeString string,
 ) (*PromotionApplyResult, error) {
+
 	if strings.TrimSpace(promoCodeString) == "" {
 		return nil, PromotionApplyError{Reason: "promo_code_required"}
 	}
@@ -80,6 +89,7 @@ func (s *promotionService) ApplyPromotion(
 	}
 
 	promo, err := s.repo.GetByCode(ctx, promoCodeString)
+
 	if err != nil {
 		if generated.IsNotFound(err) {
 			return nil, PromotionApplyError{Reason: "promotion_not_found"}
@@ -153,12 +163,69 @@ func (s *promotionService) ApplyPromotion(
 	}, nil
 }
 
-func (s *promotionService) ApplyPromotionAndSnapshot(
+func (s *promotionService) ApplyPromotion(
+	ctx context.Context,
+	userID int,
+	order *model.OrderDTO,
+	promoCodeString string,
+) (*engine.PromotionApplyResult, error) {
+
+	orderCtx := s.promoctxbuilder.BuildFromOrderDTO(order)
+	promo, err := s.repo.GetByCode(ctx, promoCodeString)
+	result, err := s.promoengine.Apply(
+		ctx,
+		promo,
+		userID,
+		orderCtx,
+		time.Now(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s *promotionService) ApplyPromotionAndSnapshotV1(
 	ctx context.Context,
 	userID int,
 	order *model.OrderDTO,
 	promoCodeString string,
 ) (*PromotionApplyResult, *model.PromotionSnapshot, error) {
+	result, err := s.ApplyPromotionV1(ctx, userID, order, promoCodeString)
+	if err != nil {
+		return nil, nil, err
+	}
+	if order == nil || order.ID == 0 {
+		return nil, nil, errors.New("order is required")
+	}
+
+	orderCtx := s.buildOrderPromotionContext(order)
+
+	snapshot := &model.PromotionSnapshot{
+		PromoCode:         result.PromoCode,
+		DiscountType:      string(result.Promotion.DiscountType),
+		DiscountValue:     result.Promotion.DiscountValue,
+		DiscountAmount:    result.DiscountAmount,
+		IsRemake:          orderCtx.IsRemake,
+		RemakeCount:       orderCtx.RemakeCount,
+		AppliedConditions: result.AppliedConditions,
+		AppliedAt:         time.Now(),
+	}
+
+	if err := s.repo.CreatePromotionUsageFromSnapshot(ctx, nil, result.Promotion.ID, int(order.ID), userID, snapshot); err != nil {
+		return nil, nil, err
+	}
+
+	return result, snapshot, nil
+}
+
+func (s *promotionService) ApplyPromotionAndSnapshot(
+	ctx context.Context,
+	userID int,
+	order *model.OrderDTO,
+	promoCodeString string,
+) (*engine.PromotionApplyResult, *model.PromotionSnapshot, error) {
 	result, err := s.ApplyPromotion(ctx, userID, order, promoCodeString)
 	if err != nil {
 		return nil, nil, err

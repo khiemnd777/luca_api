@@ -124,7 +124,7 @@ func kOrderSearch(q dbutils.SearchQuery) string {
 }
 
 func (s *orderService) Create(ctx context.Context, deptID int, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
-	dto, err := s.repo.Create(ctx, input)
+	dto, err := s.repo.Create(ctx, userID, input)
 	if err != nil {
 		return nil, err
 	}
