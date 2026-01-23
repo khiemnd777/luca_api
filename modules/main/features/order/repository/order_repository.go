@@ -150,6 +150,7 @@ func (r *orderRepository) createNewOrder(
 		"dentist_name", utils.DerefString(dto.DentistName),
 		"patient_id", utils.DerefInt(dto.PatientID),
 		"patient_name", utils.DerefString(dto.PatientName),
+		"ref_user_name", utils.DerefString(dto.RefUserName),
 	)
 
 	q := tx.Order.Create().
@@ -161,7 +162,9 @@ func (r *orderRepository) createNewOrder(
 		SetNillableDentistID(dto.DentistID).
 		SetNillableDentistName(dto.DentistName).
 		SetNillablePatientID(dto.PatientID).
-		SetNillablePatientName(dto.PatientName)
+		SetNillablePatientName(dto.PatientName).
+		SetNillableRefUserID(dto.RefUserID).
+		SetNillableRefUserName(dto.RefUserName)
 
 	// custom fields
 	if input.Collections != nil && len(*input.Collections) > 0 {
@@ -275,6 +278,9 @@ func (r *orderRepository) createNewOrder(
 		return nil, err
 	}
 	if err = relation.Upsert1(ctx, tx, "orders_patients", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_ref_users", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
 
@@ -482,7 +488,9 @@ func (r *orderRepository) Update(
 		SetNillableDentistID(output.DentistID).
 		SetNillableDentistName(output.DentistName).
 		SetNillablePatientID(output.PatientID).
-		SetNillablePatientName(output.PatientName)
+		SetNillablePatientName(output.PatientName).
+		SetNillableRefUserID(output.RefUserID).
+		SetNillableRefUserName(output.RefUserName)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(

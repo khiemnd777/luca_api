@@ -66,6 +66,14 @@ func (Order) Fields() []ent.Field {
 			Nillable().
 			Optional(),
 
+		// Nhân viên giới thiệu
+		field.Int("ref_user_id").
+			Optional().
+			Nillable(),
+		field.String("ref_user_name").
+			Nillable().
+			Optional(),
+
 		// Cache & Table
 		field.String("code_latest").
 			Optional().

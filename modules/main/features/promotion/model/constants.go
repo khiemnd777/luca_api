@@ -11,6 +11,8 @@ type PromotionScopeType = promotionscope.ScopeType
 const (
 	PromotionScopeAll      PromotionScopeType = promotionscope.ScopeTypeALL
 	PromotionScopeUser     PromotionScopeType = promotionscope.ScopeTypeUSER
+	PromotionScopeStaff    PromotionScopeType = promotionscope.ScopeTypeSTAFF
+	PromotionScopeClinic   PromotionScopeType = promotionscope.ScopeTypeCLINIC
 	PromotionScopeSeller   PromotionScopeType = promotionscope.ScopeTypeSELLER
 	PromotionScopeCategory PromotionScopeType = promotionscope.ScopeTypeCATEGORY
 	PromotionScopeProduct  PromotionScopeType = promotionscope.ScopeTypePRODUCT

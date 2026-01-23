@@ -25,6 +25,8 @@ type OrderDTO struct {
 	DentistName  *string `json:"dentist_name,omitempty"`
 	PatientID    *int    `json:"patient_id,omitempty"`
 	PatientName  *string `json:"patient_name,omitempty"`
+	RefUserID    *int    `json:"ref_user_id,omitempty"`
+	RefUserName  *string `json:"ref_user_name,omitempty"`
 	// Latest props
 	LatestOrderItemUpsert *OrderItemUpsertDTO `json:"latest_order_item_upsert,omitempty"`
 	LatestOrderItem       *OrderItemDTO       `json:"latest_order_item,omitempty"`

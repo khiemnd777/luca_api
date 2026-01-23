@@ -16,7 +16,7 @@ func (PromotionScope) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("promo_code_id"),
 		field.Enum("scope_type").
-			Values("ALL", "USER", "SELLER", "CATEGORY", "PRODUCT").
+			Values("ALL", "USER", "STAFF", "SELLER", "CLINIC", "CATEGORY", "PRODUCT").
 			Immutable(),
 		field.JSON("scope_value", json.RawMessage{}).
 			Optional().
