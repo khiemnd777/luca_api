@@ -35,16 +35,17 @@ func (e *Engine) Apply(
 	promo *generated.PromotionCode,
 	guard PromotionGuard,
 	userID int,
+	orderID int64,
 	orderCtx OrderContext,
 	now time.Time,
 ) (*PromotionApplyResult, error) {
 
 	// ===== PRE-CHECK (repo-backed via guard) =====
-	if err := guard.EnsureValidPromo(ctx, promo, now); err != nil {
+	if err := guard.EnsureValidPromo(ctx, promo, now, orderID); err != nil {
 		return nil, err
 	}
 
-	if err := guard.CheckUsage(ctx, promo, userID); err != nil {
+	if err := guard.CheckUsage(ctx, promo, userID, orderID); err != nil {
 		return nil, err
 	}
 

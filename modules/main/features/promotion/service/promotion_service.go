@@ -50,7 +50,7 @@ func IsPromotionApplyError(err error) (string, bool) {
 type PromotionService interface {
 	ApplyPromotion(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, error)
 	ApplyPromotionAndSnapshot(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, *model.PromotionSnapshot, error)
-	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error)
+	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int64) ([]model.PromotionCodeDTO, error)
 }
 
 type promotionService struct {
@@ -180,6 +180,7 @@ func (s *promotionService) ApplyPromotion(
 		promo,
 		s.promoguard,
 		userID,
+		order.ID,
 		orderCtx,
 		time.Now(),
 	)
@@ -217,7 +218,14 @@ func (s *promotionService) ApplyPromotionAndSnapshotV1(
 		AppliedAt:         time.Now(),
 	}
 
-	if err := s.repo.CreatePromotionUsageFromSnapshot(ctx, nil, result.Promotion.ID, int(order.ID), userID, snapshot); err != nil {
+	if err := s.repo.CreatePromotionUsageFromSnapshot(
+		ctx,
+		nil,
+		result.Promotion.ID,
+		order.ID,
+		userID,
+		snapshot,
+	); err != nil {
 		return nil, nil, err
 	}
 
@@ -251,14 +259,14 @@ func (s *promotionService) ApplyPromotionAndSnapshot(
 		AppliedAt:         time.Now(),
 	}
 
-	if err := s.repo.CreatePromotionUsageFromSnapshot(ctx, nil, result.Promotion.ID, int(order.ID), userID, snapshot); err != nil {
+	if err := s.repo.UpsertPromotionUsageFromSnapshot(ctx, nil, result.Promotion.ID, order.ID, userID, snapshot); err != nil {
 		return nil, nil, err
 	}
 
 	return result, snapshot, nil
 }
 
-func (s *promotionService) GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error) {
+func (s *promotionService) GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int64) ([]model.PromotionCodeDTO, error) {
 	return s.repo.GetPromotionCodesInUsageByOrderID(ctx, orderID)
 }
 

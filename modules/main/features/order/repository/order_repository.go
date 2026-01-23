@@ -279,11 +279,11 @@ func (r *orderRepository) createNewOrder(
 	}
 
 	if promoSnapshot != nil {
-		if err := r.promotionRepo.CreatePromotionUsageFromSnapshot(
+		if err := r.promotionRepo.UpsertPromotionUsageFromSnapshot(
 			ctx,
 			tx,
 			*out.PromotionCodeID,
-			int(out.ID),
+			out.ID,
 			userID,
 			promoSnapshot,
 		); err != nil {
@@ -399,11 +399,11 @@ func (r *orderRepository) upsertExistingOrder(
 	}
 
 	if promoSnapshot != nil {
-		if err := r.promotionRepo.CreatePromotionUsageFromSnapshot(
+		if err := r.promotionRepo.UpsertPromotionUsageFromSnapshot(
 			ctx,
 			tx,
 			*out.PromotionCodeID,
-			int(out.ID),
+			out.ID,
 			userID,
 			promoSnapshot,
 		); err != nil {
@@ -615,11 +615,11 @@ func (r *orderRepository) Update(
 				"applied_conditions", promoSnapshot.AppliedConditions,
 			)
 
-			if err := r.promotionRepo.CreatePromotionUsageFromSnapshot(
+			if err := r.promotionRepo.UpsertPromotionUsageFromSnapshot(
 				ctx,
 				tx,
 				*output.PromotionCodeID,
-				int(output.ID),
+				output.ID,
 				userID,
 				promoSnapshot,
 			); err != nil {

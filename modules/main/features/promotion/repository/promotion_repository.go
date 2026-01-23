@@ -14,13 +14,22 @@ import (
 )
 
 type PromotionRepository interface {
-	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int) ([]model.PromotionCodeDTO, error)
+	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int64) ([]model.PromotionCodeDTO, error)
+	ExistsUsageByOrderID(ctx context.Context, promoCodeID int, orderID int64) (bool, error)
 	GetByCode(ctx context.Context, code string) (*generated.PromotionCode, error)
 	CountUsageByUser(ctx context.Context, promoCodeID, userID int) (int, error)
 	CountTotalUsage(ctx context.Context, promoCodeID int) (int, error)
 	CreateUsage(ctx context.Context, tx *generated.Tx, usage *generated.PromotionUsage) error
 	LockPromotionForUpdate(ctx context.Context, tx *generated.Tx, promoCodeID int) (*generated.PromotionCode, error)
-	CreatePromotionUsageFromSnapshot(ctx context.Context, tx *generated.Tx, promoCodeID int, orderID int, userID int, snapshot *model.PromotionSnapshot) error
+	CreatePromotionUsageFromSnapshot(ctx context.Context, tx *generated.Tx, promoCodeID int, orderID int64, userID int, snapshot *model.PromotionSnapshot) error
+	UpsertPromotionUsageFromSnapshot(
+		ctx context.Context,
+		tx *generated.Tx,
+		promoCodeID int,
+		orderID int64,
+		userID int,
+		snapshot *model.PromotionSnapshot,
+	) error
 }
 
 type promotionRepository struct {
@@ -92,9 +101,30 @@ WHERE promo_code_id = $1
 	return count, nil
 }
 
+func (r *promotionRepository) ExistsUsageByOrderID(
+	ctx context.Context,
+	promoCodeID int,
+	orderID int64,
+) (bool, error) {
+	const q = `
+SELECT EXISTS (
+  SELECT 1
+  FROM promotion_usages
+  WHERE promo_code_id = $1
+    AND order_id = $2
+  LIMIT 1
+)
+`
+	var exists bool
+	if err := r.sqlDB.QueryRowContext(ctx, q, promoCodeID, orderID).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (r *promotionRepository) GetPromotionCodesInUsageByOrderID(
 	ctx context.Context,
-	orderID int,
+	orderID int64,
 ) ([]model.PromotionCodeDTO, error) {
 	promos, err := r.db.PromotionCode.
 		Query().
@@ -199,11 +229,88 @@ FOR UPDATE
 	return &p, nil
 }
 
+func (r *promotionRepository) UpsertPromotionUsageFromSnapshot(
+	ctx context.Context,
+	tx *generated.Tx,
+	promoCodeID int,
+	orderID int64,
+	userID int,
+	snapshot *model.PromotionSnapshot,
+) error {
+
+	if snapshot == nil {
+		return errors.New("snapshot is required")
+	}
+
+	discountAmount := int(math.Round(snapshot.DiscountAmount))
+
+	var (
+		client *generated.Client
+	)
+	if tx != nil {
+		client = tx.Client()
+	} else {
+		client = r.db
+	}
+
+	// TRY FIND EXISTING USAGE
+	existing, err := client.PromotionUsage.
+		Query().
+		Where(
+			promotionusage.OrderIDEQ(orderID),
+			promotionusage.PromoCodeIDEQ(promoCodeID),
+			promotionusage.DiscountAmountEQ(discountAmount),
+		).
+		Only(ctx)
+
+	if err == nil {
+		// UPDATE
+		_, err = client.PromotionUsage.
+			UpdateOne(existing).
+			SetUserID(userID).
+			SetPromoCode(snapshot.PromoCode).
+			SetDiscountType(snapshot.DiscountType).
+			SetDiscountValue(snapshot.DiscountValue).
+			SetIsRemake(snapshot.IsRemake).
+			SetRemakeCount(snapshot.RemakeCount).
+			SetAppliedConditions(snapshot.AppliedConditions).
+			SetAppliedAt(snapshot.AppliedAt).
+			SetUsedAt(snapshot.AppliedAt).
+			Save(ctx)
+
+		return err
+	}
+
+	if !generated.IsNotFound(err) {
+		// real error
+		return err
+	}
+
+	// CREATE
+	_, err = client.PromotionUsage.
+		Create().
+		SetPromoCodeID(promoCodeID).
+		SetOrderID(orderID).
+		SetUserID(userID).
+		SetPromoCode(snapshot.PromoCode).
+		SetDiscountType(snapshot.DiscountType).
+		SetDiscountValue(snapshot.DiscountValue).
+		SetDiscountAmount(discountAmount).
+		SetIsRemake(snapshot.IsRemake).
+		SetRemakeCount(snapshot.RemakeCount).
+		SetAppliedConditions(snapshot.AppliedConditions).
+		SetAppliedAt(snapshot.AppliedAt).
+		SetUsedAt(snapshot.AppliedAt).
+		Save(ctx)
+
+	return err
+}
+
 func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 	ctx context.Context,
 	tx *generated.Tx,
 	promoCodeID int,
-	orderID int,
+	orderID int64,
 	userID int,
 	snapshot *model.PromotionSnapshot,
 ) error {

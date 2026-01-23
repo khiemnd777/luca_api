@@ -128,7 +128,7 @@ func (h *PromotionHandler) GetPromotionCodesInUsageByOrderID(c *fiber.Ctx) error
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
 	}
 
-	items, err := h.svc.GetPromotionCodesInUsageByOrderID(c.UserContext(), orderID)
+	items, err := h.svc.GetPromotionCodesInUsageByOrderID(c.UserContext(), int64(orderID))
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

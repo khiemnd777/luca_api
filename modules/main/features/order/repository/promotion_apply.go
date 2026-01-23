@@ -73,6 +73,7 @@ func (r *orderRepository) applyPromotion(
 		promo,
 		r.promoguard,
 		userID,
+		order.ID,
 		orderCtx,
 		time.Now(),
 	)

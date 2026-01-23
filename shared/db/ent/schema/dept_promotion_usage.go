@@ -15,7 +15,7 @@ type PromotionUsage struct {
 func (PromotionUsage) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("promo_code_id"),
-		field.Int("order_id"),
+		field.Int64("order_id"),
 		field.Int("user_id"),
 		field.String("promo_code").
 			Optional(),

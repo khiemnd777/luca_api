@@ -14,6 +14,7 @@ type PromotionGuard interface {
 		ctx context.Context,
 		promo *generated.PromotionCode,
 		now time.Time,
+		orderID int64,
 	) error
 
 	// Check usage limits
@@ -21,6 +22,7 @@ type PromotionGuard interface {
 		ctx context.Context,
 		promo *generated.PromotionCode,
 		userID int,
+		orderID int64,
 	) error
 }
 
@@ -36,7 +38,16 @@ func (g *Guard) EnsureValidPromo(
 	ctx context.Context,
 	promo *generated.PromotionCode,
 	now time.Time,
+	orderID int64,
 ) error {
+
+	used, err := g.repo.ExistsUsageByOrderID(ctx, promo.ID, orderID)
+	if err != nil {
+		return err
+	}
+	if used {
+		return nil
+	}
 
 	if promo == nil {
 		return PromotionApplyError{Reason: "promotion_not_found"}
@@ -61,7 +72,16 @@ func (g *Guard) CheckUsage(
 	ctx context.Context,
 	promo *generated.PromotionCode,
 	userID int,
+	orderID int64,
 ) error {
+
+	used, err := g.repo.ExistsUsageByOrderID(ctx, promo.ID, orderID)
+	if err != nil {
+		return err
+	}
+	if used {
+		return nil
+	}
 
 	// ===== TOTAL USAGE LIMIT =====
 	if promo.TotalUsageLimit != nil && *promo.TotalUsageLimit != 0 {
