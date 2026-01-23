@@ -10,6 +10,9 @@ CREATE INDEX IF NOT EXISTS idx_promotion_usages_promo
 CREATE INDEX IF NOT EXISTS idx_promotion_usages_promo_for_order
   ON promotion_usages (order_id, promo_code_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_promotion_usage_order_promo_discount
+  ON promotion_usages (order_id, promo_code_id, discount_amount);
+  
 CREATE INDEX IF NOT EXISTS idx_promotion_codes_created_at
   ON promotion_codes (created_at DESC);
 
@@ -18,3 +21,4 @@ CREATE INDEX IF NOT EXISTS idx_promotion_codes_active_created
 
 CREATE INDEX IF NOT EXISTS idx_promotion_codes_active_window
   ON promotion_codes (is_active, start_at, end_at);
+
