@@ -71,6 +71,7 @@ func (r *orderRepository) applyPromotion(
 	result, err := r.promoengine.Apply(
 		ctx,
 		promo,
+		r.promoguard,
 		userID,
 		orderCtx,
 		time.Now(),
@@ -122,6 +123,10 @@ func (r *orderRepository) buildPromotionSnapshot(
 		userID,
 		order,
 	)
+
+	if result == nil {
+		return 0, nil
+	}
 
 	remakeCount := 0
 	if order.RemakeCount != nil {

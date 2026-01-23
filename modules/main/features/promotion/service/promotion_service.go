@@ -58,18 +58,21 @@ type promotionService struct {
 	orderItemProductRepo orderrepo.OrderItemProductRepository
 	promoengine          *engine.Engine
 	promoctxbuilder      *contextbuilder.Builder
+	promoguard           engine.PromotionGuard
 	deps                 *module.ModuleDeps[config.ModuleConfig]
 }
 
 func NewPromotionService(repo repository.PromotionRepository, deps *module.ModuleDeps[config.ModuleConfig]) PromotionService {
 	orderItemProductRepo := orderrepo.NewOrderItemProductRepository(deps.Ent.(*generated.Client))
-	engine := engine.NewEngine(deps)
+	promoengine := engine.NewEngine(deps)
 	promoctxbuilder := contextbuilder.NewBuilder(orderItemProductRepo)
+	promoguard := engine.NewGuard(repo)
 	return &promotionService{
 		repo:                 repo,
 		orderItemProductRepo: orderItemProductRepo,
-		promoengine:          engine,
+		promoengine:          promoengine,
 		promoctxbuilder:      promoctxbuilder,
+		promoguard:           promoguard,
 		deps:                 deps,
 	}
 }
@@ -175,6 +178,7 @@ func (s *promotionService) ApplyPromotion(
 	result, err := s.promoengine.Apply(
 		ctx,
 		promo,
+		s.promoguard,
 		userID,
 		orderCtx,
 		time.Now(),

@@ -65,6 +65,7 @@ type orderRepository struct {
 	promotionRepo        promotionrepo.PromotionRepository
 	promoengine          *engine.Engine
 	promoctxbuilder      *contextbuilder.Builder
+	promoguard           engine.PromotionGuard
 }
 
 func NewOrderRepository(
@@ -73,8 +74,11 @@ func NewOrderRepository(
 	cfMgr *customfields.Manager,
 ) OrderRepository {
 	orderItemProductRepo := NewOrderItemProductRepository(db)
+	promotionRepo := promotionrepo.NewPromotionRepository(db, deps.DB)
 	promoengine := engine.NewEngine(deps)
 	promoctxbuilder := contextbuilder.NewBuilder(orderItemProductRepo)
+	promoguard := engine.NewGuard(promotionRepo)
+
 	return &orderRepository{
 		db:                   db,
 		deps:                 deps,
@@ -83,9 +87,10 @@ func NewOrderRepository(
 		orderItemProcessRepo: NewOrderItemProcessRepository(db, deps, cfMgr),
 		orderCodeRepo:        NewOrderCodeRepository(db),
 		orderItemProductRepo: orderItemProductRepo,
-		promotionRepo:        promotionrepo.NewPromotionRepository(db, deps.DB),
+		promotionRepo:        promotionRepo,
 		promoengine:          promoengine,
 		promoctxbuilder:      promoctxbuilder,
+		promoguard:           promoguard,
 	}
 }
 

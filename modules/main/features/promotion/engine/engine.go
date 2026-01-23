@@ -33,10 +33,20 @@ discount, applied, err := engine.NewEngine(s.deps).Apply(
 func (e *Engine) Apply(
 	ctx context.Context,
 	promo *generated.PromotionCode,
+	guard PromotionGuard,
 	userID int,
 	orderCtx OrderContext,
 	now time.Time,
 ) (*PromotionApplyResult, error) {
+
+	// ===== PRE-CHECK (repo-backed via guard) =====
+	if err := guard.EnsureValidPromo(ctx, promo, now); err != nil {
+		return nil, err
+	}
+
+	if err := guard.CheckUsage(ctx, promo, userID); err != nil {
+		return nil, err
+	}
 
 	// ===== SCOPE =====
 	scopeMatched, err := e.matchScopes(ctx, promo, userID, orderCtx)

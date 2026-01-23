@@ -6,6 +6,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/order/service"
+	"github.com/khiemnd777/andy_api/modules/main/features/promotion/engine"
 	promotionservice "github.com/khiemnd777/andy_api/modules/main/features/promotion/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
@@ -58,7 +59,7 @@ func (h *PromotionHandler) Validate(c *fiber.Ctx) error {
 
 	result, err := h.svc.ApplyPromotion(c.UserContext(), userID, payload.Order, payload.PromoCode)
 	if err != nil {
-		if reason, ok := promotionservice.IsPromotionApplyError(err); ok {
+		if reason, ok := engine.IsPromotionApplyError(err); ok {
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"valid":  false,
 				"reason": reason,
@@ -101,7 +102,7 @@ func (h *PromotionHandler) Apply(c *fiber.Ctx) error {
 
 	result, snapshot, err := h.svc.ApplyPromotionAndSnapshot(c.UserContext(), userID, payload.Order, payload.PromoCode)
 	if err != nil {
-		if reason, ok := promotionservice.IsPromotionApplyError(err); ok {
+		if reason, ok := engine.IsPromotionApplyError(err); ok {
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"success": false,
 				"reason":  reason,
