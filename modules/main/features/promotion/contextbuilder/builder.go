@@ -76,6 +76,16 @@ func (b *Builder) BuildFromOrderDTO(
 		sellerID = *order.ClinicID
 	}
 
+	clinicID := 0
+	if order.ClinicID != nil {
+		clinicID = *order.ClinicID
+	}
+
+	refUserID := 0
+	if order.RefUserID != nil {
+		refUserID = *order.RefUserID
+	}
+
 	return engine.OrderContext{
 		TotalPrice:     *totalPrice,
 		IsRemake:       isRemake,
@@ -85,6 +95,8 @@ func (b *Builder) BuildFromOrderDTO(
 		ProductIDs:     productIDs,
 		ShippingAmount: shippingAmount,
 		SellerID:       sellerID,
+		ClinicID:       clinicID,
+		RefUserID:      refUserID,
 	}
 }
 

@@ -15,6 +15,8 @@ type OrderContext struct {
 	ProductIDs     []int
 	ShippingAmount float64
 	SellerID       int
+	ClinicID       int
+	RefUserID      int
 }
 
 type PromotionApplyResult struct {

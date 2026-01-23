@@ -63,6 +63,24 @@ func (e *Engine) matchScopes(
 				return true, nil
 			}
 
+		case promotionmodel.PromotionScopeClinic:
+			ids, err := parseIntList(scope.ScopeValue)
+			if err != nil {
+				return false, err
+			}
+			if orderCtx.ClinicID != 0 && containsInt(ids, orderCtx.ClinicID) {
+				return true, nil
+			}
+
+		case promotionmodel.PromotionScopeStaff:
+			ids, err := parseIntList(scope.ScopeValue)
+			if err != nil {
+				return false, err
+			}
+			if orderCtx.RefUserID != 0 && containsInt(ids, orderCtx.RefUserID) {
+				return true, nil
+			}
+
 		case promotionmodel.PromotionScopeProduct:
 			ids, err := parseIntList(scope.ScopeValue)
 			if err != nil {
