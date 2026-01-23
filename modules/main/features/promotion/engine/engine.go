@@ -55,7 +55,7 @@ func (e *Engine) Apply(
 		return nil, err
 	}
 	if !scopeMatched {
-		return nil, PromotionApplyError{Reason: "promotion_scope_not_matched"}
+		return nil, PromotionApplyError{Reason: ReasonPromotionScopeNotMatched}
 	}
 
 	// ===== CONDITIONS =====

@@ -21,7 +21,7 @@ func (e *Engine) matchConditions(
 
 		case promotionmodel.PromotionConditionOrderIsRemake:
 			if !orderCtx.IsRemake {
-				return nil, PromotionApplyError{Reason: "condition_order_is_remake_not_met"}
+				return nil, PromotionApplyError{Reason: ReasonConditionOrderIsRemakeNotMet}
 			}
 
 		case promotionmodel.PromotionConditionRemakeCountLTE:
@@ -30,7 +30,7 @@ func (e *Engine) matchConditions(
 				return nil, err
 			}
 			if orderCtx.RemakeCount > value {
-				return nil, PromotionApplyError{Reason: "condition_remake_count_lte_not_met"}
+				return nil, PromotionApplyError{Reason: ReasonConditionRemakeCountLTENotMet}
 			}
 
 		case promotionmodel.PromotionConditionRemakeWithinDays:
@@ -39,10 +39,10 @@ func (e *Engine) matchConditions(
 				return nil, err
 			}
 			if orderCtx.OriginalTime.IsZero() {
-				return nil, PromotionApplyError{Reason: "condition_remake_within_days_not_met"}
+				return nil, PromotionApplyError{Reason: ReasonConditionRemakeWithinDaysNotMet}
 			}
 			if int(now.Sub(orderCtx.OriginalTime).Hours()/24) > value {
-				return nil, PromotionApplyError{Reason: "condition_remake_within_days_not_met"}
+				return nil, PromotionApplyError{Reason: ReasonConditionRemakeWithinDaysNotMet}
 			}
 
 		case promotionmodel.PromotionConditionRemakeReason:
@@ -51,7 +51,7 @@ func (e *Engine) matchConditions(
 				return nil, err
 			}
 			if orderCtx.RemakeReason == "" || !containsString(values, orderCtx.RemakeReason) {
-				return nil, PromotionApplyError{Reason: "condition_remake_reason_not_met"}
+				return nil, PromotionApplyError{Reason: ReasonConditionRemakeReasonNotMet}
 			}
 
 		default:

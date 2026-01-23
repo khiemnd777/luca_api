@@ -50,19 +50,19 @@ func (g *Guard) EnsureValidPromo(
 	}
 
 	if promo == nil {
-		return PromotionApplyError{Reason: "promotion_not_found"}
+		return PromotionApplyError{Reason: ReasonPromotionNotFound}
 	}
 
 	if !promo.IsActive {
-		return PromotionApplyError{Reason: "promotion_inactive"}
+		return PromotionApplyError{Reason: ReasonPromotionInactive}
 	}
 
 	if promo.StartAt.After(now) {
-		return PromotionApplyError{Reason: "promotion_not_started"}
+		return PromotionApplyError{Reason: ReasonPromotionNotStarted}
 	}
 
 	if promo.EndAt.Before(now) {
-		return PromotionApplyError{Reason: "promotion_expired"}
+		return PromotionApplyError{Reason: ReasonPromotionExpired}
 	}
 
 	return nil
@@ -91,7 +91,7 @@ func (g *Guard) CheckUsage(
 		}
 		if total >= *promo.TotalUsageLimit {
 			return PromotionApplyError{
-				Reason: "promotion_total_usage_limit_reached",
+				Reason: ReasonPromotionTotalUsageLimitReached,
 			}
 		}
 	}
@@ -105,7 +105,7 @@ func (g *Guard) CheckUsage(
 			}
 			if userUsage >= *promo.UsagePerUser {
 				return engine.PromotionApplyError{
-					Reason: "promotion_user_usage_limit_reached",
+					Reason: ReasonPromotionUserUsageLimitReached,
 				}
 			}
 		}

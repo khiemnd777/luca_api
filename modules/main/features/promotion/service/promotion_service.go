@@ -85,31 +85,31 @@ func (s *promotionService) ApplyPromotionV1(
 ) (*PromotionApplyResult, error) {
 
 	if strings.TrimSpace(promoCodeString) == "" {
-		return nil, PromotionApplyError{Reason: "promo_code_required"}
+		return nil, PromotionApplyError{Reason: engine.ReasonPromoCodeRequired}
 	}
 	if order == nil {
-		return nil, PromotionApplyError{Reason: "order_required"}
+		return nil, PromotionApplyError{Reason: engine.ReasonOrderRequired}
 	}
 
 	promo, err := s.repo.GetByCode(ctx, promoCodeString)
 
 	if err != nil {
 		if generated.IsNotFound(err) {
-			return nil, PromotionApplyError{Reason: "promotion_not_found"}
+			return nil, PromotionApplyError{Reason: engine.ReasonPromotionNotFound}
 		}
 		return nil, err
 	}
 
 	if !promo.IsActive {
-		return nil, PromotionApplyError{Reason: "promotion_inactive"}
+		return nil, PromotionApplyError{Reason: engine.ReasonPromotionInactive}
 	}
 
 	now := time.Now()
 	if promo.StartAt.After(now) {
-		return nil, PromotionApplyError{Reason: "promotion_not_started"}
+		return nil, PromotionApplyError{Reason: engine.ReasonPromotionNotStarted}
 	}
 	if promo.EndAt.Before(now) {
-		return nil, PromotionApplyError{Reason: "promotion_expired"}
+		return nil, PromotionApplyError{Reason: engine.ReasonPromotionExpired}
 	}
 
 	if promo.TotalUsageLimit != nil && *promo.TotalUsageLimit != 0 {
@@ -118,7 +118,7 @@ func (s *promotionService) ApplyPromotionV1(
 			return nil, err
 		}
 		if totalUsage >= *promo.TotalUsageLimit {
-			return nil, PromotionApplyError{Reason: "promotion_total_usage_limit_reached"}
+			return nil, PromotionApplyError{Reason: engine.ReasonPromotionTotalUsageLimitReached}
 		}
 	}
 
@@ -128,7 +128,7 @@ func (s *promotionService) ApplyPromotionV1(
 	// 		return nil, err
 	// 	}
 	// 	if userUsage >= *promo.UsagePerUser {
-	// 		return nil, PromotionApplyError{Reason: "promotion_user_usage_limit_reached"}
+	// 		return nil, PromotionApplyError{Reason: engine.ReasonPromotionUserUsageLimitReached}
 	// 	}
 	// }
 
@@ -139,7 +139,7 @@ func (s *promotionService) ApplyPromotionV1(
 		return nil, err
 	}
 	if !scopeMatched {
-		return nil, PromotionApplyError{Reason: "promotion_scope_not_matched"}
+		return nil, PromotionApplyError{Reason: engine.ReasonPromotionScopeNotMatched}
 	}
 
 	appliedConditions, err := s.matchConditions(promo, orderCtx, now)
@@ -498,7 +498,7 @@ func (s *promotionService) matchConditions(
 		switch cond.ConditionType {
 		case promotionmodel.PromotionConditionOrderIsRemake:
 			if !orderCtx.IsRemake {
-				return nil, PromotionApplyError{Reason: "condition_order_is_remake_not_met"}
+				return nil, PromotionApplyError{Reason: engine.ReasonConditionOrderIsRemakeNotMet}
 			}
 			applied = append(applied, string(cond.ConditionType))
 		case promotionmodel.PromotionConditionRemakeCountLTE:
@@ -507,7 +507,7 @@ func (s *promotionService) matchConditions(
 				return nil, err
 			}
 			if orderCtx.RemakeCount > value {
-				return nil, PromotionApplyError{Reason: "condition_remake_count_lte_not_met"}
+				return nil, PromotionApplyError{Reason: engine.ReasonConditionRemakeCountLTENotMet}
 			}
 			applied = append(applied, string(cond.ConditionType))
 		case promotionmodel.PromotionConditionRemakeWithinDays:
@@ -516,11 +516,11 @@ func (s *promotionService) matchConditions(
 				return nil, err
 			}
 			if orderCtx.OriginalTime.IsZero() {
-				return nil, PromotionApplyError{Reason: "condition_remake_within_days_not_met"}
+				return nil, PromotionApplyError{Reason: engine.ReasonConditionRemakeWithinDaysNotMet}
 			}
 			days := int(now.Sub(orderCtx.OriginalTime).Hours() / 24)
 			if days > value {
-				return nil, PromotionApplyError{Reason: "condition_remake_within_days_not_met"}
+				return nil, PromotionApplyError{Reason: engine.ReasonConditionRemakeWithinDaysNotMet}
 			}
 			applied = append(applied, string(cond.ConditionType))
 		case promotionmodel.PromotionConditionRemakeReason:
@@ -529,7 +529,7 @@ func (s *promotionService) matchConditions(
 				return nil, err
 			}
 			if orderCtx.RemakeReason == "" || !containsString(values, orderCtx.RemakeReason) {
-				return nil, PromotionApplyError{Reason: "condition_remake_reason_not_met"}
+				return nil, PromotionApplyError{Reason: engine.ReasonConditionRemakeReasonNotMet}
 			}
 			applied = append(applied, string(cond.ConditionType))
 		default:
@@ -544,7 +544,7 @@ func (s *promotionService) calculateDiscount(
 	orderCtx orderPromotionContext,
 ) (float64, error) {
 	if promo.MinOrderValue != nil && *promo.MinOrderValue != 0 && orderCtx.TotalPrice < float64(*promo.MinOrderValue) {
-		return 0, PromotionApplyError{Reason: "min_order_value_not_met"}
+		return 0, PromotionApplyError{Reason: engine.ReasonMinOrderValueNotMet}
 	}
 
 	var discount float64

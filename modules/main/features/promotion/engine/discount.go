@@ -25,7 +25,7 @@ func (e *Engine) calculateDiscount(
 			"min_order_value", *promo.MinOrderValue,
 		)
 
-		return 0, PromotionApplyError{Reason: "min_order_value_not_met"}
+		return 0, PromotionApplyError{Reason: ReasonMinOrderValueNotMet}
 	}
 
 	var discount float64
