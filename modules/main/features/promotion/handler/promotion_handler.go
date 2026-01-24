@@ -52,12 +52,12 @@ func (h *PromotionHandler) Validate(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order")
 	}
 
-	userID, ok := utils.GetUserIDInt(c)
-	if !ok {
-		return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "unauthorized")
-	}
+	// userID, ok := utils.GetUserIDInt(c)
+	// if !ok {
+	// 	return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "unauthorized")
+	// }
 
-	result, err := h.svc.ApplyPromotion(c.UserContext(), userID, payload.Order, payload.PromoCode)
+	result, err := h.svc.ApplyPromotion(c.UserContext(), nil, payload.Order, payload.PromoCode)
 	if err != nil {
 		if reason, ok := engine.IsPromotionApplyError(err); ok {
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -91,16 +91,16 @@ func (h *PromotionHandler) Apply(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order")
 	}
 
-	userID, ok := utils.GetUserIDInt(c)
-	if !ok {
-		return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "unauthorized")
-	}
+	// userID, ok := utils.GetUserIDInt(c)
+	// if !ok {
+	// 	return client_error.ResponseError(c, fiber.StatusUnauthorized, nil, "unauthorized")
+	// }
 
 	if payload.Order.ID <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
 	}
 
-	result, snapshot, err := h.svc.ApplyPromotionAndSnapshot(c.UserContext(), userID, payload.Order, payload.PromoCode)
+	result, snapshot, err := h.svc.ApplyPromotionAndSnapshot(c.UserContext(), nil, payload.Order, payload.PromoCode)
 	if err != nil {
 		if reason, ok := engine.IsPromotionApplyError(err); ok {
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{

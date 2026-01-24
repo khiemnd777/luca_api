@@ -34,7 +34,7 @@ func (e *Engine) Apply(
 	ctx context.Context,
 	promo *generated.PromotionCode,
 	guard PromotionGuard,
-	userID int,
+	userID *int,
 	orderID int64,
 	orderCtx OrderContext,
 	now time.Time,

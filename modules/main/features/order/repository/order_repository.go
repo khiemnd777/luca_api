@@ -211,7 +211,7 @@ func (r *orderRepository) createNewOrder(
 	}
 	prdTotalPrice := totalPrice
 
-	discountAmount, promoSnapshot := r.buildPromotionSnapshot(ctx, userID, out)
+	discountAmount, promoSnapshot := r.buildPromotionSnapshot(ctx, out)
 	if discountAmount > 0 {
 		prdTotalPrice = math.Max(0, prdTotalPrice-discountAmount)
 	}
@@ -290,7 +290,7 @@ func (r *orderRepository) createNewOrder(
 			tx,
 			*out.PromotionCodeID,
 			out.ID,
-			userID,
+			out.RefUserID,
 			promoSnapshot,
 		); err != nil {
 			return nil, err
@@ -361,7 +361,7 @@ func (r *orderRepository) upsertExistingOrder(
 	}
 	prdTotalPrice := totalPrice
 
-	discountAmount, promoSnapshot := r.buildPromotionSnapshot(ctx, userID, out)
+	discountAmount, promoSnapshot := r.buildPromotionSnapshot(ctx, out)
 	if discountAmount > 0 {
 		prdTotalPrice = math.Max(0, prdTotalPrice-discountAmount)
 	}
@@ -403,6 +403,9 @@ func (r *orderRepository) upsertExistingOrder(
 	if err = relation.Upsert1(ctx, tx, "orders_patients", orderEnt, &input.DTO, out); err != nil {
 		return nil, err
 	}
+	if err = relation.Upsert1(ctx, tx, "orders_ref_users", orderEnt, &input.DTO, out); err != nil {
+		return nil, err
+	}
 
 	if promoSnapshot != nil {
 		if err := r.promotionRepo.UpsertPromotionUsageFromSnapshot(
@@ -410,7 +413,7 @@ func (r *orderRepository) upsertExistingOrder(
 			tx,
 			*out.PromotionCodeID,
 			out.ID,
-			userID,
+			out.RefUserID,
 			promoSnapshot,
 		); err != nil {
 			return nil, err
@@ -552,7 +555,7 @@ func (r *orderRepository) Update(
 			return nil, err
 		}
 
-		discountAmount, promoSnapshot := r.buildPromotionSnapshot(ctx, userID, output)
+		discountAmount, promoSnapshot := r.buildPromotionSnapshot(ctx, output)
 
 		if discountAmount > 0 {
 			logger.Info(
@@ -628,7 +631,7 @@ func (r *orderRepository) Update(
 				tx,
 				*output.PromotionCodeID,
 				output.ID,
-				userID,
+				output.RefUserID,
 				promoSnapshot,
 			); err != nil {
 				logger.Error(
@@ -651,6 +654,9 @@ func (r *orderRepository) Update(
 		return nil, err
 	}
 	if err = relation.Upsert1(ctx, tx, "orders_patients", entity, &input.DTO, output); err != nil {
+		return nil, err
+	}
+	if err = relation.Upsert1(ctx, tx, "orders_ref_users", entity, &input.DTO, output); err != nil {
 		return nil, err
 	}
 

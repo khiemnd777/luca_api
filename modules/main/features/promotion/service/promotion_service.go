@@ -48,8 +48,8 @@ func IsPromotionApplyError(err error) (string, bool) {
 }
 
 type PromotionService interface {
-	ApplyPromotion(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, error)
-	ApplyPromotionAndSnapshot(ctx context.Context, userID int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, *model.PromotionSnapshot, error)
+	ApplyPromotion(ctx context.Context, userID *int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, error)
+	ApplyPromotionAndSnapshot(ctx context.Context, userID *int, order *model.OrderDTO, promoCodeString string) (*engine.PromotionApplyResult, *model.PromotionSnapshot, error)
 	GetPromotionCodesInUsageByOrderID(ctx context.Context, orderID int64) ([]model.PromotionCodeDTO, error)
 }
 
@@ -168,7 +168,7 @@ func (s *promotionService) ApplyPromotionV1(
 
 func (s *promotionService) ApplyPromotion(
 	ctx context.Context,
-	userID int,
+	userID *int,
 	order *model.OrderDTO,
 	promoCodeString string,
 ) (*engine.PromotionApplyResult, error) {
@@ -179,7 +179,7 @@ func (s *promotionService) ApplyPromotion(
 		ctx,
 		promo,
 		s.promoguard,
-		userID,
+		order.RefUserID,
 		order.ID,
 		orderCtx,
 		time.Now(),
@@ -223,7 +223,7 @@ func (s *promotionService) ApplyPromotionAndSnapshotV1(
 		nil,
 		result.Promotion.ID,
 		order.ID,
-		userID,
+		order.RefUserID,
 		snapshot,
 	); err != nil {
 		return nil, nil, err
@@ -234,11 +234,11 @@ func (s *promotionService) ApplyPromotionAndSnapshotV1(
 
 func (s *promotionService) ApplyPromotionAndSnapshot(
 	ctx context.Context,
-	userID int,
+	userID *int,
 	order *model.OrderDTO,
 	promoCodeString string,
 ) (*engine.PromotionApplyResult, *model.PromotionSnapshot, error) {
-	result, err := s.ApplyPromotion(ctx, userID, order, promoCodeString)
+	result, err := s.ApplyPromotion(ctx, order.RefUserID, order, promoCodeString)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -259,7 +259,7 @@ func (s *promotionService) ApplyPromotionAndSnapshot(
 		AppliedAt:         time.Now(),
 	}
 
-	if err := s.repo.UpsertPromotionUsageFromSnapshot(ctx, nil, result.Promotion.ID, order.ID, userID, snapshot); err != nil {
+	if err := s.repo.UpsertPromotionUsageFromSnapshot(ctx, nil, result.Promotion.ID, order.ID, order.RefUserID, snapshot); err != nil {
 		return nil, nil, err
 	}
 

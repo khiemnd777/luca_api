@@ -24,11 +24,7 @@ type promotionApplyResult struct {
 	Promo             *generated.PromotionCode
 }
 
-func (r *orderRepository) applyPromotion(
-	ctx context.Context,
-	userID int,
-	order *model.OrderDTO,
-) (*engine.PromotionApplyResult, *model.PromotionSnapshot) {
+func (r *orderRepository) applyPromotion(ctx context.Context, order *model.OrderDTO) (*engine.PromotionApplyResult, *model.PromotionSnapshot) {
 
 	if order == nil || order.PromotionCode == nil || order.PromotionCodeID == nil {
 		logger.Debug(
@@ -40,7 +36,6 @@ func (r *orderRepository) applyPromotion(
 	logger.Debug(
 		"start apply promotion",
 		"order_id", order.ID,
-		"user_id", userID,
 		"promo_code", *order.PromotionCode,
 	)
 
@@ -72,7 +67,7 @@ func (r *orderRepository) applyPromotion(
 		ctx,
 		promo,
 		r.promoguard,
-		userID,
+		order.RefUserID,
 		order.ID,
 		orderCtx,
 		time.Now(),
@@ -82,7 +77,6 @@ func (r *orderRepository) applyPromotion(
 			"promotion apply failed",
 			"order_id", order.ID,
 			"promo_code", promo.Code,
-			"user_id", userID,
 			"reason", err,
 		)
 		return nil, nil
@@ -110,20 +104,12 @@ func (r *orderRepository) applyPromotion(
 	return result, snapshot
 }
 
-func (r *orderRepository) buildPromotionSnapshot(
-	ctx context.Context,
-	userID int,
-	order *model.OrderDTO,
-) (float64, *model.PromotionSnapshot) {
+func (r *orderRepository) buildPromotionSnapshot(ctx context.Context, order *model.OrderDTO) (float64, *model.PromotionSnapshot) {
 	if order == nil || order.PromotionCode == nil || order.PromotionCodeID == nil {
 		return 0, nil
 	}
 
-	result, _ := r.applyPromotion(
-		ctx,
-		userID,
-		order,
-	)
+	result, _ := r.applyPromotion(ctx, order)
 
 	if result == nil {
 		return 0, nil

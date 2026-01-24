@@ -21,7 +21,7 @@ type PromotionGuard interface {
 	CheckUsage(
 		ctx context.Context,
 		promo *generated.PromotionCode,
-		userID int,
+		userID *int,
 		orderID int64,
 	) error
 }
@@ -71,7 +71,7 @@ func (g *Guard) EnsureValidPromo(
 func (g *Guard) CheckUsage(
 	ctx context.Context,
 	promo *generated.PromotionCode,
-	userID int,
+	userID *int,
 	orderID int64,
 ) error {
 
@@ -97,19 +97,18 @@ func (g *Guard) CheckUsage(
 	}
 
 	// ===== USER USAGE LIMIT (optional – giữ y hệt code cũ) =====
-	/*
-		if promo.UsagePerUser != nil && *promo.UsagePerUser != 0 {
-			userUsage, err := g.repo.CountUsageByUser(ctx, promo.ID, userID)
-			if err != nil {
-				return err
-			}
-			if userUsage >= *promo.UsagePerUser {
-				return engine.PromotionApplyError{
-					Reason: ReasonPromotionUserUsageLimitReached,
-				}
+
+	if userID != nil && promo.UsagePerUser != nil && *promo.UsagePerUser != 0 {
+		userUsage, err := g.repo.CountUsageByUser(ctx, promo.ID, *userID)
+		if err != nil {
+			return err
+		}
+		if userUsage >= *promo.UsagePerUser {
+			return PromotionApplyError{
+				Reason: ReasonPromotionUserUsageLimitReached,
 			}
 		}
-	*/
+	}
 
 	return nil
 }

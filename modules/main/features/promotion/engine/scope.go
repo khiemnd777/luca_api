@@ -13,7 +13,7 @@ import (
 func (e *Engine) matchScopes(
 	ctx context.Context,
 	promo *generated.PromotionCode,
-	userID int,
+	userID *int,
 	orderCtx OrderContext,
 ) (bool, error) {
 
@@ -50,7 +50,10 @@ func (e *Engine) matchScopes(
 			if err != nil {
 				return false, err
 			}
-			if containsInt(ids, userID) {
+			if userID == nil {
+				return false, nil
+			}
+			if containsInt(ids, *userID) {
 				return true, nil
 			}
 

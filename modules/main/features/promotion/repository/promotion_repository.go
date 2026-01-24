@@ -21,13 +21,13 @@ type PromotionRepository interface {
 	CountTotalUsage(ctx context.Context, promoCodeID int) (int, error)
 	CreateUsage(ctx context.Context, tx *generated.Tx, usage *generated.PromotionUsage) error
 	LockPromotionForUpdate(ctx context.Context, tx *generated.Tx, promoCodeID int) (*generated.PromotionCode, error)
-	CreatePromotionUsageFromSnapshot(ctx context.Context, tx *generated.Tx, promoCodeID int, orderID int64, userID int, snapshot *model.PromotionSnapshot) error
+	CreatePromotionUsageFromSnapshot(ctx context.Context, tx *generated.Tx, promoCodeID int, orderID int64, userID *int, snapshot *model.PromotionSnapshot) error
 	UpsertPromotionUsageFromSnapshot(
 		ctx context.Context,
 		tx *generated.Tx,
 		promoCodeID int,
 		orderID int64,
-		userID int,
+		userID *int,
 		snapshot *model.PromotionSnapshot,
 	) error
 }
@@ -234,7 +234,7 @@ func (r *promotionRepository) UpsertPromotionUsageFromSnapshot(
 	tx *generated.Tx,
 	promoCodeID int,
 	orderID int64,
-	userID int,
+	userID *int,
 	snapshot *model.PromotionSnapshot,
 ) error {
 
@@ -267,7 +267,7 @@ func (r *promotionRepository) UpsertPromotionUsageFromSnapshot(
 		// UPDATE
 		_, err = client.PromotionUsage.
 			UpdateOne(existing).
-			SetUserID(userID).
+			SetNillableUserID(userID).
 			SetPromoCode(snapshot.PromoCode).
 			SetDiscountType(snapshot.DiscountType).
 			SetDiscountValue(snapshot.DiscountValue).
@@ -287,11 +287,10 @@ func (r *promotionRepository) UpsertPromotionUsageFromSnapshot(
 	}
 
 	// CREATE
-	_, err = client.PromotionUsage.
+	q := client.PromotionUsage.
 		Create().
 		SetPromoCodeID(promoCodeID).
 		SetOrderID(orderID).
-		SetUserID(userID).
 		SetPromoCode(snapshot.PromoCode).
 		SetDiscountType(snapshot.DiscountType).
 		SetDiscountValue(snapshot.DiscountValue).
@@ -300,8 +299,13 @@ func (r *promotionRepository) UpsertPromotionUsageFromSnapshot(
 		SetRemakeCount(snapshot.RemakeCount).
 		SetAppliedConditions(snapshot.AppliedConditions).
 		SetAppliedAt(snapshot.AppliedAt).
-		SetUsedAt(snapshot.AppliedAt).
-		Save(ctx)
+		SetUsedAt(snapshot.AppliedAt)
+
+	if userID != nil {
+		q.SetUserID(*userID)
+	}
+
+	_, err = q.Save(ctx)
 
 	return err
 }
@@ -311,7 +315,7 @@ func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 	tx *generated.Tx,
 	promoCodeID int,
 	orderID int64,
-	userID int,
+	userID *int,
 	snapshot *model.PromotionSnapshot,
 ) error {
 	if snapshot == nil {
@@ -325,10 +329,9 @@ func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 		q = tx.PromotionUsage.Create()
 	}
 
-	_, err := q.
+	qent := q.
 		SetPromoCodeID(promoCodeID).
 		SetOrderID(orderID).
-		SetUserID(userID).
 		SetPromoCode(snapshot.PromoCode).
 		SetDiscountType(snapshot.DiscountType).
 		SetDiscountValue(snapshot.DiscountValue).
@@ -337,8 +340,12 @@ func (r *promotionRepository) CreatePromotionUsageFromSnapshot(
 		SetRemakeCount(snapshot.RemakeCount).
 		SetAppliedConditions(snapshot.AppliedConditions).
 		SetAppliedAt(snapshot.AppliedAt).
-		SetUsedAt(snapshot.AppliedAt).
-		Save(ctx)
+		SetUsedAt(snapshot.AppliedAt)
+
+	if userID != nil {
+		qent.SetUserID(*userID)
+	}
+	_, err := qent.Save(ctx)
 	return err
 }
 
