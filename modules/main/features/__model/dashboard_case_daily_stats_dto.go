@@ -7,11 +7,6 @@ type AvgTurnaroundResult struct {
 	DeltaDays float64
 }
 
-type AvgTurnaroundByDepartment struct {
-	DepartmentID int
-	AvgDays      float64
-}
-
 type CaseDailyStatsUpsert struct {
 	ReceivedAt   time.Time
 	CompletedAt  time.Time

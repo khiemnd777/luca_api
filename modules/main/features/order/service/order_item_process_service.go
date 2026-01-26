@@ -265,7 +265,7 @@ func (s *orderItemProcessService) CheckInOrOut(
 		})
 
 		if orderstatus != nil && "completed" == *orderstatus {
-			pubsub.PublishAsync("order:completed", &model.CaseDailyStatsUpsert{
+			pubsub.PublishAsync("dashboard:daily:stats", &model.CaseDailyStatsUpsert{
 				DepartmentID: deptID,
 				CompletedAt:  *dto.CompletedAt,
 				ReceivedAt:   *ordercreatedat,
