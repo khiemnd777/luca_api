@@ -8,6 +8,7 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_stats/repository"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
 )
 
 type CaseDailyStatsService interface {
@@ -43,7 +44,15 @@ func NewCaseDailyStatsService(
 	repo repository.CaseDailyStatsRepository,
 	deps *module.ModuleDeps[config.ModuleConfig],
 ) CaseDailyStatsService {
-	return &caseDailyStatsService{repo: repo, deps: deps}
+	svc := &caseDailyStatsService{repo: repo, deps: deps}
+
+	pubsub.SubscribeAsync("order:completed", func(payload *model.CaseDailyStatsUpsert) error {
+		ctx := context.Background()
+		turnaroundsec := payload.CompletedAt.Sub(payload.ReceivedAt).Seconds()
+		return svc.UpsertOne(ctx, payload.CompletedAt, payload.DepartmentID, int64(turnaroundsec))
+	})
+
+	return svc
 }
 
 func (s *caseDailyStatsService) UpsertOne(
