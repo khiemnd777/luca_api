@@ -209,7 +209,7 @@ func (s *orderItemProcessService) CheckInOrOut(
 	checkInOrOutData *model.OrderItemProcessInProgressDTO,
 ) (*model.OrderItemProcessInProgressDTO, error) {
 	var err error
-	dto, _, orderstatus, ordercreatedat, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
+	dto, _, orderstatus, orderitem, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,13 @@ func (s *orderItemProcessService) CheckInOrOut(
 			pubsub.PublishAsync("dashboard:daily:stats", &model.CaseDailyStatsUpsert{
 				DepartmentID: deptID,
 				CompletedAt:  *dto.CompletedAt,
-				ReceivedAt:   *ordercreatedat,
+				ReceivedAt:   orderitem.CreatedAt,
+			})
+
+			pubsub.PublishAsync("dashboard:daily:remake:stats", &model.CaseDailyRemakeStatsUpsert{
+				DepartmentID: deptID,
+				CompletedAt:  *dto.CompletedAt,
+				IsRemake:     orderitem.RemakeCount > 0,
 			})
 		}
 	}
