@@ -23,8 +23,8 @@ import (
 type OrderItemProcessInProgressRepository interface {
 	PrepareCheckInOrOut(ctx context.Context, tx *generated.Tx, orderItemID int64, orderID *int64) (*model.OrderItemProcessInProgressDTO, error)
 	PrepareCheckInOrOutByCode(ctx context.Context, code string) (*model.OrderItemProcessInProgressDTO, error)
-	CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, *string, *string, error)
-	Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, *string, *string, error)
+	CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, *string, *string, *time.Time, error)
+	Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, *string, *string, *time.Time, error)
 	CheckIn(ctx context.Context, tx *generated.Tx, orderItemID int64, orderID *int64, note *string) (*model.OrderItemProcessInProgressDTO, error)
 	CheckOut(ctx context.Context, tx *generated.Tx, orderItemID int64, note *string) (*model.OrderItemProcessInProgressDTO, error)
 	GetLatest(ctx context.Context, tx *generated.Tx, orderItemID int64) (*model.OrderItemProcessInProgressDTO, error)
@@ -353,12 +353,12 @@ func (r *orderItemProcessInProgressRepository) Assign(
 	assignedID *int64,
 	assignedName *string,
 	note *string,
-) (*model.OrderItemProcessInProgressDTO, *string, *string, error) {
+) (*model.OrderItemProcessInProgressDTO, *string, *string, *time.Time, error) {
 
 	var err error
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -376,11 +376,11 @@ func (r *orderItemProcessInProgressRepository) Assign(
 		Where(orderitemprocessinprogress.ID(inprogressID)).
 		Only(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	if current.ProcessID == nil {
-		return nil, nil, nil, fmt.Errorf("process id is required for inprogress %d", inprogressID)
+		return nil, nil, nil, nil, fmt.Errorf("process id is required for inprogress %d", inprogressID)
 	}
 
 	// Resolve process status
@@ -393,7 +393,7 @@ func (r *orderItemProcessInProgressRepository) Assign(
 		).
 		Only(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	status := proc.Status
@@ -414,11 +414,11 @@ func (r *orderItemProcessInProgressRepository) Assign(
 			SetNillableCheckInNote(note).
 			Save(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](updated)
-		return dto, &status, nil, nil
+		return dto, &status, nil, nil, nil
 	}
 
 	// Close current
@@ -430,7 +430,7 @@ func (r *orderItemProcessInProgressRepository) Assign(
 		// SetCompletedAt(now).
 		SetCheckOutNote(checkoutNote).
 		Save(ctx); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Create new inprogress
@@ -448,7 +448,7 @@ func (r *orderItemProcessInProgressRepository) Assign(
 		SetStartedAt(now).
 		Save(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Sync process status
@@ -460,28 +460,37 @@ func (r *orderItemProcessInProgressRepository) Assign(
 		assignedID,
 		assignedName,
 	); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// sync status back to order and order item
-	orderstatus, err := r.syncOrderAndItemStatus(ctx, tx, current.OrderItemID, current.OrderID)
+	orderstatus, ordercreatedat, err := r.syncOrderAndItemStatus(ctx, tx, current.OrderItemID, current.OrderID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
-	return dto, &status, orderstatus, nil
+	return dto, &status, orderstatus, ordercreatedat, nil
 }
 
-func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, *string, *string, error) {
+func (r *orderItemProcessInProgressRepository) CheckInOrOut(
+	ctx context.Context,
+	checkInOrOutData *model.OrderItemProcessInProgressDTO,
+) (
+	*model.OrderItemProcessInProgressDTO,
+	*string,
+	*string,
+	*time.Time,
+	error,
+) {
 	if checkInOrOutData == nil {
-		return nil, nil, nil, fmt.Errorf("checkInOrOutData is required")
+		return nil, nil, nil, nil, fmt.Errorf("checkInOrOutData is required")
 	}
 
 	var err error
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -495,12 +504,12 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 	if checkInOrOutData.ID > 0 {
 		if checkInOrOutData.ProcessID == nil {
 			err = fmt.Errorf("process id is required for checkout of order item process %d", checkInOrOutData.ID)
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		leaderID, leaderName, sectionName, processName, err := r.ProcessInfoByProcessID(ctx, tx, checkInOrOutData.NextProcessID)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		completedAt := time.Now()
@@ -517,31 +526,31 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 			SetCompletedAt(completedAt).
 			Save(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		if err := r.updateProcessStatus(ctx, tx, *checkInOrOutData.ProcessID, "completed"); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		// sync status back to order and order item
-		orderstatus, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID)
+		orderstatus, ordercreatedat, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		// sync process to order
 		if err := r.syncOrderProcessLatest(ctx, tx, *checkInOrOutData.ProcessID, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
-		return dto, nil, orderstatus, nil
+		return dto, nil, orderstatus, ordercreatedat, nil
 	}
 
 	if checkInOrOutData.ProcessID == nil {
 		err = fmt.Errorf("process id is required for checkin of order item %d", checkInOrOutData.OrderItemID)
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	proc, err := r.processClient(tx).
@@ -550,7 +559,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		Select(orderitemprocess.FieldSectionName).
 		Only(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	checkInOrOutData.SectionName = proc.SectionName
 	checkInOrOutData.SectionID = proc.SectionID
@@ -572,13 +581,13 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		SetStartedAt(startedAt).
 		Save(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// process's status
 	rework, err := r.hasCompletedProcess(ctx, tx, *checkInOrOutData.ProcessID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	status := "in_progress"
 	if rework {
@@ -592,22 +601,22 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(ctx context.Context,
 		checkInOrOutData.AssignedID,
 		checkInOrOutData.AssignedName,
 	); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// sync status back to order and order item
-	orderstatus, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID)
+	orderstatus, ordercreatedat, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// sync process to order
 	if err := r.syncOrderProcessLatest(ctx, tx, *checkInOrOutData.ProcessID, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
-	return dto, &status, orderstatus, nil
+	return dto, &status, orderstatus, ordercreatedat, nil
 }
 
 func (r *orderItemProcessInProgressRepository) CheckIn(ctx context.Context, tx *generated.Tx, orderItemID int64, orderID *int64, note *string) (*model.OrderItemProcessInProgressDTO, error) {
@@ -816,17 +825,17 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 	tx *generated.Tx,
 	orderItemID int64,
 	orderID *int64,
-) (*string, error) {
+) (*string, *time.Time, error) {
 	processes, err := r.processClient(tx).
 		Query().
 		Where(orderitemprocess.OrderItemID(orderItemID)).
 		Select(orderitemprocess.FieldCustomFields).
 		All(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(processes) == 0 {
-		return nil, fmt.Errorf("no processes found for order item %d", orderItemID)
+		return nil, nil, fmt.Errorf("no processes found for order item %d", orderItemID)
 	}
 
 	allWaiting := true
@@ -868,7 +877,7 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 		).
 		Only(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	cf := maps.Clone(orderItem.CustomFields)
@@ -881,7 +890,7 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 		UpdateOneID(orderItemID).
 		SetCustomFields(cf).
 		Save(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if orderID == nil {
@@ -893,11 +902,11 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 		if _, err := tx.Order.UpdateOneID(*orderID).
 			SetNillableStatusLatest(&orderStatus).
 			Save(ctx); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	return &orderStatus, nil
+	return &orderStatus, &orderItem.CreatedAt, nil
 }
 
 func (r *orderItemProcessInProgressRepository) syncOrderProcessLatest(

@@ -13,6 +13,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/modules/notification"
 	"github.com/khiemnd777/andy_api/shared/modules/realtime"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -69,6 +70,7 @@ type OrderItemProcessService interface {
 
 	CheckInOrOut(
 		ctx context.Context,
+		deptID int,
 		userID int,
 		checkInOrOutData *model.OrderItemProcessInProgressDTO,
 	) (*model.OrderItemProcessInProgressDTO, error)
@@ -200,9 +202,14 @@ func (s *orderItemProcessService) PrepareCheckInOrOutByCode(ctx context.Context,
 }
 
 // TODO: remove all orderID, orderItemID
-func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, error) {
+func (s *orderItemProcessService) CheckInOrOut(
+	ctx context.Context,
+	deptID,
+	userID int,
+	checkInOrOutData *model.OrderItemProcessInProgressDTO,
+) (*model.OrderItemProcessInProgressDTO, error) {
 	var err error
-	dto, _, _, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
+	dto, _, orderstatus, ordercreatedat, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +263,14 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, 
 			"section_name":    dto.NextSectionName,
 			"process_name":    dto.NextProcessName,
 		})
+
+		if orderstatus != nil && "completed" == *orderstatus {
+			pubsub.PublishAsync("order:completed", &model.CaseDailyStatsUpsert{
+				DepartmentID: deptID,
+				CompletedAt:  *dto.CompletedAt,
+				ReceivedAt:   *ordercreatedat,
+			})
+		}
 	}
 
 	realtime.BroadcastAll("order:inprogress", nil)
@@ -264,7 +279,7 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, 
 }
 
 func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
-	dto, _, _, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
+	dto, _, _, _, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
 	if err != nil {
 		return nil, err
 	}
