@@ -202,7 +202,7 @@ func (s *orderItemProcessService) PrepareCheckInOrOutByCode(ctx context.Context,
 // TODO: remove all orderID, orderItemID
 func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, error) {
 	var err error
-	dto, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
+	dto, _, _, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, 
 }
 
 func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
-	dto, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
+	dto, _, _, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
 	if err != nil {
 		return nil, err
 	}
