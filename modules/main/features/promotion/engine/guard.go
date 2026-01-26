@@ -61,7 +61,7 @@ func (g *Guard) EnsureValidPromo(
 		return PromotionApplyError{Reason: ReasonPromotionNotStarted}
 	}
 
-	if promo.EndAt.Before(now) {
+	if promo.EndAt != nil && promo.EndAt.Before(now) {
 		return PromotionApplyError{Reason: ReasonPromotionExpired}
 	}
 

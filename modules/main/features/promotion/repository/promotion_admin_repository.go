@@ -60,7 +60,7 @@ func (r *promotionAdminRepository) CreatePromotion(
 			SetDiscountValue(input.DiscountValue).
 			SetIsActive(input.IsActive).
 			SetStartAt(input.StartAt).
-			SetEndAt(input.EndAt).
+			SetNillableEndAt(input.EndAt).
 			SetNillableMaxDiscountAmount(input.MaxDiscountAmount).
 			SetNillableMinOrderValue(input.MinOrderValue).
 			SetNillableTotalUsageLimit(input.TotalUsageLimit).
@@ -132,7 +132,7 @@ func (r *promotionAdminRepository) UpdatePromotion(
 			SetNillableTotalUsageLimit(input.TotalUsageLimit).
 			SetNillableUsagePerUser(input.UsagePerUser).
 			SetStartAt(input.StartAt).
-			SetEndAt(input.EndAt).
+			SetNillableEndAt(input.EndAt).
 			SetIsActive(input.IsActive)
 
 		promo, err := q.Save(ctx)

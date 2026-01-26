@@ -30,7 +30,7 @@ type PromotionCodeDTO struct {
 	TotalUsageLimit   *int                       `json:"total_usage_limit,omitempty"`
 	UsagePerUser      *int                       `json:"usage_per_user,omitempty"`
 	StartAt           time.Time                  `json:"start_at,omitempty"`
-	EndAt             time.Time                  `json:"end_at,omitempty"`
+	EndAt             *time.Time                 `json:"end_at,omitempty"`
 	IsActive          bool                       `json:"is_active,omitempty"`
 	Scopes            []PromotionScopeInput      `json:"scopes,omitempty"`
 	Conditions        []PromotionConditionInput  `json:"conditions,omitempty"`
@@ -83,7 +83,7 @@ type CreatePromotionInput struct {
 	TotalUsageLimit   *int                       `json:"total_usage_limit,omitempty"`
 	UsagePerUser      *int                       `json:"usage_per_user,omitempty"`
 	StartAt           time.Time                  `json:"start_at,omitempty"`
-	EndAt             time.Time                  `json:"end_at,omitempty"`
+	EndAt             *time.Time                 `json:"end_at,omitempty"`
 	IsActive          bool                       `json:"is_active"`
 	Scopes            []PromotionScopeInput      `json:"scopes"`
 	Conditions        []PromotionConditionInput  `json:"conditions"`
@@ -97,7 +97,7 @@ type UpdatePromotionInput struct {
 	TotalUsageLimit   *int                       `json:"total_usage_limit,omitempty"`
 	UsagePerUser      *int                       `json:"usage_per_user,omitempty"`
 	StartAt           time.Time                  `json:"start_at,omitempty"`
-	EndAt             time.Time                  `json:"end_at,omitempty"`
+	EndAt             *time.Time                 `json:"end_at,omitempty"`
 	IsActive          bool                       `json:"is_active"`
 	Scopes            []PromotionScopeInput      `json:"scopes"`
 	Conditions        []PromotionConditionInput  `json:"conditions"`

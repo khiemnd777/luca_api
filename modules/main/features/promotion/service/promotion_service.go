@@ -108,7 +108,7 @@ func (s *promotionService) ApplyPromotionV1(
 	if promo.StartAt.After(now) {
 		return nil, PromotionApplyError{Reason: engine.ReasonPromotionNotStarted}
 	}
-	if promo.EndAt.Before(now) {
+	if promo.EndAt != nil && promo.EndAt.Before(now) {
 		return nil, PromotionApplyError{Reason: engine.ReasonPromotionExpired}
 	}
 

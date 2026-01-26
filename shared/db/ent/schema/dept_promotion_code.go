@@ -35,7 +35,9 @@ func (PromotionCode) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 		field.Time("start_at"),
-		field.Time("end_at"),
+		field.Time("end_at").
+			Optional().
+			Nillable(),
 		field.Bool("is_active").
 			Default(true),
 		field.Time("created_at").

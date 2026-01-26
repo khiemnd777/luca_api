@@ -167,7 +167,7 @@ func (r *orderRepository) applyPromotionForSnapshot(
 	if promo.StartAt.After(now) {
 		return nil, fmt.Errorf("promotion_not_started")
 	}
-	if promo.EndAt.Before(now) {
+	if promo.EndAt != nil && promo.EndAt.Before(now) {
 		return nil, fmt.Errorf("promotion_expired")
 	}
 
