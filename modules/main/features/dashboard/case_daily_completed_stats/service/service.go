@@ -31,7 +31,7 @@ type CaseDailyCompletedStatsService interface {
 		toDate time.Time,
 		previousFrom time.Time,
 		previousTo time.Time,
-	) (*model.ActiveCasesResult, error)
+	) (*model.CompletedCasesResult, error)
 }
 
 type caseDailyCompletedStatsService struct {
@@ -76,6 +76,6 @@ func (s *caseDailyCompletedStatsService) CompletedCases(
 	toDate time.Time,
 	previousFrom time.Time,
 	previousTo time.Time,
-) (*model.ActiveCasesResult, error) {
+) (*model.CompletedCasesResult, error) {
 	return s.repo.CompletedCases(ctx, departmentID, fromDate, toDate, previousFrom, previousTo)
 }

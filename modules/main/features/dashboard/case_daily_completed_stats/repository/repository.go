@@ -31,7 +31,7 @@ type CaseDailyCompletedStatsRepository interface {
 		toDate time.Time,
 		previousFrom time.Time,
 		previousTo time.Time,
-	) (*model.ActiveCasesResult, error)
+	) (*model.CompletedCasesResult, error)
 }
 
 type caseDailyCompletedStatsRepository struct {
@@ -133,7 +133,7 @@ func (r *caseDailyCompletedStatsRepository) CompletedCases(
 	toDate time.Time,
 	previousFrom time.Time,
 	previousTo time.Time,
-) (*model.ActiveCasesResult, error) {
+) (*model.CompletedCasesResult, error) {
 
 	const q = `
 WITH current_period AS (
@@ -142,7 +142,7 @@ WITH current_period AS (
   WHERE
     stat_date >= $1
     AND stat_date <  $2
-    AND ($3 IS NULL OR department_id = $3)
+    AND ($3::INT IS NULL OR department_id = $3::INT)
 ),
 previous_period AS (
   SELECT COALESCE(SUM(completed_cases), 0) AS value
@@ -150,7 +150,7 @@ previous_period AS (
   WHERE
     stat_date >= $4
     AND stat_date <  $5
-    AND ($3 IS NULL OR department_id = $3)
+    AND ($3::INT IS NULL OR department_id = $3::INT)
 )
 SELECT
   c.value AS value,
@@ -159,7 +159,7 @@ FROM current_period c
 CROSS JOIN previous_period p;
 `
 
-	var res model.ActiveCasesResult
+	var res model.CompletedCasesResult
 
 	err := r.sqlDB.QueryRowContext(
 		ctx,

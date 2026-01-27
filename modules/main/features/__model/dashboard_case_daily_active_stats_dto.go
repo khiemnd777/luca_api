@@ -3,8 +3,8 @@ package model
 import "time"
 
 type ActiveCasesResult struct {
-	Value int
-	Delta int
+	Value int `json:"value,omitempty"`
+	Delta int `json:"delta,omitempty"`
 }
 
 type CaseDailyActiveStatsUpsert struct {

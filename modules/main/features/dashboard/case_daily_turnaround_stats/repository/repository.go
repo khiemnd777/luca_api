@@ -151,7 +151,7 @@ WITH current_period AS (
   WHERE
     stat_date >= $1
     AND stat_date <  $2
-    AND ($3 IS NULL OR department_id = $3)
+    AND ($3::INT IS NULL OR department_id = $3::INT)
 ),
 previous_period AS (
   SELECT
@@ -161,7 +161,7 @@ previous_period AS (
   WHERE
     stat_date >= $4
     AND stat_date <  $5
-    AND ($3 IS NULL OR department_id = $3)
+    AND ($3::INT IS NULL OR department_id = $3::INT)
 )
 SELECT
   COALESCE(c.avg_sec / 86400, 0)                   AS avg_days,
