@@ -42,6 +42,7 @@ func (r *dueTodayRepository) DueToday(
 
 	const q = `
 SELECT
+	o.id,
   oi.code,
   o.dentist_name,
   o.patient_name,
@@ -51,7 +52,7 @@ FROM order_items oi
 JOIN orders o ON o.id = oi.order_id
 WHERE
 	o.department_id=$1::INT
-  (oi.custom_fields->>'delivery_date')::timestamptz >= date_trunc('day', now())
+  AND (oi.custom_fields->>'delivery_date')::timestamptz >= date_trunc('day', now())
   AND (oi.custom_fields->>'delivery_date')::timestamptz <  date_trunc('day', now()) + interval '1 day'
   AND oi.custom_fields->>'status' IN (
     'received',
@@ -75,6 +76,7 @@ ORDER BY
 	for rows.Next() {
 		var it model.DueTodayItem
 		if err := rows.Scan(
+			&it.ID,
 			&it.Code,
 			&it.Dentist,
 			&it.Patient,
