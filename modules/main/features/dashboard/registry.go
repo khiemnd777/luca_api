@@ -16,6 +16,9 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/handler"
 	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/repository"
 	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
+	duetodayhlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/handler"
+	duetodayrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/repository"
+	duetodaysvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/service"
 	"github.com/khiemnd777/andy_api/modules/main/registry"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
@@ -55,6 +58,12 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	caseDailyActiveStatsSvc := dailyactivesvc.NewCaseDailyActiveStatsService(caseDailyActiveStatsRepo, deps)
 	caseDailyActiveStatsHandler := dailyactivehlr.NewCaseDailyActiveStatsHandler(caseDailyActiveStatsSvc, deps)
 	caseDailyActiveStatsHandler.RegisterRoutes(router)
+
+	// Due Today
+	duetodayRepo := duetodayrepo.NewDueTodayRepository(entClient, deps.DB, deps)
+	duetodaySvc := duetodaysvc.NewDueTodayService(duetodayRepo, deps)
+	duetodayHandler := duetodayhlr.NewDueTodayHandler(duetodaySvc, deps)
+	duetodayHandler.RegisterRoutes(router)
 
 	return nil
 }

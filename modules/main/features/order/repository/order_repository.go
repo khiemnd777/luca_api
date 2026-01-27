@@ -45,12 +45,12 @@ type OrderRepository interface {
 		ctx context.Context,
 		orderID int64,
 	) (*model.OrderDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	GetOrdersBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
-	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
-	NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
-	CompletedList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
+	InProgressList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
+	NewestList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
+	CompletedList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -154,6 +154,7 @@ func (r *orderRepository) createNewOrder(
 	)
 
 	q := tx.Order.Create().
+		SetNillableDepartmentID(dto.DepartmentID).
 		SetNillableCode(dto.Code).
 		SetNillablePromotionCode(dto.PromotionCode).
 		SetNillablePromotionCodeID(dto.PromotionCodeID).
@@ -847,11 +848,13 @@ func (r *orderRepository) PrepareForRemakeByOrderID(
 	return dto, nil
 }
 
-func (r *orderRepository) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
+func (r *orderRepository) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Order.Query().
-			Where(order.DeletedAtIsNil()),
+			Where(order.DepartmentIDEQ(deptID),
+				order.DeletedAtIsNil(),
+			),
 		query,
 		order.Table,
 		order.FieldID,
@@ -898,11 +901,12 @@ func (r *orderRepository) GetOrdersBySectionID(
 	return list, nil
 }
 
-func (r *orderRepository) InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error) {
+func (r *orderRepository) InProgressList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Order.Query().
 			Where(
+				order.DepartmentIDEQ(deptID),
 				order.DeletedAtIsNil(),
 				order.StatusLatestEQ("in_progress"),
 			),
@@ -934,11 +938,12 @@ func (r *orderRepository) InProgressList(ctx context.Context, query table.TableQ
 	return list, nil
 }
 
-func (r *orderRepository) NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error) {
+func (r *orderRepository) NewestList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Order.Query().
 			Where(
+				order.DepartmentIDEQ(deptID),
 				order.DeletedAtIsNil(),
 				order.StatusLatestEQ("received"),
 			),
@@ -968,11 +973,12 @@ func (r *orderRepository) NewestList(ctx context.Context, query table.TableQuery
 	return list, nil
 }
 
-func (r *orderRepository) CompletedList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error) {
+func (r *orderRepository) CompletedList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Order.Query().
 			Where(
+				order.DepartmentIDEQ(deptID),
 				order.DeletedAtIsNil(),
 				order.StatusLatestEQ("completed"),
 			),
@@ -1002,11 +1008,13 @@ func (r *orderRepository) CompletedList(ctx context.Context, query table.TableQu
 	return list, nil
 }
 
-func (r *orderRepository) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error) {
+func (r *orderRepository) Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error) {
 	return dbutils.Search(
 		ctx,
 		r.db.Order.Query().
-			Where(order.DeletedAtIsNil()),
+			Where(order.DepartmentIDEQ(deptID),
+				order.DeletedAtIsNil(),
+			),
 		[]string{
 			dbutils.GetNormField(order.FieldCode),
 		},
