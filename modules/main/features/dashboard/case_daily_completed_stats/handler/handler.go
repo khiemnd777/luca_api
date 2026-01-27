@@ -4,7 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_remake_stats/service"
+	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_completed_stats/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -13,20 +13,20 @@ import (
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
-type CaseDailyRemakeStatsHandler struct {
-	svc  service.CaseDailyRemakeStatsService
+type CaseDailyCompletedStatsHandler struct {
+	svc  service.CaseDailyCompletedStatsService
 	deps *module.ModuleDeps[config.ModuleConfig]
 }
 
-func NewCaseDailyRemakeStatsHandler(svc service.CaseDailyRemakeStatsService, deps *module.ModuleDeps[config.ModuleConfig]) *CaseDailyRemakeStatsHandler {
-	return &CaseDailyRemakeStatsHandler{svc: svc, deps: deps}
+func NewCaseDailyCompletedStatsHandler(svc service.CaseDailyCompletedStatsService, deps *module.ModuleDeps[config.ModuleConfig]) *CaseDailyCompletedStatsHandler {
+	return &CaseDailyCompletedStatsHandler{svc: svc, deps: deps}
 }
 
-func (h *CaseDailyRemakeStatsHandler) RegisterRoutes(router fiber.Router) {
-	app.RouterGet(router, "/:dept_id<int>/dashboard/case-daily-remake-stats/avg-remake-rate", h.RemakeRate)
+func (h *CaseDailyCompletedStatsHandler) RegisterRoutes(router fiber.Router) {
+	app.RouterGet(router, "/:dept_id<int>/dashboard/case-daily-completed-stats/completed-cases", h.CompletedCases)
 }
 
-func (h *CaseDailyRemakeStatsHandler) RemakeRate(c *fiber.Ctx) error {
+func (h *CaseDailyCompletedStatsHandler) CompletedCases(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
@@ -80,7 +80,7 @@ func (h *CaseDailyRemakeStatsHandler) RemakeRate(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid previous_to_date")
 	}
 
-	res, err := h.svc.AvgRemakeRate(
+	res, err := h.svc.CompletedCases(
 		c.UserContext(),
 		departmentID,
 		fromDate,

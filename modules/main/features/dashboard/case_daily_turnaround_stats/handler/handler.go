@@ -4,7 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_stats/service"
+	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"

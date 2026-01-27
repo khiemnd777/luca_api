@@ -276,6 +276,11 @@ func (s *orderItemProcessService) CheckInOrOut(
 				CompletedAt:  *dto.CompletedAt,
 				IsRemake:     orderitem.RemakeCount > 0,
 			})
+
+			pubsub.PublishAsync("dashboard:daily:completed:stats", &model.CaseDailyCompletedStatsUpsert{
+				DepartmentID: deptID,
+				CompletedAt:  *dto.CompletedAt,
+			})
 		}
 	}
 

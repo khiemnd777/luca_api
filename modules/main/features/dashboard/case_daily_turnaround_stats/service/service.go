@@ -6,7 +6,7 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_stats/repository"
+	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/repository"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/pubsub"
 )

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_stats/service"
+	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
 	"github.com/khiemnd777/andy_api/shared/logger"
 )
 
