@@ -148,6 +148,11 @@ func (s *orderService) Create(ctx context.Context, deptID int, userID int, input
 	}
 	realtime.BroadcastAll("order:newest", nil)
 
+	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
 	return dto, nil
 }
 
@@ -161,6 +166,11 @@ func (s *orderService) Update(ctx context.Context, deptID, userID int, input *mo
 		cache.InvalidateKeys(kOrderByID(dto.ID), kOrderByIDAll(dto.ID))
 	}
 	cache.InvalidateKeys(kOrderAll()...)
+
+	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
 
 	s.upsertSearch(ctx, deptID, dto)
 

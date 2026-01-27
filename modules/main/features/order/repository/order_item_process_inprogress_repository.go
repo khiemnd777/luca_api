@@ -889,6 +889,7 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 	if _, err := tx.OrderItem.
 		UpdateOneID(orderItemID).
 		SetCustomFields(cf).
+		SetStatus(orderStatus).
 		Save(ctx); err != nil {
 		return nil, nil, err
 	}

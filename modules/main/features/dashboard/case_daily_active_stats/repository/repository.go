@@ -11,22 +11,16 @@ import (
 	"github.com/khiemnd777/andy_api/shared/module"
 )
 
-type CaseDailyCompletedStatsRepository interface {
+type CaseDailyActiveStatsRepository interface {
 	UpsertOne(
 		ctx context.Context,
-		completedAt time.Time,
+		statDate time.Time,
 		departmentID int,
 	) error
 
-	RebuildRange(
+	ActiveCases(
 		ctx context.Context,
-		fromDate time.Time,
-		toDate time.Time,
-	) error
-
-	CompletedCases(
-		ctx context.Context,
-		departmentID *int, // nil = all departments
+		departmentID *int,
 		fromDate time.Time,
 		toDate time.Time,
 		previousFrom time.Time,
@@ -34,25 +28,25 @@ type CaseDailyCompletedStatsRepository interface {
 	) (*model.ActiveCasesResult, error)
 }
 
-type caseDailyCompletedStatsRepository struct {
+type caseDailyActiveStatsRepository struct {
 	db    *generated.Client
 	sqlDB *sql.DB
 	deps  *module.ModuleDeps[config.ModuleConfig]
 }
 
-func NewCaseDailyCompletedStatsRepository(
+func NewCaseDailyActiveStatsRepository(
 	db *generated.Client,
 	sqlDB *sql.DB,
 	deps *module.ModuleDeps[config.ModuleConfig],
-) CaseDailyCompletedStatsRepository {
-	return &caseDailyCompletedStatsRepository{
+) CaseDailyActiveStatsRepository {
+	return &caseDailyActiveStatsRepository{
 		db:    db,
 		sqlDB: sqlDB,
 		deps:  deps,
 	}
 }
 
-func (r *caseDailyCompletedStatsRepository) UpsertOne(
+func (r *caseDailyActiveStatsRepository) UpsertOne(
 	ctx context.Context,
 	statDate time.Time,
 	departmentID int,
@@ -61,21 +55,26 @@ func (r *caseDailyCompletedStatsRepository) UpsertOne(
 	const q = `
 INSERT INTO case_daily_active_stats (
   stat_date,
+  department_id,
   active_cases
 )
 SELECT
   $1 AS stat_date,
+  $2 AS department_id,
   COUNT(*) AS active_cases
-FROM order_items oi
-WHERE
-  oi.custom_fields->>'status' IN (
-    'received',
-    'in_progress',
-    'qc',
-    'issue',
-    'rework'
-  )
-ON CONFLICT (stat_date) DO UPDATE
+FROM (
+  SELECT 1
+  FROM order_items oi
+  WHERE
+    oi.custom_fields->>'status' IN (
+      'received',
+      'in_progress',
+      'qc',
+      'issue',
+      'rework'
+    )
+) t
+ON CONFLICT (stat_date, department_id) DO UPDATE
 SET
   active_cases = EXCLUDED.active_cases,
   updated_at = now();
@@ -85,50 +84,15 @@ SET
 		ctx,
 		q,
 		statDate.UTC(),
+		departmentID,
 	)
 
 	return err
 }
 
-func (r *caseDailyCompletedStatsRepository) RebuildRange(
+func (r *caseDailyActiveStatsRepository) ActiveCases(
 	ctx context.Context,
-	fromDate time.Time,
-	toDate time.Time,
-) error {
-	const q = `
-INSERT INTO case_daily_completed_stats (
-  stat_date,
-  department_id,
-  completed_cases
-)
-SELECT
-  DATE(completed_at),
-  department_id,
-  COUNT(*)
-FROM cases
-WHERE
-  completed_at >= $1
-  AND completed_at <  $2
-GROUP BY
-  DATE(completed_at),
-  department_id
-ON CONFLICT (stat_date, department_id) DO UPDATE
-SET
-  completed_cases = EXCLUDED.completed_cases,
-  updated_at = now();
-`
-	_, err := r.sqlDB.ExecContext(
-		ctx,
-		q,
-		fromDate.UTC(),
-		toDate.UTC(),
-	)
-	return err
-}
-
-func (r *caseDailyCompletedStatsRepository) CompletedCases(
-	ctx context.Context,
-	departmentID *int, // nil = all departments
+	departmentID *int,
 	fromDate time.Time,
 	toDate time.Time,
 	previousFrom time.Time,
@@ -137,16 +101,18 @@ func (r *caseDailyCompletedStatsRepository) CompletedCases(
 
 	const q = `
 WITH current_period AS (
-  SELECT COALESCE(SUM(completed_cases), 0) AS value
-  FROM case_daily_completed_stats
+  SELECT
+    COALESCE(SUM(active_cases), 0) AS value
+  FROM case_daily_active_stats
   WHERE
     stat_date >= $1
     AND stat_date <  $2
     AND ($3 IS NULL OR department_id = $3)
 ),
 previous_period AS (
-  SELECT COALESCE(SUM(completed_cases), 0) AS value
-  FROM case_daily_completed_stats
+  SELECT
+    COALESCE(SUM(active_cases), 0) AS value
+  FROM case_daily_active_stats
   WHERE
     stat_date >= $4
     AND stat_date <  $5

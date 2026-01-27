@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
@@ -280,6 +281,11 @@ func (s *orderItemProcessService) CheckInOrOut(
 			pubsub.PublishAsync("dashboard:daily:completed:stats", &model.CaseDailyCompletedStatsUpsert{
 				DepartmentID: deptID,
 				CompletedAt:  *dto.CompletedAt,
+			})
+
+			pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+				DepartmentID: deptID,
+				StatAt:       time.Now(),
 			})
 		}
 	}
