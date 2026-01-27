@@ -13,9 +13,12 @@ import (
 	dailyremakehlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_remake_stats/handler"
 	dailyremakerepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_remake_stats/repository"
 	dailyremakesvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_remake_stats/service"
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/handler"
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/repository"
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
+	turnaroundhlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/handler"
+	turnaroundrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/repository"
+	turnaroundsvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
+	casestatuseshlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_statuses/handler"
+	casestatusesrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_statuses/repository"
+	casestatusessvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_statuses/service"
 	duetodayhlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/handler"
 	duetodayrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/repository"
 	duetodaysvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/service"
@@ -33,9 +36,9 @@ func (feature) Priority() int { return 69 }
 func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.ModuleConfig], cfMgr *customfields.Manager) error {
 	entClient := deps.Ent.(*generated.Client)
 	// Case Daily Stats
-	caseDailyStatsRepo := repository.NewCaseDailyStatsRepository(entClient, deps.DB, deps)
-	caseDailyStatsSvc := service.NewCaseDailyStatsService(caseDailyStatsRepo, deps)
-	caseDailyStatsHandler := handler.NewCaseDailyStatsHandler(caseDailyStatsSvc, deps)
+	caseDailyStatsRepo := turnaroundrepo.NewCaseDailyStatsRepository(entClient, deps.DB, deps)
+	caseDailyStatsSvc := turnaroundsvc.NewCaseDailyStatsService(caseDailyStatsRepo, deps)
+	caseDailyStatsHandler := turnaroundhlr.NewCaseDailyStatsHandler(caseDailyStatsSvc, deps)
 	caseDailyStatsHandler.RegisterRoutes(router)
 	// cron.RegisterJob(jobs.NewCaseDailyStatsRebuildRangeJob(caseDailyStatsSvc))
 
@@ -64,6 +67,12 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	duetodaySvc := duetodaysvc.NewDueTodayService(duetodayRepo, deps)
 	duetodayHandler := duetodayhlr.NewDueTodayHandler(duetodaySvc, deps)
 	duetodayHandler.RegisterRoutes(router)
+
+	// Case Statuses
+	caseStatusesRepo := casestatusesrepo.NewCaseStatusesRepository(entClient, deps.DB, deps)
+	caseStatusesSvc := casestatusessvc.NewCaseStatusesService(caseStatusesRepo, deps)
+	caseStatusesHandler := casestatuseshlr.NewCaseStatusesHandler(caseStatusesSvc, deps)
+	caseStatusesHandler.RegisterRoutes(router)
 
 	return nil
 }
