@@ -143,6 +143,9 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 	if _, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_brand_names", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
 
 	return out, nil
 }
@@ -221,6 +224,9 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 	out := mapper.MapAs[*generated.Product, *model.ProductDTO](entity)
 
 	if _, err = relation.UpsertM2M(ctx, tx, "products_processes", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_brand_names", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 

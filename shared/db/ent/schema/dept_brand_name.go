@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 )
@@ -33,6 +34,12 @@ func (BrandName) Fields() []ent.Field {
 		field.Time("deleted_at").
 			Optional().
 			Nillable(),
+	}
+}
+
+func (BrandName) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("products", ProductBrandName.Type),
 	}
 }
 
