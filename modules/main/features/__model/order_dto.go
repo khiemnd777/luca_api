@@ -7,6 +7,7 @@ import (
 type OrderDTO struct {
 	// General
 	ID              int64          `json:"id,omitempty"`
+	DepartmentID    *int           `json:"department_id,omitempty"`
 	Code            *string        `json:"code,omitempty"`
 	PromotionCodeID *int           `json:"promotion_code_id,omitempty"`
 	PromotionCode   *string        `json:"promotion_code,omitempty"`

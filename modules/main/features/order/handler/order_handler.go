@@ -51,7 +51,8 @@ func (h *OrderHandler) List(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
-	res, err := h.svc.List(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.List(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -63,7 +64,8 @@ func (h *OrderHandler) InProgressList(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
-	res, err := h.svc.InProgressList(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.InProgressList(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -75,7 +77,8 @@ func (h *OrderHandler) NewestList(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
-	res, err := h.svc.NewestList(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.NewestList(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -87,7 +90,8 @@ func (h *OrderHandler) CompletedList(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
-	res, err := h.svc.CompletedList(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.CompletedList(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -112,7 +116,8 @@ func (h *OrderHandler) Search(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := dbutils.ParseSearchQuery(c, 20)
-	res, err := h.svc.Search(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.Search(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

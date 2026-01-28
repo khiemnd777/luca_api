@@ -21,6 +21,22 @@ CREATE INDEX IF NOT EXISTS ix_order_items_parent_order_id_not_deleted
   ON order_items(parent_item_id)
   WHERE deleted_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_order_items_delivery_date
+  ON order_items (((custom_fields->>'delivery_date')));
+
+CREATE INDEX IF NOT EXISTS idx_order_items_status
+  ON order_items ((custom_fields->>'status'));
+
+CREATE INDEX IF NOT EXISTS idx_order_items_delivery_date_active
+  ON order_items (((custom_fields->>'delivery_date')))
+  WHERE custom_fields->>'status' IN (
+    'received',
+    'in_progress',
+    'qc',
+    'issue',
+    'rework'
+  );
+
 -- order_item_products indexes
 CREATE INDEX IF NOT EXISTS idx_order_item_products_order_id
 ON order_item_products (order_id);

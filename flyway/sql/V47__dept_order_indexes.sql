@@ -3,6 +3,10 @@ CREATE INDEX IF NOT EXISTS ix_orders_id_not_deleted
   ON orders(id)
   WHERE deleted_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS ix_orders_department_id_not_deleted
+  ON orders(department_id)
+  WHERE deleted_at IS NULL;
+
 CREATE INDEX IF NOT EXISTS ix_orders_code_not_deleted
   ON orders(code)
   WHERE deleted_at IS NULL;

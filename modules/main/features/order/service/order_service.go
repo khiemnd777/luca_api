@@ -30,12 +30,12 @@ type OrderService interface {
 	PrepareForRemakeByOrderID(ctx context.Context, orderID int64) (*model.OrderDTO, error)
 	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	GetOrdersBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
-	InProgressList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
-	NewestList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
-	CompletedList(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
+	InProgressList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
+	NewestList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
+	CompletedList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
 	Delete(ctx context.Context, id int64) error
 	SyncPrice(ctx context.Context, orderID int64) (float64, error)
 }
@@ -87,12 +87,12 @@ func kOrderSearchAll() string {
 	return "order:search:*"
 }
 
-func kOrderList(q table.TableQuery) string {
+func kOrderList(deptID int, q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("order:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("order:list:dpt%d:l%d:p%d:o%s:d%s", deptID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kOrderSectionList(sectionID int, q table.TableQuery) string {
@@ -103,16 +103,16 @@ func kOrderSectionList(sectionID int, q table.TableQuery) string {
 	return fmt.Sprintf("order:section:%d:list:l%d:p%d:o%s:d%s", sectionID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kOrderInProgressList(q table.TableQuery) string {
-	return fmt.Sprintf("order:list:inprogress:l%d:p%d", q.Limit, q.Page)
+func kOrderInProgressList(deptID int, q table.TableQuery) string {
+	return fmt.Sprintf("order:list:inprogress:dpt%d:l%d:p%d", deptID, q.Limit, q.Page)
 }
 
-func kOrderNewestList(q table.TableQuery) string {
-	return fmt.Sprintf("order:list:newest:l%d:p%d", q.Limit, q.Page)
+func kOrderNewestList(deptID int, q table.TableQuery) string {
+	return fmt.Sprintf("order:list:newest:dpt%d:l%d:p%d", deptID, q.Limit, q.Page)
 }
 
-func kOrderCompletedList(q table.TableQuery) string {
-	return fmt.Sprintf("order:list:completed:l%d:p%d", q.Limit, q.Page)
+func kOrderCompletedList(deptID int, q table.TableQuery) string {
+	return fmt.Sprintf("order:list:completed:dpt%d:l%d:p%d", deptID, q.Limit, q.Page)
 }
 
 func kOrderSearch(q dbutils.SearchQuery) string {
@@ -148,6 +148,11 @@ func (s *orderService) Create(ctx context.Context, deptID int, userID int, input
 	}
 	realtime.BroadcastAll("order:newest", nil)
 
+	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
 	return dto, nil
 }
 
@@ -161,6 +166,11 @@ func (s *orderService) Update(ctx context.Context, deptID, userID int, input *mo
 		cache.InvalidateKeys(kOrderByID(dto.ID), kOrderByIDAll(dto.ID))
 	}
 	cache.InvalidateKeys(kOrderAll()...)
+
+	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
 
 	s.upsertSearch(ctx, deptID, dto)
 
@@ -237,16 +247,16 @@ func (s *orderService) SyncPrice(ctx context.Context, orderID int64) (float64, e
 	return s.repo.SyncPrice(ctx, orderID)
 }
 
-func (s *orderService) NewestList(ctx context.Context, q table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error) {
+func (s *orderService) NewestList(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error) {
 	type boxed = table.TableListResult[model.NewestOrderDTO]
 
 	query := q
 	query.OrderBy = utils.Ptr("created_at")
 	query.Direction = "desc"
-	key := kOrderNewestList(query)
+	key := kOrderNewestList(deptID, query)
 
 	ptr, err := cache.Get(key, cache.TTLLong, func() (*boxed, error) {
-		list, err := s.repo.NewestList(ctx, query)
+		list, err := s.repo.NewestList(ctx, deptID, query)
 		if err != nil {
 			return nil, err
 		}
@@ -259,16 +269,16 @@ func (s *orderService) NewestList(ctx context.Context, q table.TableQuery) (tabl
 	return *ptr, nil
 }
 
-func (s *orderService) CompletedList(ctx context.Context, q table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error) {
+func (s *orderService) CompletedList(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error) {
 	type boxed = table.TableListResult[model.CompletedOrderDTO]
 
 	query := q
 	query.OrderBy = utils.Ptr("updated_at")
 	query.Direction = "desc"
-	key := kOrderCompletedList(query)
+	key := kOrderCompletedList(deptID, query)
 
 	ptr, err := cache.Get(key, cache.TTLLong, func() (*boxed, error) {
-		list, err := s.repo.CompletedList(ctx, query)
+		list, err := s.repo.CompletedList(ctx, deptID, query)
 		if err != nil {
 			return nil, err
 		}
@@ -281,16 +291,16 @@ func (s *orderService) CompletedList(ctx context.Context, q table.TableQuery) (t
 	return *ptr, nil
 }
 
-func (s *orderService) InProgressList(ctx context.Context, q table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error) {
+func (s *orderService) InProgressList(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error) {
 	type boxed = table.TableListResult[model.InProcessOrderDTO]
 
 	query := q
 	query.OrderBy = utils.Ptr("delivery_date")
 	query.Direction = "desc"
-	key := kOrderInProgressList(query)
+	key := kOrderInProgressList(deptID, query)
 
 	ptr, err := cache.Get(key, cache.TTLLong, func() (*boxed, error) {
-		list, err := s.repo.InProgressList(ctx, query)
+		list, err := s.repo.InProgressList(ctx, deptID, query)
 		if err != nil {
 			return nil, err
 		}
@@ -316,12 +326,12 @@ func (s *orderService) InProgressList(ctx context.Context, q table.TableQuery) (
 	return res, nil
 }
 
-func (s *orderService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
+func (s *orderService) List(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
 	type boxed = table.TableListResult[model.OrderDTO]
-	key := kOrderList(q)
+	key := kOrderList(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.List(ctx, q)
+		res, e := s.repo.List(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}
@@ -363,12 +373,12 @@ func (s *orderService) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *orderService) Search(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error) {
+func (s *orderService) Search(ctx context.Context, deptID int, q dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error) {
 	type boxed = dbutils.SearchResult[model.OrderDTO]
 	key := kOrderSearch(q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.Search(ctx, q)
+		res, e := s.repo.Search(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}

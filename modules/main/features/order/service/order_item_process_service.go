@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
@@ -13,6 +14,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/modules/notification"
 	"github.com/khiemnd777/andy_api/shared/modules/realtime"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
 	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
@@ -69,6 +71,7 @@ type OrderItemProcessService interface {
 
 	CheckInOrOut(
 		ctx context.Context,
+		deptID int,
 		userID int,
 		checkInOrOutData *model.OrderItemProcessInProgressDTO,
 	) (*model.OrderItemProcessInProgressDTO, error)
@@ -200,9 +203,14 @@ func (s *orderItemProcessService) PrepareCheckInOrOutByCode(ctx context.Context,
 }
 
 // TODO: remove all orderID, orderItemID
-func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, checkInOrOutData *model.OrderItemProcessInProgressDTO) (*model.OrderItemProcessInProgressDTO, error) {
+func (s *orderItemProcessService) CheckInOrOut(
+	ctx context.Context,
+	deptID,
+	userID int,
+	checkInOrOutData *model.OrderItemProcessInProgressDTO,
+) (*model.OrderItemProcessInProgressDTO, error) {
 	var err error
-	dto, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
+	dto, _, orderstatus, orderitem, err := s.inprogressRepo.CheckInOrOut(ctx, checkInOrOutData)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +264,30 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, 
 			"section_name":    dto.NextSectionName,
 			"process_name":    dto.NextProcessName,
 		})
+
+		if orderstatus != nil && "completed" == *orderstatus {
+			pubsub.PublishAsync("dashboard:daily:stats", &model.CaseDailyStatsUpsert{
+				DepartmentID: deptID,
+				CompletedAt:  *dto.CompletedAt,
+				ReceivedAt:   orderitem.CreatedAt,
+			})
+
+			pubsub.PublishAsync("dashboard:daily:remake:stats", &model.CaseDailyRemakeStatsUpsert{
+				DepartmentID: deptID,
+				CompletedAt:  *dto.CompletedAt,
+				IsRemake:     orderitem.RemakeCount > 0,
+			})
+
+			pubsub.PublishAsync("dashboard:daily:completed:stats", &model.CaseDailyCompletedStatsUpsert{
+				DepartmentID: deptID,
+				CompletedAt:  *dto.CompletedAt,
+			})
+
+			pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+				DepartmentID: deptID,
+				StatAt:       time.Now(),
+			})
+		}
 	}
 
 	realtime.BroadcastAll("order:inprogress", nil)
@@ -264,7 +296,7 @@ func (s *orderItemProcessService) CheckInOrOut(ctx context.Context, userID int, 
 }
 
 func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
-	dto, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
+	dto, _, _, _, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
 	if err != nil {
 		return nil, err
 	}

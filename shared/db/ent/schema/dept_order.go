@@ -22,6 +22,10 @@ func (Order) Fields() []ent.Field {
 				"postgres": "bigserial",
 			}),
 
+		field.Int("department_id").
+			Optional().
+			Nillable(),
+
 		field.String("code").
 			Optional().
 			Nillable(),
