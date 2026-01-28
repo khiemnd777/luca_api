@@ -77,6 +77,9 @@ func (Product) Edges() []ent.Edge {
 		edge.To("processes", ProductProcess.Type),
 		edge.To("categories", CategoryProduct.Type),
 		edge.To("brand_names", ProductBrandName.Type),
+		edge.To("techniques", ProductTechnique.Type),
+		edge.To("raw_materials", ProductRawMaterial.Type),
+		edge.To("restoration_types", ProductRestorationType.Type),
 		edge.To("order_items", OrderItemProduct.Type),
 	}
 }

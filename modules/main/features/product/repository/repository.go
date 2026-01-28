@@ -146,6 +146,15 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 	if _, err = relation.UpsertM2M(ctx, tx, "products_brand_names", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_techniques", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_raw_materials", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_restoration_types", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
 
 	return out, nil
 }
@@ -227,6 +236,15 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 		return nil, err
 	}
 	if _, err = relation.UpsertM2M(ctx, tx, "products_brand_names", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_techniques", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_raw_materials", entity, input.DTO, out); err != nil {
+		return nil, err
+	}
+	if _, err = relation.UpsertM2M(ctx, tx, "products_restoration_types", entity, input.DTO, out); err != nil {
 		return nil, err
 	}
 

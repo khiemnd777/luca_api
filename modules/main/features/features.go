@@ -14,7 +14,10 @@ import (
 	_ "github.com/khiemnd777/andy_api/modules/main/features/process"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/product"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/promotion"
+	_ "github.com/khiemnd777/andy_api/modules/main/features/raw_material"
+	_ "github.com/khiemnd777/andy_api/modules/main/features/restoration_type"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/section"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/staff"
 	_ "github.com/khiemnd777/andy_api/modules/main/features/supplier"
+	_ "github.com/khiemnd777/andy_api/modules/main/features/technique"
 )

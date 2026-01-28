@@ -11,6 +11,12 @@ type ProductDTO struct {
 	ProcessNames   *string        `json:"process_names,omitempty"`
 	BrandNameIDs   []int          `json:"brand_name_ids,omitempty"`
 	BrandNameNames *string        `json:"brand_name_names,omitempty"`
+	TechniqueIDs   []int          `json:"technique_ids,omitempty"`
+	TechniqueNames *string        `json:"technique_names,omitempty"`
+	RawMaterialIDs []int          `json:"raw_material_ids,omitempty"`
+	RawMaterialNames *string        `json:"raw_material_names,omitempty"`
+	RestorationTypeIDs   []int          `json:"restoration_type_ids,omitempty"`
+	RestorationTypeNames *string        `json:"restoration_type_names,omitempty"`
 	CategoryID     *int           `json:"category_id,omitempty"`
 	CategoryName   *string        `json:"category_name,omitempty"`
 	// template
