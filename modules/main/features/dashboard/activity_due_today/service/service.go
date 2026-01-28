@@ -5,7 +5,7 @@ import (
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
-	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/repository"
+	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/activity_due_today/repository"
 	"github.com/khiemnd777/andy_api/shared/module"
 )
 

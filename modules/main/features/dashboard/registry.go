@@ -4,6 +4,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
+	activetodayhlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/activity_active_today/handler"
+	activetodayrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/activity_active_today/repository"
+	activetodaysvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/activity_active_today/service"
+	duetodayhlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/activity_due_today/handler"
+	duetodayrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/activity_due_today/repository"
+	duetodaysvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/activity_due_today/service"
 	dailyactivehlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_active_stats/handler"
 	dailyactiverepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_active_stats/repository"
 	dailyactivesvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_active_stats/service"
@@ -19,9 +25,6 @@ import (
 	casestatuseshlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_statuses/handler"
 	casestatusesrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_statuses/repository"
 	casestatusessvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_statuses/service"
-	duetodayhlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/handler"
-	duetodayrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/repository"
-	duetodaysvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/due_today/service"
 	"github.com/khiemnd777/andy_api/modules/main/registry"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
@@ -62,11 +65,17 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	caseDailyActiveStatsHandler := dailyactivehlr.NewCaseDailyActiveStatsHandler(caseDailyActiveStatsSvc, deps)
 	caseDailyActiveStatsHandler.RegisterRoutes(router)
 
-	// Due Today
+	// Activity Due Today
 	duetodayRepo := duetodayrepo.NewDueTodayRepository(entClient, deps.DB, deps)
 	duetodaySvc := duetodaysvc.NewDueTodayService(duetodayRepo, deps)
 	duetodayHandler := duetodayhlr.NewDueTodayHandler(duetodaySvc, deps)
 	duetodayHandler.RegisterRoutes(router)
+
+	// Activity Active Today
+	activetodayRepo := activetodayrepo.NewActiveTodayRepository(entClient, deps.DB, deps)
+	activetodaySvc := activetodaysvc.NewActiveTodayService(activetodayRepo, deps)
+	activetodayHandler := activetodayhlr.NewActiveTodayHandler(activetodaySvc, deps)
+	activetodayHandler.RegisterRoutes(router)
 
 	// Case Statuses
 	caseStatusesRepo := casestatusesrepo.NewCaseStatusesRepository(entClient, deps.DB, deps)

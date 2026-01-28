@@ -10,59 +10,62 @@ import (
 	"github.com/khiemnd777/andy_api/shared/module"
 )
 
-type DueTodayRepository interface {
-	DueToday(
+type ActiveTodayRepository interface {
+	ActiveToday(
 		ctx context.Context,
 		deptID int,
-	) ([]*model.DueTodayItem, error)
+	) ([]*model.ActiveTodayItem, error)
 }
 
-type dueTodayRepository struct {
+type activeTodayRepository struct {
 	db    *generated.Client
 	sqlDB *sql.DB
 	deps  *module.ModuleDeps[config.ModuleConfig]
 }
 
-func NewDueTodayRepository(
+func NewActiveTodayRepository(
 	db *generated.Client,
 	sqlDB *sql.DB,
 	deps *module.ModuleDeps[config.ModuleConfig],
-) DueTodayRepository {
-	return &dueTodayRepository{
+) ActiveTodayRepository {
+	return &activeTodayRepository{
 		db:    db,
 		sqlDB: sqlDB,
 		deps:  deps,
 	}
 }
 
-func (r *dueTodayRepository) DueToday(
+func (r *activeTodayRepository) ActiveToday(
 	ctx context.Context,
 	deptID int,
-) ([]*model.DueTodayItem, error) {
+) ([]*model.ActiveTodayItem, error) {
 
 	const q = `
 SELECT
 	o.id,
-  oi.code,
-  o.dentist_name,
-  o.patient_name,
-  (oi.custom_fields->>'delivery_date')::timestamptz AS delivery_at,
-  oi.custom_fields->>'priority'       AS priority
+	oi.code,
+	o.dentist_name,
+	o.patient_name,
+	(oi.custom_fields->>'delivery_date')::timestamptz AS delivery_at,
+	oi.created_at,
+	(current_date - oi.created_at::date) AS age_days,
+	oi.custom_fields->>'priority' AS priority
 FROM order_items oi
 JOIN orders o ON o.id = oi.order_id
 WHERE
-	o.department_id=$1::INT
-  AND (oi.custom_fields->>'delivery_date')::timestamptz >= date_trunc('day', now())
-  AND (oi.custom_fields->>'delivery_date')::timestamptz <  date_trunc('day', now()) + interval '1 day'
-  AND oi.custom_fields->>'status' IN (
-    'received',
-    'in_progress',
-    'qc',
-    'issue',
-    'rework'
-  )
+	o.department_id = $1::INT
+	AND o.deleted_at IS NULL
+	AND oi.deleted_at IS NULL
+	AND oi.custom_fields->>'status' IN (
+		'received',
+		'in_progress',
+		'qc',
+		'issue',
+		'rework'
+	)
 ORDER BY
-  delivery_at ASC;
+	oi.created_at ASC
+LIMIT 5;
 `
 
 	rows, err := r.sqlDB.QueryContext(ctx, q, deptID)
@@ -71,16 +74,18 @@ ORDER BY
 	}
 	defer rows.Close()
 
-	var result []*model.DueTodayItem
+	var result []*model.ActiveTodayItem
 
 	for rows.Next() {
-		var it model.DueTodayItem
+		var it model.ActiveTodayItem
 		if err := rows.Scan(
 			&it.ID,
 			&it.Code,
 			&it.Dentist,
 			&it.Patient,
 			&it.DeliveryAt,
+			&it.CreatedAt,
+			&it.AgeDays,
 			&it.Priority,
 		); err != nil {
 			return nil, err
