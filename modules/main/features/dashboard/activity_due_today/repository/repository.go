@@ -47,14 +47,19 @@ SELECT
   o.dentist_name,
   o.patient_name,
   (oi.custom_fields->>'delivery_date')::timestamptz AS delivery_at,
+	(current_date - oi.created_at::date) AS age_days,
+	CASE
+		WHEN (oi.custom_fields->>'delivery_date')::timestamptz < date_trunc('day', now())
+			THEN 'overdue'
+		ELSE 'today'
+	END AS due_type,
   oi.custom_fields->>'priority'       AS priority
 FROM order_items oi
 JOIN orders o ON o.id = oi.order_id
 WHERE
 	o.department_id=$1::INT
 	AND o.deleted_at IS NULL AND oi.deleted_at IS NULL
-  AND (oi.custom_fields->>'delivery_date')::timestamptz >= date_trunc('day', now())
-  AND (oi.custom_fields->>'delivery_date')::timestamptz <  date_trunc('day', now()) + interval '1 day'
+	AND (oi.custom_fields->>'delivery_date')::timestamptz <  date_trunc('day', now()) + interval '1 day'
   AND oi.custom_fields->>'status' IN (
     'received',
     'in_progress',
@@ -83,6 +88,8 @@ LIMIT 5;
 			&it.Dentist,
 			&it.Patient,
 			&it.DeliveryAt,
+			&it.AgeDays,
+			&it.DueType,
 			&it.Priority,
 		); err != nil {
 			return nil, err

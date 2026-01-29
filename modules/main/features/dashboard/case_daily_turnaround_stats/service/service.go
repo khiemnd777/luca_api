@@ -46,7 +46,7 @@ func NewCaseDailyStatsService(
 ) CaseDailyStatsService {
 	svc := &caseDailyStatsService{repo: repo, deps: deps}
 
-	pubsub.SubscribeAsync("dashboard:daily:stats", func(payload *model.CaseDailyStatsUpsert) error {
+	pubsub.SubscribeAsync("dashboard:daily:turnaround:stats", func(payload *model.CaseDailyStatsUpsert) error {
 		ctx := context.Background()
 		turnaroundsec := payload.CompletedAt.Sub(payload.ReceivedAt).Seconds()
 		return svc.UpsertOne(ctx, payload.CompletedAt, payload.DepartmentID, int64(turnaroundsec))

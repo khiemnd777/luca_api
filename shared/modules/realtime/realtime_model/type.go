@@ -3,7 +3,8 @@ package realtime_model
 import "encoding/json"
 
 type RealtimeRequest struct {
-	UserID  int              `json:"user_id"`
+	UserID  *int             `json:"user_id,omitempty"`
+	DeptID  *int             `json:"dept_id,omitempty"`
 	Message RealtimeEnvelope `json:"message"`
 }
 

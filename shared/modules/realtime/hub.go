@@ -32,12 +32,12 @@ func Send(receiverID int, eventType string, data any) {
 	}
 
 	pubsub.Publish("realtime:send", realtime_model.RealtimeRequest{
-		UserID:  receiverID,
+		UserID:  &receiverID,
 		Message: envelope,
 	})
 }
 
-func BroadcastTo(receiverID int, eventType string, data any) {
+func BroadcastToUser(receiverID int, eventType string, data any) {
 	raw, err := json.Marshal(data)
 	if err != nil {
 		logger.Error(fmt.Sprintf("❌ Failed to marshal realtime payload: %v", err))
@@ -49,8 +49,26 @@ func BroadcastTo(receiverID int, eventType string, data any) {
 		Payload: raw,
 	}
 
-	pubsub.Publish("realtime:send", realtime_model.RealtimeRequest{
-		UserID:  receiverID,
+	pubsub.Publish("realtime:broadcast:user", realtime_model.RealtimeRequest{
+		UserID:  &receiverID,
+		Message: envelope,
+	})
+}
+
+func BroadcastToDept(deptID int, eventType string, data any) {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		logger.Error(fmt.Sprintf("❌ Failed to marshal realtime payload: %v", err))
+		return
+	}
+
+	envelope := realtime_model.RealtimeEnvelope{
+		Type:    eventType,
+		Payload: raw,
+	}
+
+	pubsub.Publish("realtime:broadcast:dept", realtime_model.RealtimeRequest{
+		DeptID:  &deptID,
 		Message: envelope,
 	})
 }

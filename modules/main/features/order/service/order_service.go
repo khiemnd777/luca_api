@@ -24,7 +24,7 @@ import (
 type OrderService interface {
 	Create(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
-	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
+	UpdateStatus(ctx context.Context, deptID int, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	PrepareForRemakeByOrderID(ctx context.Context, orderID int64) (*model.OrderDTO, error)
@@ -153,6 +153,11 @@ func (s *orderService) Create(ctx context.Context, deptID int, userID int, input
 		StatAt:       time.Now(),
 	})
 
+	realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
+
 	return dto, nil
 }
 
@@ -172,12 +177,17 @@ func (s *orderService) Update(ctx context.Context, deptID, userID int, input *mo
 		StatAt:       time.Now(),
 	})
 
+	realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
+
 	s.upsertSearch(ctx, deptID, dto)
 
 	return dto, nil
 }
 
-func (s *orderService) UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error) {
+func (s *orderService) UpdateStatus(ctx context.Context, deptID int, orderItemProcessID int64, status string) (*model.OrderItemDTO, error) {
 	out, err := s.repo.UpdateStatus(ctx, orderItemProcessID, status)
 	if err != nil {
 		return nil, err
@@ -190,6 +200,8 @@ func (s *orderService) UpdateStatus(ctx context.Context, orderItemProcessID int6
 		)
 	}
 	cache.InvalidateKeys(kOrderAll()...)
+
+	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
 
 	return out, nil
 }

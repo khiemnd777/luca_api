@@ -293,7 +293,9 @@ func (h *OrderHandler) UpdateStatus(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid status")
 	}
 
-	dto, err := h.svc.UpdateStatus(c.UserContext(), int64(oipID), status)
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	dto, err := h.svc.UpdateStatus(c.UserContext(), deptID, int64(oipID), status)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

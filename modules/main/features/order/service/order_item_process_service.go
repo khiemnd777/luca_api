@@ -266,11 +266,13 @@ func (s *orderItemProcessService) CheckInOrOut(
 		})
 
 		if orderstatus != nil && "completed" == *orderstatus {
-			pubsub.PublishAsync("dashboard:daily:stats", &model.CaseDailyStatsUpsert{
+			pubsub.PublishAsync("dashboard:daily:turnaround:stats", &model.CaseDailyStatsUpsert{
 				DepartmentID: deptID,
 				CompletedAt:  *dto.CompletedAt,
 				ReceivedAt:   orderitem.CreatedAt,
 			})
+
+			realtime.BroadcastToDept(deptID, "dashboard:daily:turnaround:stats", nil)
 
 			pubsub.PublishAsync("dashboard:daily:remake:stats", &model.CaseDailyRemakeStatsUpsert{
 				DepartmentID: deptID,
@@ -278,19 +280,28 @@ func (s *orderItemProcessService) CheckInOrOut(
 				IsRemake:     orderitem.RemakeCount > 0,
 			})
 
+			realtime.BroadcastToDept(deptID, "dashboard:daily:remake:stats", nil)
+
 			pubsub.PublishAsync("dashboard:daily:completed:stats", &model.CaseDailyCompletedStatsUpsert{
 				DepartmentID: deptID,
 				CompletedAt:  *dto.CompletedAt,
 			})
 
+			realtime.BroadcastToDept(deptID, "dashboard:daily:completed:stats", nil)
+
 			pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
 				DepartmentID: deptID,
 				StatAt:       time.Now(),
 			})
+
+			realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
 		}
 	}
 
 	realtime.BroadcastAll("order:inprogress", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
 
 	return dto, nil
 }

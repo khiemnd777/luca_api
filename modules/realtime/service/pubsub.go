@@ -8,9 +8,28 @@ import (
 )
 
 func (s *Hub) InitPubSubEvents() {
+	// obsoleted: use realtime:broadcast:user
 	pubsub.Subscribe("realtime:send", func(payload *realtime_model.RealtimeRequest) error {
 		msg, _ := json.Marshal(payload.Message)
-		s.BroadcastTo(payload.UserID, msg)
+		if payload.UserID != nil {
+			s.BroadcastToUser(*payload.UserID, msg)
+		}
+		return nil
+	})
+
+	pubsub.Subscribe("realtime:broadcast:user", func(payload *realtime_model.RealtimeRequest) error {
+		msg, _ := json.Marshal(payload.Message)
+		if payload.UserID != nil {
+			s.BroadcastToUser(*payload.UserID, msg)
+		}
+		return nil
+	})
+
+	pubsub.Subscribe("realtime:broadcast:dept", func(payload *realtime_model.RealtimeRequest) error {
+		msg, _ := json.Marshal(payload.Message)
+		if payload.DeptID != nil {
+			s.BroadcastToUser(*payload.DeptID, msg)
+		}
 		return nil
 	})
 

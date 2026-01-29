@@ -68,7 +68,21 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 			return
 		}
 
-		client := service.ClientConn{UserID: userID, Conn: c}
+		deptID, err := h.parseDeptIDFromJWT(c)
+		if err != nil {
+			if errors.Is(err, ErrTokenExpired) {
+				h.closeWithReason(c, "token_expired")
+			} else {
+				h.closeWithReason(c, "token_invalid")
+			}
+			return
+		}
+
+		client := service.ClientConn{
+			UserID: userID,
+			DeptID: deptID,
+			Conn:   c,
+		}
 
 		h.hub.Register <- client
 		defer func() {
@@ -131,7 +145,7 @@ func (h *Handler) RegisterInternalRoutes(router fiber.Router) {
 			return fiber.ErrBadRequest
 		}
 
-		h.hub.BroadcastTo(req.UserID, msg)
+		h.hub.BroadcastToUser(req.UserID, msg)
 		return c.SendStatus(200)
 	})
 }
@@ -160,6 +174,48 @@ func (h *Handler) pingLoopMessage(c *websocket.Conn, stop <-chan struct{}) {
 func (h *Handler) writeText(c *websocket.Conn, s string) error {
 	_ = c.SetWriteDeadline(time.Now().Add(h.writeWait))
 	return c.WriteMessage(websocket.TextMessage, []byte(s))
+}
+
+func (h *Handler) parseDeptIDFromJWT(c *websocket.Conn) (int, error) {
+	tokenStr := c.Query("token")
+	if tokenStr == "" {
+		return -1, ErrTokenInvalid
+	}
+
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(h.jwtSecret), nil
+	})
+
+	if err != nil || !token.Valid {
+		return -1, ErrTokenInvalid
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return -1, ErrTokenInvalid
+	}
+
+	if exp, ok := claims["exp"].(float64); ok {
+		if time.Now().Unix() > int64(exp) {
+			return -1, ErrTokenExpired
+		}
+	}
+
+	switch v := claims["dept_id"].(type) {
+	case string:
+		id, err := strconv.Atoi(v)
+		if err != nil {
+			return -1, ErrTokenInvalid
+		}
+		return id, nil
+	case float64:
+		return int(v), nil
+	}
+
+	return -1, ErrTokenInvalid
 }
 
 func (h *Handler) parseUserIDFromJWT(c *websocket.Conn) (int, error) {
