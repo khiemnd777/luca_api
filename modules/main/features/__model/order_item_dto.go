@@ -16,6 +16,11 @@ type OrderItemDTO struct {
 	QrCode       *string  `json:"qr_code,omitempty"`
 	RemakeCount  int      `json:"remake_count,omitempty"`
 	TotalPrice   *float64 `json:"total_price,omitempty"`
+	// delivery
+	DeliveryStatus       *string    `json:"delivery_status,omitempty"`
+	DeliveryInProgressAt *time.Time `json:"delivery_in_progress_at,omitempty"`
+	DeliveredAt          *time.Time `json:"delivered_at,omitempty"`
+	DeliveryReturnedAt   *time.Time `json:"delivery_returned_at,omitempty"`
 	// products
 	Products []*OrderItemProductDTO `json:"products,omitempty"`
 	// materials

@@ -63,6 +63,23 @@ func (OrderItem) Fields() []ent.Field {
 		field.String("status").
 			Default("pending"), // pending | in_progress | qc | completed | rework | issue
 
+		field.String("delivery_status").
+			Optional().
+			Nillable().
+			Default("pending"), // pending | delivery_in_progress | delivered | returned
+
+		field.Time("delivery_in_progress_at").
+			Optional().
+			Nillable(),
+
+		field.Time("delivered_at").
+			Optional().
+			Nillable(),
+
+		field.Time("delivery_returned_at").
+			Optional().
+			Nillable(),
+
 		field.Time("created_at").
 			Default(time.Now),
 		field.Time("updated_at").

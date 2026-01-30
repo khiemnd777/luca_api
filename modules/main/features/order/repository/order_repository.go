@@ -199,6 +199,7 @@ func (r *orderRepository) createNewOrder(
 
 	// reassign latest order item -> order as cache to appear them on the table
 	lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
+	lstDeliveryStatus := latest.DeliveryStatus
 	lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
 	prdQty := utils.SafeGetIntPtr(latest.CustomFields, "quantity")
 	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
@@ -221,6 +222,7 @@ func (r *orderRepository) createNewOrder(
 		Update().
 		SetNillableCodeLatest(latest.Code).
 		SetNillableStatusLatest(lstStatus).
+		SetNillableDeliveryStatusLatest(lstDeliveryStatus).
 		SetNillablePriorityLatest(lstPriority).
 		SetNillableQuantity(prdQty).
 		SetTotalPrice(prdTotalPrice).
@@ -236,6 +238,7 @@ func (r *orderRepository) createNewOrder(
 	// Assign latest ones to output
 	out.CodeLatest = latest.Code
 	out.StatusLatest = lstStatus
+	out.DeliveryStatusLatest = lstDeliveryStatus
 	out.PriorityLatest = lstPriority
 	out.Quantity = prdQty
 	out.TotalPrice = &prdTotalPrice
@@ -351,6 +354,7 @@ func (r *orderRepository) upsertExistingOrder(
 
 	// reassign latest order item -> order as cache to appear them on the table
 	lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
+	lstDeliveryStatus := latest.DeliveryStatus
 	lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
 	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
@@ -371,6 +375,7 @@ func (r *orderRepository) upsertExistingOrder(
 		Update().
 		SetNillableCodeLatest(latest.Code).
 		SetNillableStatusLatest(lstStatus).
+		SetNillableDeliveryStatusLatest(lstDeliveryStatus).
 		SetNillablePriorityLatest(lstPriority).
 		SetTotalPrice(prdTotalPrice).
 		SetNillableDeliveryDate(dlrDate).
@@ -385,6 +390,7 @@ func (r *orderRepository) upsertExistingOrder(
 	// Assign latest ones to output
 	out.CodeLatest = latest.Code
 	out.StatusLatest = lstStatus
+	out.DeliveryStatusLatest = lstDeliveryStatus
 	out.PriorityLatest = lstPriority
 	out.TotalPrice = &prdTotalPrice
 	out.DeliveryDate = dlrDate
@@ -542,6 +548,7 @@ func (r *orderRepository) Update(
 	// ===== Update order cache fields & total price
 	if isLatest {
 		lstStatus := utils.SafeGetStringPtr(latest.CustomFields, "status")
+		lstDeliveryStatus := latest.DeliveryStatus
 		lstPriority := utils.SafeGetStringPtr(latest.CustomFields, "priority")
 		dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 		rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
@@ -583,6 +590,7 @@ func (r *orderRepository) Update(
 			Update().
 			SetNillableCodeLatest(latest.Code).
 			SetNillableStatusLatest(lstStatus).
+			SetNillableDeliveryStatusLatest(lstDeliveryStatus).
 			SetNillablePriorityLatest(lstPriority).
 			SetTotalPrice(prdTotalPrice).
 			SetNillableDeliveryDate(dlrDate).
@@ -610,6 +618,7 @@ func (r *orderRepository) Update(
 		// ===== Assign latest values to output
 		output.CodeLatest = latest.Code
 		output.StatusLatest = lstStatus
+		output.DeliveryStatusLatest = lstDeliveryStatus
 		output.PriorityLatest = lstPriority
 		output.TotalPrice = &prdTotalPrice
 		output.DeliveryDate = dlrDate
@@ -925,6 +934,7 @@ func (r *orderRepository) InProgressList(ctx context.Context, deptID int, query 
 					TotalPrice:        item.TotalPrice,
 					ProcessNameLatest: item.ProcessNameLatest,
 					StatusLatest:      item.StatusLatest,
+					DeliveryStatusLatest: item.DeliveryStatusLatest,
 					PriorityLatest:    item.PriorityLatest,
 				})
 			}
@@ -960,6 +970,7 @@ func (r *orderRepository) NewestList(ctx context.Context, deptID int, query tabl
 					CodeLatest:     item.CodeLatest,
 					CreatedAt:      item.CreatedAt,
 					StatusLatest:   item.StatusLatest,
+					DeliveryStatusLatest: item.DeliveryStatusLatest,
 					PriorityLatest: item.PriorityLatest,
 				})
 			}
@@ -995,6 +1006,7 @@ func (r *orderRepository) CompletedList(ctx context.Context, deptID int, query t
 					CodeLatest:     item.CodeLatest,
 					CreatedAt:      item.CreatedAt,
 					StatusLatest:   item.StatusLatest,
+					DeliveryStatusLatest: item.DeliveryStatusLatest,
 					PriorityLatest: item.PriorityLatest,
 				})
 			}

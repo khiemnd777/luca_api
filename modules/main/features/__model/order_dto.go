@@ -33,6 +33,7 @@ type OrderDTO struct {
 	LatestOrderItem       *OrderItemDTO       `json:"latest_order_item,omitempty"`
 	CodeLatest            *string             `json:"code_latest,omitempty"`
 	StatusLatest          *string             `json:"status_latest,omitempty"`
+	DeliveryStatusLatest  *string             `json:"delivery_status_latest,omitempty"`
 	PriorityLatest        *string             `json:"priority_latest,omitempty"`
 	ProcessIDLatest       *int                `json:"process_id_latest,omitempty"`
 	ProcessNameLatest     *string             `json:"process_name_latest,omitempty"`

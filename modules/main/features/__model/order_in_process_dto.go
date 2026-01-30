@@ -11,5 +11,6 @@ type InProcessOrderDTO struct {
 	TotalPrice        *float64   `json:"total_price,omitempty"`
 	ProcessNameLatest *string    `json:"process_name_latest,omitempty"`
 	StatusLatest      *string    `json:"status_latest,omitempty"`
+	DeliveryStatusLatest *string `json:"delivery_status_latest,omitempty"`
 	PriorityLatest    *string    `json:"priority_latest,omitempty"`
 }

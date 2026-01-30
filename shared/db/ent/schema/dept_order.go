@@ -83,13 +83,17 @@ func (Order) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
-		field.String("status_latest").
-			Optional().
-			Nillable(),
+	field.String("status_latest").
+		Optional().
+		Nillable(),
 
-		field.Int("process_id_latest").
-			Optional().
-			Nillable(),
+	field.String("delivery_status_latest").
+		Optional().
+		Nillable(),
+
+	field.Int("process_id_latest").
+		Optional().
+		Nillable(),
 
 		field.String("process_name_latest").
 			Optional().

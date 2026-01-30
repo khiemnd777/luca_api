@@ -412,7 +412,20 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 	q.SetRemakeCount(in.RemakeCount).
 		SetOrderID(in.OrderID).
 		SetNillableCodeOriginal(in.CodeOriginal).
-		SetNillableTotalPrice(in.TotalPrice)
+		SetNillableTotalPrice(in.TotalPrice).
+		SetNillableDeliveryStatus(in.DeliveryStatus)
+
+	if in.DeliveryStatus != nil {
+		now := time.Now()
+		switch *in.DeliveryStatus {
+		case "delivery_in_progress":
+			q.SetDeliveryInProgressAt(now)
+		case "delivered":
+			q.SetDeliveredAt(now)
+		case "returned":
+			q.SetDeliveryReturnedAt(now)
+		}
+	}
 
 	// metadata
 	// new order is as `received`
@@ -521,7 +534,20 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, orde
 
 	q := tx.OrderItem.UpdateOneID(dto.ID).
 		SetNillableCode(dto.Code).
-		SetNillableTotalPrice(dto.TotalPrice)
+		SetNillableTotalPrice(dto.TotalPrice).
+		SetNillableDeliveryStatus(dto.DeliveryStatus)
+
+	if dto.DeliveryStatus != nil {
+		now := time.Now()
+		switch *dto.DeliveryStatus {
+		case "delivery_in_progress":
+			q.SetDeliveryInProgressAt(now)
+		case "delivered":
+			q.SetDeliveredAt(now)
+		case "returned":
+			q.SetDeliveryReturnedAt(now)
+		}
+	}
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err := customfields.PrepareCustomFields(ctx,
