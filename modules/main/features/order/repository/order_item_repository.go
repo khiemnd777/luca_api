@@ -30,6 +30,8 @@ type OrderItemRepository interface {
 	GetTotalPriceByOrderItemID(ctx context.Context, orderItemID int64) (float64, error)
 	GetTotalPriceByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (float64, error)
 	GetAllProductsAndMaterialsByOrderID(ctx context.Context, orderID int64) (model.OrderProductsAndMaterialsDTO, error)
+	GetDeliveryStatus(ctx context.Context, orderID, orderItemID int64) (*string, error)
+	UpdateDeliveryStatus(ctx context.Context, tx *generated.Tx, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error)
 	// -- general functions
 	Create(ctx context.Context, tx *generated.Tx, order *model.OrderDTO, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
 	Update(ctx context.Context, tx *generated.Tx, order *model.OrderDTO, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error)
@@ -139,6 +141,63 @@ func (r *orderItemRepository) GetLatestByOrderID(ctx context.Context, orderID in
 		return nil, err
 	}
 	return dto, nil
+}
+
+func (r *orderItemRepository) GetDeliveryStatus(ctx context.Context, orderID, orderItemID int64) (*string, error) {
+	itemEnt, err := r.db.OrderItem.
+		Query().
+		Where(
+			orderitem.IDEQ(orderItemID),
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Select(orderitem.FieldDeliveryStatus).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return itemEnt.DeliveryStatus, nil
+}
+
+func (r *orderItemRepository) UpdateDeliveryStatus(ctx context.Context, tx *generated.Tx, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error) {
+	orderItemClient := r.db.OrderItem
+	if tx != nil {
+		orderItemClient = tx.OrderItem
+	}
+
+	itemEnt, err := orderItemClient.
+		Query().
+		Where(
+			orderitem.IDEQ(orderItemID),
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	q := orderItemClient.
+		UpdateOneID(itemEnt.ID).
+		SetDeliveryStatus(status)
+
+	now := time.Now()
+	switch status {
+	case "delivery_in_progress":
+		q.SetDeliveryInProgressAt(now)
+	case "delivered":
+		q.SetDeliveredAt(now)
+	case "returned":
+		q.SetDeliveryReturnedAt(now)
+	}
+
+	entity, err := q.Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity), nil
 }
 
 func (r *orderItemRepository) PrepareLatestForRemakeByOrderID(
@@ -417,13 +476,22 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 
 	if in.DeliveryStatus != nil {
 		now := time.Now()
+
 		switch *in.DeliveryStatus {
 		case "delivery_in_progress":
-			q.SetDeliveryInProgressAt(now)
+			if _, exists := q.Mutation().DeliveryInProgressAt(); !exists {
+				q.SetDeliveryInProgressAt(now)
+			}
+
 		case "delivered":
-			q.SetDeliveredAt(now)
+			if _, exists := q.Mutation().DeliveredAt(); !exists {
+				q.SetDeliveredAt(now)
+			}
+
 		case "returned":
-			q.SetDeliveryReturnedAt(now)
+			if _, exists := q.Mutation().DeliveryReturnedAt(); !exists {
+				q.SetDeliveryReturnedAt(now)
+			}
 		}
 	}
 
@@ -539,13 +607,22 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, orde
 
 	if dto.DeliveryStatus != nil {
 		now := time.Now()
+
 		switch *dto.DeliveryStatus {
 		case "delivery_in_progress":
-			q.SetDeliveryInProgressAt(now)
+			if _, exists := q.Mutation().DeliveryInProgressAt(); !exists {
+				q.SetDeliveryInProgressAt(now)
+			}
+
 		case "delivered":
-			q.SetDeliveredAt(now)
+			if _, exists := q.Mutation().DeliveredAt(); !exists {
+				q.SetDeliveredAt(now)
+			}
+
 		case "returned":
-			q.SetDeliveryReturnedAt(now)
+			if _, exists := q.Mutation().DeliveryReturnedAt(); !exists {
+				q.SetDeliveryReturnedAt(now)
+			}
 		}
 	}
 

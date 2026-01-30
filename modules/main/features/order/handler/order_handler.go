@@ -40,9 +40,11 @@ func (h *OrderHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/products", h.GetAllOrderProducts)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/materials", h.GetAllOrderMaterials)
 	app.RouterGet(router, "/:dept_id<int>/order/:id<int>/sync-price", h.SyncPrice)
+	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/item/:order_item_id<int>/delivery-status", h.GetDeliveryStatus)
 	app.RouterPost(router, "/:dept_id<int>/order", h.Create)
 	app.RouterPut(router, "/:dept_id<int>/order/:id<int>", h.Update)
 	app.RouterPut(router, "/:dept_id<int>/order/:id<int>/process/:order_item_process_id<int>/change-status/:status", h.UpdateStatus)
+	app.RouterPut(router, "/:dept_id<int>/order/:order_id<int>/item/:order_item_id<int>/change-delivery-status/:status", h.UpdateDeliveryStatus)
 	app.RouterDelete(router, "/:dept_id<int>/order/:id<int>", h.Delete)
 }
 
@@ -300,6 +302,61 @@ func (h *OrderHandler) UpdateStatus(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *OrderHandler) UpdateDeliveryStatus(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	orderItemID, _ := utils.GetParamAsInt(c, "order_item_id")
+	if orderItemID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order item id")
+	}
+
+	status := utils.GetParamAsString(c, "status")
+	if strings.TrimSpace(status) == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid status")
+	}
+
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	dto, err := h.svc.UpdateDeliveryStatus(c.UserContext(), deptID, int64(orderID), int64(orderItemID), status)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *OrderHandler) GetDeliveryStatus(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	orderID, _ := utils.GetParamAsInt(c, "order_id")
+	if orderID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order id")
+	}
+
+	orderItemID, _ := utils.GetParamAsInt(c, "order_item_id")
+	if orderItemID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order item id")
+	}
+
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	status, err := h.svc.GetDeliveryStatus(c.UserContext(), deptID, int64(orderID), int64(orderItemID))
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"delivery_status": status,
+	})
 }
 
 func (h *OrderHandler) Delete(c *fiber.Ctx) error {

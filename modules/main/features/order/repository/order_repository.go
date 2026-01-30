@@ -34,6 +34,8 @@ type OrderRepository interface {
 	ExistsByCode(ctx context.Context, code string) (bool, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	UpdateStatus(ctx context.Context, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
+	UpdateDeliveryStatus(ctx context.Context, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error)
+	GetDeliveryStatus(ctx context.Context, orderID, orderItemID int64) (*string, error)
 	SyncPrice(ctx context.Context, orderID int64) (float64, error)
 	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
@@ -716,6 +718,52 @@ func (r *orderRepository) UpdateStatus(ctx context.Context, orderItemProcessID i
 	}
 
 	return orderDTO, nil
+}
+
+func (r *orderRepository) UpdateDeliveryStatus(ctx context.Context, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error) {
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	itemDTO, err := r.orderItemRepo.UpdateDeliveryStatus(ctx, tx, orderID, orderItemID, status)
+	if err != nil {
+		return nil, err
+	}
+
+	latest, err := tx.OrderItem.
+		Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt)).
+		First(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if latest.ID == orderItemID {
+		if _, err = tx.Order.
+			UpdateOneID(orderID).
+			SetNillableDeliveryStatusLatest(itemDTO.DeliveryStatus).
+			Save(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return itemDTO, nil
+}
+
+func (r *orderRepository) GetDeliveryStatus(ctx context.Context, orderID, orderItemID int64) (*string, error) {
+	return r.orderItemRepo.GetDeliveryStatus(ctx, orderID, orderItemID)
 }
 
 func (r *orderRepository) recalculateOrderStatusByProcesses(

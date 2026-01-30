@@ -25,6 +25,8 @@ type OrderService interface {
 	Create(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	UpdateStatus(ctx context.Context, deptID int, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
+	UpdateDeliveryStatus(ctx context.Context, deptID int, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error)
+	GetDeliveryStatus(ctx context.Context, deptID int, orderID, orderItemID int64) (*string, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
 	PrepareForRemakeByOrderID(ctx context.Context, orderID int64) (*model.OrderDTO, error)
@@ -204,6 +206,30 @@ func (s *orderService) UpdateStatus(ctx context.Context, deptID int, orderItemPr
 	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
 
 	return out, nil
+}
+
+func (s *orderService) UpdateDeliveryStatus(ctx context.Context, deptID int, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error) {
+	out, err := s.repo.UpdateDeliveryStatus(ctx, orderID, orderItemID, status)
+	if err != nil {
+		return nil, err
+	}
+
+	if out != nil {
+		cache.InvalidateKeys(
+			kOrderByID(out.OrderID),
+			kOrderByIDAll(out.OrderID),
+		)
+	}
+	cache.InvalidateKeys(kOrderAll()...)
+
+	// Later: broadcast to delivery dashboard only
+	// realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+
+	return out, nil
+}
+
+func (s *orderService) GetDeliveryStatus(ctx context.Context, deptID int, orderID, orderItemID int64) (*string, error) {
+	return s.repo.GetDeliveryStatus(ctx, orderID, orderItemID)
 }
 
 func (s *orderService) upsertSearch(ctx context.Context, deptID int, dto *model.OrderDTO) {
