@@ -19,6 +19,9 @@ import (
 	dailyremakehlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_remake_stats/handler"
 	dailyremakerepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_remake_stats/repository"
 	dailyremakesvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_remake_stats/service"
+	dailysaleshlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_sales_stats/handler"
+	dailysalesrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_sales_stats/repository"
+	dailysalessvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_sales_stats/service"
 	turnaroundhlr "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/handler"
 	turnaroundrepo "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/repository"
 	turnaroundsvc "github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
@@ -51,6 +54,12 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	caseDailyRemakeStatsHandler := dailyremakehlr.NewCaseDailyRemakeStatsHandler(caseDailyRemakeStatsSvc, deps)
 	caseDailyRemakeStatsHandler.RegisterRoutes(router)
 	// cron.RegisterJob(dailyremakejobs.NewCaseDailyRemakeStatsRebuildRangeJob(caseDailyRemakeStatsSvc))
+
+	// Case Daily Sales Stats
+	caseDailySalesStatsRepo := dailysalesrepo.NewCaseDailySalesStatsRepository(entClient, deps.DB, deps)
+	caseDailySalesStatsSvc := dailysalessvc.NewCaseDailySalesStatsService(caseDailySalesStatsRepo, deps)
+	caseDailySalesStatsHandler := dailysaleshlr.NewCaseDailySalesStatsHandler(caseDailySalesStatsSvc, deps)
+	caseDailySalesStatsHandler.RegisterRoutes(router)
 
 	// Case Daily Completed Stats
 	caseDailyCompletedStatsRepo := dailycompletedrepo.NewCaseDailyCompletedStatsRepository(entClient, deps.DB, deps)
