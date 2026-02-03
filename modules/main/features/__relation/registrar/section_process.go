@@ -42,7 +42,7 @@ func init() {
 		RefFields:   []string{"id", "code", "name", "section_name", "color"},
 		Permissions: []string{"process.search"},
 		CachePrefix: "process:list",
-		ExtraWhere: func(args *[]any) string {
+		ExtraWhere: func(params policy.ExtraWhereParams, args *[]any) string {
 			return `
 				r.deleted_at IS NULL AND
 				NOT EXISTS (

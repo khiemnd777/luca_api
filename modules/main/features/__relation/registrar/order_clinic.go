@@ -1,6 +1,8 @@
 package registrar
 
 import (
+	"fmt"
+
 	policy "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
@@ -30,6 +32,11 @@ func init() {
 		NormFields:  []string{"name"},
 		RefFields:   []string{"id", "name"},
 		Permissions: []string{"clinic.search"},
+		ExtraWhere: func(params policy.ExtraWhereParams, args *[]any) string {
+			*args = append(*args, params.DepartmentID)
+			return fmt.Sprintf("r.department_id = $%d::INT", len(*args))
+
+		},
 		CachePrefix: "clinic:search",
 	})
 }

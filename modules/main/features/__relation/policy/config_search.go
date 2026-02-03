@@ -9,6 +9,10 @@ type ConfigSearch struct {
 	Permissions  []string
 	CachePrefix  string
 	ExtraJoins   func() string
-	ExtraWhere   func(args *[]any) string
+	ExtraWhere   func(params ExtraWhereParams, args *[]any) string
 	OrderRows    func([]map[string]any) []map[string]any
+}
+
+type ExtraWhereParams struct {
+	DepartmentID int
 }

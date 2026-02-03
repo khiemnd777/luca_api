@@ -6,6 +6,7 @@ import (
 
 type ClinicDTO struct {
 	ID           int            `json:"id,omitempty"`
+	DepartmentID int            `json:"department_id,omitempty"`
 	Name         string         `json:"name,omitempty"`
 	Address      *string        `json:"address,omitempty"`
 	PhoneNumber  *string        `json:"phone_number,omitempty"`

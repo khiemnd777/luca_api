@@ -20,14 +20,14 @@ import (
 )
 
 type ClinicRepository interface {
-	Create(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error)
-	Update(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error)
-	GetByID(ctx context.Context, id int) (*model.ClinicDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
-	ListByDentistID(ctx context.Context, dentistID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
-	ListByPatientID(ctx context.Context, patientID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error)
+	Update(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.ClinicDTO, error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
+	ListByDentistID(ctx context.Context, deptID int, dentistID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
+	ListByPatientID(ctx context.Context, deptID int, patientID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type clinicRepo struct {
@@ -41,7 +41,7 @@ func NewClinicRepository(db *generated.Client, deps *module.ModuleDeps[config.Mo
 	return &clinicRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
-func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error) {
+func (r *clinicRepo) Create(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -55,6 +55,7 @@ func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.
 	}()
 
 	q := tx.Clinic.Create().
+		SetNillableDepartmentID(&deptID).
 		SetName(input.Name).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
@@ -116,7 +117,7 @@ func (r *clinicRepo) Create(ctx context.Context, input model.ClinicDTO) (*model.
 	return dto, nil
 }
 
-func (r *clinicRepo) Update(ctx context.Context, input model.ClinicDTO) (*model.ClinicDTO, error) {
+func (r *clinicRepo) Update(ctx context.Context, deptID int, input model.ClinicDTO) (*model.ClinicDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -128,6 +129,17 @@ func (r *clinicRepo) Update(ctx context.Context, input model.ClinicDTO) (*model.
 			_ = tx.Commit()
 		}
 	}()
+
+	_, err = tx.Clinic.Query().
+		Where(
+			clinic.ID(input.ID),
+			clinic.DepartmentIDEQ(deptID),
+			clinic.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	q := tx.Clinic.UpdateOneID(input.ID).
 		SetName(input.Name).
@@ -196,10 +208,11 @@ func (r *clinicRepo) Update(ctx context.Context, input model.ClinicDTO) (*model.
 	return dto, nil
 }
 
-func (r *clinicRepo) GetByID(ctx context.Context, id int) (*model.ClinicDTO, error) {
+func (r *clinicRepo) GetByID(ctx context.Context, deptID int, id int) (*model.ClinicDTO, error) {
 	q := r.db.Clinic.Query().
 		Where(
 			clinic.ID(id),
+			clinic.DepartmentIDEQ(deptID),
 			clinic.DeletedAtIsNil(),
 		)
 
@@ -225,11 +238,14 @@ func (r *clinicRepo) GetByID(ctx context.Context, id int) (*model.ClinicDTO, err
 	return dto, nil
 }
 
-func (r *clinicRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
+func (r *clinicRepo) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Clinic.Query().
-			Where(clinic.DeletedAtIsNil()),
+			Where(
+				clinic.DeletedAtIsNil(),
+				clinic.DepartmentIDEQ(deptID),
+			),
 		query,
 		clinic.Table,
 		clinic.FieldID,
@@ -246,13 +262,14 @@ func (r *clinicRepo) List(ctx context.Context, query table.TableQuery) (table.Ta
 	return list, nil
 }
 
-func (r *clinicRepo) ListByDentistID(ctx context.Context, dentistID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
+func (r *clinicRepo) ListByDentistID(ctx context.Context, deptID int, dentistID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Clinic.Query().
 			Where(
 				clinic.HasDentistsWith(clinicdentist.DentistIDEQ(dentistID)),
 				clinic.DeletedAtIsNil(),
+				clinic.DepartmentIDEQ(deptID),
 			),
 		query,
 		clinic.Table,
@@ -270,13 +287,14 @@ func (r *clinicRepo) ListByDentistID(ctx context.Context, dentistID int, query t
 	return list, nil
 }
 
-func (r *clinicRepo) ListByPatientID(ctx context.Context, patientID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
+func (r *clinicRepo) ListByPatientID(ctx context.Context, deptID int, patientID int, query table.TableQuery) (table.TableListResult[model.ClinicDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Clinic.Query().
 			Where(
 				clinic.HasPatientsWith(clinicpatient.PatientIDEQ(patientID)),
 				clinic.DeletedAtIsNil(),
+				clinic.DepartmentIDEQ(deptID),
 			),
 		query,
 		clinic.Table,
@@ -294,11 +312,14 @@ func (r *clinicRepo) ListByPatientID(ctx context.Context, patientID int, query t
 	return list, nil
 }
 
-func (r *clinicRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error) {
+func (r *clinicRepo) Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.ClinicDTO], error) {
 	return dbutils.Search(
 		ctx,
 		r.db.Clinic.Query().
-			Where(clinic.DeletedAtIsNil()),
+			Where(
+				clinic.DeletedAtIsNil(),
+				clinic.DepartmentIDEQ(deptID),
+			),
 		[]string{
 			dbutils.GetNormField(clinic.FieldName),
 		},
@@ -314,8 +335,13 @@ func (r *clinicRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbu
 	)
 }
 
-func (r *clinicRepo) Delete(ctx context.Context, id int) error {
-	return r.db.Clinic.UpdateOneID(id).
+func (r *clinicRepo) Delete(ctx context.Context, deptID int, id int) error {
+	return r.db.Clinic.Update().
+		Where(
+			clinic.ID(id),
+			clinic.DepartmentIDEQ(deptID),
+			clinic.DeletedAtIsNil(),
+		).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
 }

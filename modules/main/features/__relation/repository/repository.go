@@ -240,6 +240,7 @@ func (r *RelationRepository) ListM2M(
 func (r *RelationRepository) Search(
 	ctx context.Context,
 	tx *generated.Tx,
+	deptID int,
 	cfg relation.ConfigSearch,
 	sq dbutils.SearchQuery,
 ) (any, error) {
@@ -290,7 +291,9 @@ func (r *RelationRepository) Search(
 		}
 	}
 	if cfg.ExtraWhere != nil {
-		if w := cfg.ExtraWhere(&args); strings.TrimSpace(w) != "" {
+		if w := cfg.ExtraWhere(relation.ExtraWhereParams{
+			DepartmentID: deptID,
+		}, &args); strings.TrimSpace(w) != "" {
 			whereParts = append(whereParts, w)
 		}
 	}

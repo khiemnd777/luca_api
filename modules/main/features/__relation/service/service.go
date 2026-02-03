@@ -147,7 +147,7 @@ func (s *RelationService) ListM2M(
 	})
 }
 
-func (s *RelationService) Search(ctx context.Context, key string, q dbutils.SearchQuery) (any, error) {
+func (s *RelationService) Search(ctx context.Context, deptID int, key string, q dbutils.SearchQuery) (any, error) {
 	cfg, err := relation.GetConfigRefSearch(key)
 	if err != nil {
 		return nil, nil
@@ -163,7 +163,7 @@ func (s *RelationService) Search(ctx context.Context, key string, q dbutils.Sear
 		extendWhereKey = fmt.Sprint(q.ExtendWhere)
 	}
 
-	cKey := fmt.Sprintf(cfg.CachePrefix+":%s:k%s:w%s:l%d:p%d:o%s:d%s", key, q.Keyword, extendWhereKey, q.Limit, q.Page, orderBy, q.Direction)
+	cKey := fmt.Sprintf(cfg.CachePrefix+":dpt%d:%s:k%s:w%s:l%d:p%d:o%s:d%s", deptID, key, q.Keyword, extendWhereKey, q.Limit, q.Page, orderBy, q.Direction)
 
 	return cache.Get(cKey, cache.TTLShort, func() (*any, error) {
 		tx, err := s.deps.Ent.(*generated.Client).Tx(ctx)
@@ -174,7 +174,7 @@ func (s *RelationService) Search(ctx context.Context, key string, q dbutils.Sear
 			_ = tx.Rollback()
 		}()
 
-		result, err := s.repo.Search(ctx, tx, cfg, q)
+		result, err := s.repo.Search(ctx, tx, deptID, cfg, q)
 		if err != nil {
 			return nil, err
 		}

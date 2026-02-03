@@ -144,7 +144,9 @@ func (h *RelationHandler) Search(c *fiber.Ctx) error {
 
 	q := dbutils.ParseSearchQuery(c, 10)
 
-	res, err := h.svc.Search(c.UserContext(), key, q)
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	res, err := h.svc.Search(c.UserContext(), deptID, key, q)
 
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())

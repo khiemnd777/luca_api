@@ -55,7 +55,7 @@ func init() {
 				JOIN roles r ON r.id = ur.role_id
 			`
 		},
-		ExtraWhere: func(args *[]any) string {
+		ExtraWhere: func(params policy.ExtraWhereParams, args *[]any) string {
 			*args = append(*args, "technician")
 			return fmt.Sprintf("r.role_name = $%d", len(*args))
 		},

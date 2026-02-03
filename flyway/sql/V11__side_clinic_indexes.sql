@@ -1,5 +1,5 @@
 CREATE INDEX IF NOT EXISTS ix_clinic_id_not_deleted
-  ON clinics(id)
+  ON clinics(department_id, id)
   WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS ix_dentist_id_not_deleted
