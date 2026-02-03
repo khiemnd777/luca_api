@@ -1,5 +1,5 @@
 CREATE INDEX IF NOT EXISTS ix_material_id_not_deleted
-  ON materials(id)
+  ON materials(department_id, id)
   WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS ix_material_code_not_deleted

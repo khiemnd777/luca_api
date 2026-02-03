@@ -17,12 +17,12 @@ import (
 )
 
 type MaterialRepository interface {
-	Create(ctx context.Context, input model.MaterialDTO) (*model.MaterialDTO, error)
-	Update(ctx context.Context, input model.MaterialDTO) (*model.MaterialDTO, error)
-	GetByID(ctx context.Context, id int) (*model.MaterialDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error)
-	Search(ctx context.Context, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error)
+	Update(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.MaterialDTO, error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error)
+	Search(ctx context.Context, deptID int, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type materialRepo struct {
@@ -35,7 +35,7 @@ func NewMaterialRepository(db *generated.Client, deps *module.ModuleDeps[config.
 	return &materialRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
-func (r *materialRepo) Create(ctx context.Context, input model.MaterialDTO) (*model.MaterialDTO, error) {
+func (r *materialRepo) Create(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -49,6 +49,7 @@ func (r *materialRepo) Create(ctx context.Context, input model.MaterialDTO) (*mo
 	}()
 
 	q := tx.Material.Create().
+		SetNillableDepartmentID(&deptID).
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name).
 		SetNillableType(input.Type)
@@ -79,7 +80,7 @@ func (r *materialRepo) Create(ctx context.Context, input model.MaterialDTO) (*mo
 	return dto, nil
 }
 
-func (r *materialRepo) Update(ctx context.Context, input model.MaterialDTO) (*model.MaterialDTO, error) {
+func (r *materialRepo) Update(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -91,6 +92,17 @@ func (r *materialRepo) Update(ctx context.Context, input model.MaterialDTO) (*mo
 			_ = tx.Commit()
 		}
 	}()
+
+	_, err = tx.Material.Query().
+		Where(
+			material.ID(input.ID),
+			material.DepartmentIDEQ(deptID),
+			material.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	q := tx.Material.UpdateOneID(input.ID).
 		SetNillableCode(input.Code).
@@ -123,10 +135,11 @@ func (r *materialRepo) Update(ctx context.Context, input model.MaterialDTO) (*mo
 	return dto, nil
 }
 
-func (r *materialRepo) GetByID(ctx context.Context, id int) (*model.MaterialDTO, error) {
+func (r *materialRepo) GetByID(ctx context.Context, deptID int, id int) (*model.MaterialDTO, error) {
 	q := r.db.Material.Query().
 		Where(
 			material.ID(id),
+			material.DepartmentIDEQ(deptID),
 			material.DeletedAtIsNil(),
 		)
 
@@ -139,11 +152,14 @@ func (r *materialRepo) GetByID(ctx context.Context, id int) (*model.MaterialDTO,
 	return dto, nil
 }
 
-func (r *materialRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error) {
+func (r *materialRepo) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Material.Query().
-			Where(material.DeletedAtIsNil()),
+			Where(
+				material.DeletedAtIsNil(),
+				material.DepartmentIDEQ(deptID),
+			),
 		query,
 		material.Table,
 		material.FieldID,
@@ -159,10 +175,13 @@ func (r *materialRepo) List(ctx context.Context, query table.TableQuery) (table.
 	return list, nil
 }
 
-func (r *materialRepo) Search(ctx context.Context, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
+func (r *materialRepo) Search(ctx context.Context, deptID int, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
 	q := r.db.Material.
 		Query().
-		Where(material.DeletedAtIsNil())
+		Where(
+			material.DeletedAtIsNil(),
+			material.DepartmentIDEQ(deptID),
+		)
 
 	if materialType != nil {
 		q = q.Where(material.TypeEQ(*materialType))
@@ -185,8 +204,13 @@ func (r *materialRepo) Search(ctx context.Context, materialType *string, query d
 	)
 }
 
-func (r *materialRepo) Delete(ctx context.Context, id int) error {
-	return r.db.Material.UpdateOneID(id).
+func (r *materialRepo) Delete(ctx context.Context, deptID int, id int) error {
+	return r.db.Material.Update().
+		Where(
+			material.ID(id),
+			material.DepartmentIDEQ(deptID),
+			material.DeletedAtIsNil(),
+		).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
 }

@@ -21,10 +21,10 @@ import (
 type MaterialService interface {
 	Create(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error)
 	Update(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error)
-	GetByID(ctx context.Context, id int) (*model.MaterialDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error)
-	Search(ctx context.Context, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
-	Delete(ctx context.Context, id int) error
+	GetByID(ctx context.Context, deptID int, id int) (*model.MaterialDTO, error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.MaterialDTO], error)
+	Search(ctx context.Context, deptID int, materialType *string, query dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type materialService struct {
@@ -41,34 +41,34 @@ func NewMaterialService(repo repository.MaterialRepository, deps *module.ModuleD
 // Cache Keys
 // ----------------------------------------------------------------------------
 
-func kMaterialByID(id int) string {
-	return fmt.Sprintf("material:id:%d", id)
+func kMaterialByID(deptID int, id int) string {
+	return fmt.Sprintf("material:dpt%d:id:%d", deptID, id)
 }
 
-func kMaterialAll() []string {
+func kMaterialAll(deptID int) []string {
 	return []string{
-		kMaterialListAll(),
-		kMaterialSearchAll(),
+		kMaterialListAll(deptID),
+		kMaterialSearchAll(deptID),
 	}
 }
 
-func kMaterialListAll() string {
-	return "material:list:*"
+func kMaterialListAll(deptID int) string {
+	return fmt.Sprintf("material:list:dpt%d:*", deptID)
 }
 
-func kMaterialSearchAll() string {
-	return "material:search:*"
+func kMaterialSearchAll(deptID int) string {
+	return fmt.Sprintf("material:search:dpt%d:*", deptID)
 }
 
-func kMaterialList(q table.TableQuery) string {
+func kMaterialList(deptID int, q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("material:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("material:list:dpt%d:l%d:p%d:o%s:d%s", deptID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kMaterialSearch(materialType *string, q dbutils.SearchQuery) string {
+func kMaterialSearch(deptID int, materialType *string, q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
@@ -77,7 +77,7 @@ func kMaterialSearch(materialType *string, q dbutils.SearchQuery) string {
 	if materialType != nil {
 		mtype = *materialType
 	}
-	return fmt.Sprintf("material:search:t%s:k%s:l%d:p%d:o%s:d%s", mtype, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("material:search:dpt%d:t%s:k%s:l%d:p%d:o%s:d%s", deptID, mtype, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 // ----------------------------------------------------------------------------
@@ -85,15 +85,15 @@ func kMaterialSearch(materialType *string, q dbutils.SearchQuery) string {
 // ----------------------------------------------------------------------------
 
 func (s *materialService) Create(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error) {
-	dto, err := s.repo.Create(ctx, input)
+	dto, err := s.repo.Create(ctx, deptID, input)
 	if err != nil {
 		return nil, err
 	}
 
 	if dto != nil && dto.ID > 0 {
-		cache.InvalidateKeys(kMaterialByID(dto.ID))
+		cache.InvalidateKeys(kMaterialByID(deptID, dto.ID))
 	}
-	cache.InvalidateKeys(kMaterialAll()...)
+	cache.InvalidateKeys(kMaterialAll(deptID)...)
 
 	s.upsertSearch(ctx, deptID, dto)
 
@@ -105,15 +105,15 @@ func (s *materialService) Create(ctx context.Context, deptID int, input model.Ma
 // ----------------------------------------------------------------------------
 
 func (s *materialService) Update(ctx context.Context, deptID int, input model.MaterialDTO) (*model.MaterialDTO, error) {
-	dto, err := s.repo.Update(ctx, input)
+	dto, err := s.repo.Update(ctx, deptID, input)
 	if err != nil {
 		return nil, err
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kMaterialByID(dto.ID))
+		cache.InvalidateKeys(kMaterialByID(deptID, dto.ID))
 	}
-	cache.InvalidateKeys(kMaterialAll()...)
+	cache.InvalidateKeys(kMaterialAll(deptID)...)
 
 	s.upsertSearch(ctx, deptID, dto)
 
@@ -151,9 +151,9 @@ func (s *materialService) unlinkSearch(id int) {
 // GetByID
 // ----------------------------------------------------------------------------
 
-func (s *materialService) GetByID(ctx context.Context, id int) (*model.MaterialDTO, error) {
-	return cache.Get(kMaterialByID(id), cache.TTLMedium, func() (*model.MaterialDTO, error) {
-		return s.repo.GetByID(ctx, id)
+func (s *materialService) GetByID(ctx context.Context, deptID int, id int) (*model.MaterialDTO, error) {
+	return cache.Get(kMaterialByID(deptID, id), cache.TTLMedium, func() (*model.MaterialDTO, error) {
+		return s.repo.GetByID(ctx, deptID, id)
 	})
 }
 
@@ -161,12 +161,12 @@ func (s *materialService) GetByID(ctx context.Context, id int) (*model.MaterialD
 // List
 // ----------------------------------------------------------------------------
 
-func (s *materialService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.MaterialDTO], error) {
+func (s *materialService) List(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.MaterialDTO], error) {
 	type boxed = table.TableListResult[model.MaterialDTO]
-	key := kMaterialList(q)
+	key := kMaterialList(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.List(ctx, q)
+		res, e := s.repo.List(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}
@@ -183,12 +183,16 @@ func (s *materialService) List(ctx context.Context, q table.TableQuery) (table.T
 // Delete
 // ----------------------------------------------------------------------------
 
-func (s *materialService) Delete(ctx context.Context, id int) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
+func (s *materialService) Delete(ctx context.Context, deptID int, id int) error {
+	_, err := s.repo.GetByID(ctx, deptID, id)
+	if err != nil {
 		return err
 	}
-	cache.InvalidateKeys(kMaterialAll()...)
-	cache.InvalidateKeys(kMaterialByID(id))
+	if err := s.repo.Delete(ctx, deptID, id); err != nil {
+		return err
+	}
+	cache.InvalidateKeys(kMaterialAll(deptID)...)
+	cache.InvalidateKeys(kMaterialByID(deptID, id))
 
 	s.unlinkSearch(id)
 	return nil
@@ -198,12 +202,12 @@ func (s *materialService) Delete(ctx context.Context, id int) error {
 // Search
 // ----------------------------------------------------------------------------
 
-func (s *materialService) Search(ctx context.Context, materialType *string, q dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
+func (s *materialService) Search(ctx context.Context, deptID int, materialType *string, q dbutils.SearchQuery) (dbutils.SearchResult[model.MaterialDTO], error) {
 	type boxed = dbutils.SearchResult[model.MaterialDTO]
-	key := kMaterialSearch(materialType, q)
+	key := kMaterialSearch(deptID, materialType, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.Search(ctx, materialType, q)
+		res, e := s.repo.Search(ctx, deptID, materialType, q)
 		if e != nil {
 			return nil, e
 		}

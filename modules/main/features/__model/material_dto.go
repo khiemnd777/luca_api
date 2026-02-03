@@ -4,6 +4,7 @@ import "time"
 
 type MaterialDTO struct {
 	ID            int            `json:"id,omitempty"`
+	DepartmentID  *int           `json:"department_id,omitempty"`
 	Code          *string        `json:"code,omitempty"`
 	Name          *string        `json:"name,omitempty"`
 	Type          *string        `json:"type,omitempty"`

@@ -39,7 +39,8 @@ func (h *MaterialHandler) List(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
-	res, err := h.svc.List(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.List(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -52,7 +53,8 @@ func (h *MaterialHandler) Search(c *fiber.Ctx) error {
 	}
 	q := dbutils.ParseSearchQuery(c, 20)
 	mtype := utils.GetQueryAsString(c, "type")
-	res, err := h.svc.Search(c.UserContext(), &mtype, q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.Search(c.UserContext(), deptID, &mtype, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -68,7 +70,8 @@ func (h *MaterialHandler) GetByID(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
-	dto, err := h.svc.GetByID(c.UserContext(), id)
+	deptID, _ := utils.GetDeptIDInt(c)
+	dto, err := h.svc.GetByID(c.UserContext(), deptID, id)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -126,7 +129,8 @@ func (h *MaterialHandler) Delete(c *fiber.Ctx) error {
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
-	if err := h.svc.Delete(c.UserContext(), id); err != nil {
+	deptID, _ := utils.GetDeptIDInt(c)
+	if err := h.svc.Delete(c.UserContext(), deptID, id); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)
