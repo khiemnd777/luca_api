@@ -15,6 +15,10 @@ type Process struct {
 
 func (Process) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("department_id").
+			Optional().
+			Nillable(),
+
 		field.String("code").
 			Optional().
 			Nillable(),
@@ -70,6 +74,7 @@ func (Process) Edges() []ent.Edge {
 func (Process) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("id", "deleted_at"),
+		index.Fields("department_id", "deleted_at"),
 		index.Fields("code"),
 		index.Fields("code", "deleted_at").Unique(),
 		index.Fields("name", "deleted_at"),

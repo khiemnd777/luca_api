@@ -21,10 +21,10 @@ import (
 type ProcessService interface {
 	Create(ctx context.Context, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error)
 	Update(ctx context.Context, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error)
-	GetByID(ctx context.Context, id int) (*model.ProcessDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProcessDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error)
-	Delete(ctx context.Context, id int) error
+	GetByID(ctx context.Context, deptID int, id int) (*model.ProcessDTO, error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.ProcessDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type processService struct {
@@ -41,54 +41,54 @@ func NewProcessService(repo repository.ProcessRepository, deps *module.ModuleDep
 // Cache Keys
 // ----------------------------------------------------------------------------
 
-func kProcessByID(id int) string {
-	return fmt.Sprintf("process:id:%d", id)
+func kProcessByID(deptID int, id int) string {
+	return fmt.Sprintf("process:dpt%d:id:%d", deptID, id)
 }
 
-func kProcessAll() []string {
+func kProcessAll(deptID int) []string {
 	return []string{
-		kProcessListAll(),
-		kProcessSearchAll(),
-		kProcessSectionAll(),
+		kProcessListAll(deptID),
+		kProcessSearchAll(deptID),
+		kProcessSectionAll(deptID),
 		"product_process:list:*",
 		"category_process:list:*",
 	}
 }
 
-func kProcessListAll() string {
-	return "process:list:*"
+func kProcessListAll(deptID int) string {
+	return fmt.Sprintf("process:list:dpt%d:*", deptID)
 }
 
-func kProcessSearchAll() string {
-	return "process:search:*"
+func kProcessSearchAll(deptID int) string {
+	return fmt.Sprintf("process:search:dpt%d:*", deptID)
 }
 
-func kProcessSectionAll() string {
-	return "process:section:*"
+func kProcessSectionAll(deptID int) string {
+	return fmt.Sprintf("process:section:dpt%d:*", deptID)
 }
 
-func kProcessList(q table.TableQuery) string {
+func kProcessList(deptID int, q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("process:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("process:list:dpt%d:l%d:p%d:o%s:d%s", deptID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kSectionProcessesList(sectionID int, q table.TableQuery) string {
+func kSectionProcessesList(deptID int, sectionID int, q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("section:id:%d:processes:list:l%d:p%d:o%s:d%s", sectionID, q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("section:dpt%d:id:%d:processes:list:l%d:p%d:o%s:d%s", deptID, sectionID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kProcessSearch(q dbutils.SearchQuery) string {
+func kProcessSearch(deptID int, q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("process:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("process:search:dpt%d:k%s:l%d:p%d:o%s:d%s", deptID, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 // ----------------------------------------------------------------------------
@@ -96,15 +96,15 @@ func kProcessSearch(q dbutils.SearchQuery) string {
 // ----------------------------------------------------------------------------
 
 func (s *processService) Create(ctx context.Context, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error) {
-	dto, err := s.repo.Create(ctx, input)
+	dto, err := s.repo.Create(ctx, deptID, input)
 	if err != nil {
 		return nil, err
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kProcessByID(dto.ID))
+		cache.InvalidateKeys(kProcessByID(deptID, dto.ID))
 	}
-	cache.InvalidateKeys(kProcessAll()...)
+	cache.InvalidateKeys(kProcessAll(deptID)...)
 
 	s.upsertSearch(ctx, deptID, dto)
 
@@ -116,15 +116,15 @@ func (s *processService) Create(ctx context.Context, deptID int, input model.Pro
 // ----------------------------------------------------------------------------
 
 func (s *processService) Update(ctx context.Context, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error) {
-	dto, err := s.repo.Update(ctx, input)
+	dto, err := s.repo.Update(ctx, deptID, input)
 	if err != nil {
 		return nil, err
 	}
 
 	if dto != nil {
-		cache.InvalidateKeys(kProcessByID(dto.ID))
+		cache.InvalidateKeys(kProcessByID(deptID, dto.ID))
 	}
-	cache.InvalidateKeys(kProcessAll()...)
+	cache.InvalidateKeys(kProcessAll(deptID)...)
 
 	s.upsertSearch(ctx, deptID, dto)
 
@@ -162,9 +162,9 @@ func (s *processService) unlinkSearch(id int) {
 // GetByID
 // ----------------------------------------------------------------------------
 
-func (s *processService) GetByID(ctx context.Context, id int) (*model.ProcessDTO, error) {
-	return cache.Get(kProcessByID(id), cache.TTLMedium, func() (*model.ProcessDTO, error) {
-		return s.repo.GetByID(ctx, id)
+func (s *processService) GetByID(ctx context.Context, deptID int, id int) (*model.ProcessDTO, error) {
+	return cache.Get(kProcessByID(deptID, id), cache.TTLMedium, func() (*model.ProcessDTO, error) {
+		return s.repo.GetByID(ctx, deptID, id)
 	})
 }
 
@@ -172,12 +172,12 @@ func (s *processService) GetByID(ctx context.Context, id int) (*model.ProcessDTO
 // List
 // ----------------------------------------------------------------------------
 
-func (s *processService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.ProcessDTO], error) {
+func (s *processService) List(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.ProcessDTO], error) {
 	type boxed = table.TableListResult[model.ProcessDTO]
-	key := kProcessList(q)
+	key := kProcessList(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.List(ctx, q)
+		res, e := s.repo.List(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}
@@ -194,16 +194,16 @@ func (s *processService) List(ctx context.Context, q table.TableQuery) (table.Ta
 // Delete
 // ----------------------------------------------------------------------------
 
-func (s *processService) Delete(ctx context.Context, id int) error {
-	_, err := s.repo.GetByID(ctx, id)
+func (s *processService) Delete(ctx context.Context, deptID int, id int) error {
+	_, err := s.repo.GetByID(ctx, deptID, id)
 	if err != nil {
 		return err
 	}
-	if err := s.repo.Delete(ctx, id); err != nil {
+	if err := s.repo.Delete(ctx, deptID, id); err != nil {
 		return err
 	}
-	cache.InvalidateKeys(kProcessAll()...)
-	cache.InvalidateKeys(kProcessByID(id))
+	cache.InvalidateKeys(kProcessAll(deptID)...)
+	cache.InvalidateKeys(kProcessByID(deptID, id))
 
 	s.unlinkSearch(id)
 	return nil
@@ -213,12 +213,12 @@ func (s *processService) Delete(ctx context.Context, id int) error {
 // Search
 // ----------------------------------------------------------------------------
 
-func (s *processService) Search(ctx context.Context, q dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error) {
+func (s *processService) Search(ctx context.Context, deptID int, q dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error) {
 	type boxed = dbutils.SearchResult[model.ProcessDTO]
-	key := kProcessSearch(q)
+	key := kProcessSearch(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.Search(ctx, q)
+		res, e := s.repo.Search(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}

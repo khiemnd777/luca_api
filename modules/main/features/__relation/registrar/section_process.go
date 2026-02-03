@@ -1,6 +1,8 @@
 package registrar
 
 import (
+	"fmt"
+
 	policy "github.com/khiemnd777/andy_api/modules/main/features/__relation/policy"
 	"github.com/khiemnd777/andy_api/shared/logger"
 )
@@ -43,13 +45,15 @@ func init() {
 		Permissions: []string{"process.search"},
 		CachePrefix: "process:list",
 		ExtraWhere: func(params policy.ExtraWhereParams, args *[]any) string {
-			return `
+			*args = append(*args, params.DepartmentID)
+			return fmt.Sprintf(`
 				r.deleted_at IS NULL AND
+				r.department_id = $%d::INT AND
 				NOT EXISTS (
 					SELECT 1 FROM section_processes sp
 					WHERE sp.process_id = r.id
 				)
-			`
+			`, len(*args))
 		},
 	})
 }

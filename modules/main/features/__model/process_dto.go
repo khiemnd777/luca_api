@@ -4,6 +4,7 @@ import "time"
 
 type ProcessDTO struct {
 	ID           int            `json:"id,omitempty"`
+	DepartmentID *int           `json:"department_id,omitempty"`
 	Code         *string        `json:"code,omitempty"`
 	Name         *string        `json:"name,omitempty"`
 	Color        *string        `json:"color,omitempty"`

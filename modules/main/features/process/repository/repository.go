@@ -16,12 +16,12 @@ import (
 )
 
 type ProcessRepository interface {
-	Create(ctx context.Context, input model.ProcessDTO) (*model.ProcessDTO, error)
-	Update(ctx context.Context, input model.ProcessDTO) (*model.ProcessDTO, error)
-	GetByID(ctx context.Context, id int) (*model.ProcessDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProcessDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error)
+	Update(ctx context.Context, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.ProcessDTO, error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.ProcessDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type processRepo struct {
@@ -34,7 +34,7 @@ func NewProcessRepository(db *generated.Client, deps *module.ModuleDeps[config.M
 	return &processRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
-func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (dto *model.ProcessDTO, err error) {
+func (r *processRepo) Create(ctx context.Context, deptID int, input model.ProcessDTO) (dto *model.ProcessDTO, err error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -47,11 +47,11 @@ func (r *processRepo) Create(ctx context.Context, input model.ProcessDTO) (dto *
 		}
 	}()
 
-	dto, err = r.createWithTx(ctx, tx, input)
+	dto, err = r.createWithTx(ctx, tx, deptID, input)
 	return dto, err
 }
 
-func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (dto *model.ProcessDTO, err error) {
+func (r *processRepo) Update(ctx context.Context, deptID int, input model.ProcessDTO) (dto *model.ProcessDTO, err error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -64,12 +64,13 @@ func (r *processRepo) Update(ctx context.Context, input model.ProcessDTO) (dto *
 		}
 	}()
 
-	dto, err = r.updateWithTx(ctx, tx, input)
+	dto, err = r.updateWithTx(ctx, tx, deptID, input)
 	return dto, err
 }
 
-func (r *processRepo) createWithTx(ctx context.Context, tx *generated.Tx, input model.ProcessDTO) (*model.ProcessDTO, error) {
+func (r *processRepo) createWithTx(ctx context.Context, tx *generated.Tx, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error) {
 	q := tx.Process.Create().
+		SetNillableDepartmentID(&deptID).
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
@@ -94,12 +95,23 @@ func (r *processRepo) createWithTx(ctx context.Context, tx *generated.Tx, input 
 	return dto, nil
 }
 
-func (r *processRepo) updateWithTx(ctx context.Context, tx *generated.Tx, input model.ProcessDTO) (*model.ProcessDTO, error) {
+func (r *processRepo) updateWithTx(ctx context.Context, tx *generated.Tx, deptID int, input model.ProcessDTO) (*model.ProcessDTO, error) {
+	_, err := tx.Process.Query().
+		Where(
+			process.ID(input.ID),
+			process.DepartmentIDEQ(deptID),
+			process.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	q := tx.Process.UpdateOneID(input.ID).
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name)
 
-	_, err := customfields.PrepareCustomFields(ctx,
+	_, err = customfields.PrepareCustomFields(ctx,
 		r.cfMgr,
 		[]string{"process"},
 		input.CustomFields,
@@ -120,10 +132,11 @@ func (r *processRepo) updateWithTx(ctx context.Context, tx *generated.Tx, input 
 	return dto, nil
 }
 
-func (r *processRepo) GetByID(ctx context.Context, id int) (*model.ProcessDTO, error) {
+func (r *processRepo) GetByID(ctx context.Context, deptID int, id int) (*model.ProcessDTO, error) {
 	q := r.db.Process.Query().
 		Where(
 			process.ID(id),
+			process.DepartmentIDEQ(deptID),
 			process.DeletedAtIsNil(),
 		)
 
@@ -136,11 +149,14 @@ func (r *processRepo) GetByID(ctx context.Context, id int) (*model.ProcessDTO, e
 	return dto, nil
 }
 
-func (r *processRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProcessDTO], error) {
+func (r *processRepo) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.ProcessDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Process.Query().
-			Where(process.DeletedAtIsNil()),
+			Where(
+				process.DeletedAtIsNil(),
+				process.DepartmentIDEQ(deptID),
+			),
 		query,
 		process.Table,
 		process.FieldID,
@@ -156,11 +172,14 @@ func (r *processRepo) List(ctx context.Context, query table.TableQuery) (table.T
 	return list, nil
 }
 
-func (r *processRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error) {
+func (r *processRepo) Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProcessDTO], error) {
 	return dbutils.Search(
 		ctx,
 		r.db.Process.Query().
-			Where(process.DeletedAtIsNil()),
+			Where(
+				process.DeletedAtIsNil(),
+				process.DepartmentIDEQ(deptID),
+			),
 		[]string{
 			dbutils.GetNormField(process.FieldCode),
 			dbutils.GetNormField(process.FieldName),
@@ -176,8 +195,13 @@ func (r *processRepo) Search(ctx context.Context, query dbutils.SearchQuery) (db
 	)
 }
 
-func (r *processRepo) Delete(ctx context.Context, id int) error {
-	return r.db.Process.UpdateOneID(id).
+func (r *processRepo) Delete(ctx context.Context, deptID int, id int) error {
+	return r.db.Process.Update().
+		Where(
+			process.ID(id),
+			process.DepartmentIDEQ(deptID),
+			process.DeletedAtIsNil(),
+		).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
 }

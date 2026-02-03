@@ -1,5 +1,5 @@
 CREATE INDEX IF NOT EXISTS ix_process_id_not_deleted
-  ON processes(id)
+  ON processes(department_id, id)
   WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS ix_process_code_not_deleted
