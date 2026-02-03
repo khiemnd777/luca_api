@@ -15,7 +15,9 @@ type Clinic struct {
 
 func (Clinic) Fields() []ent.Field {
 	return []ent.Field{
-		field.Int("department_id").Optional().Nillable(),
+		field.Int("department_id").
+			Optional().
+			Nillable(),
 
 		field.String("name").
 			NotEmpty(),
