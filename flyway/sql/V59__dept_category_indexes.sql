@@ -1,5 +1,9 @@
 CREATE INDEX IF NOT EXISTS ix_category_id_not_deleted
-  ON categories(id)
+  ON categories(department_id, id)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS ix_category_dept_parent_not_deleted
+  ON categories(department_id, parent_id)
   WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS ix_category_name_not_deleted

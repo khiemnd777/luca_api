@@ -4,6 +4,7 @@ import "time"
 
 type CategoryDTO struct {
 	ID              int            `json:"id,omitempty"`
+	DepartmentID    *int           `json:"department_id,omitempty"`
 	Level           int            `json:"level,omitempty"`
 	ParentID        *int           `json:"parent_id,omitempty"`
 	CategoryIDLv1   *int           `json:"category_id_lv1,omitempty"`

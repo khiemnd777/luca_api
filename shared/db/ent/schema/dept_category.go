@@ -15,6 +15,10 @@ type Category struct {
 
 func (Category) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("department_id").
+			Optional().
+			Nillable(),
+
 		field.String("name").
 			Optional().
 			Nillable(),
@@ -90,6 +94,8 @@ func (Category) Edges() []ent.Edge {
 func (Category) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("id", "deleted_at"),
+		index.Fields("department_id", "deleted_at"),
+		index.Fields("department_id", "parent_id", "deleted_at"),
 		index.Fields("name", "deleted_at"),
 		index.Fields("deleted_at"),
 		index.Fields("parent_id", "deleted_at"),

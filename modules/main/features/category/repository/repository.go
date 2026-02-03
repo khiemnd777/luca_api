@@ -23,12 +23,12 @@ import (
 )
 
 type CategoryRepository interface {
-	Create(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error)
-	Update(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error)
-	GetByID(ctx context.Context, id int) (*model.CategoryDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CategoryDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.CategoryDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error)
+	Update(ctx context.Context, deptID int, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.CategoryDTO, error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.CategoryDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.CategoryDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type categoryRepo struct {
@@ -66,7 +66,7 @@ func toTreeNode(e *generated.Category) *collectionutils.TreeNode {
 	}
 }
 
-func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
+func (r *categoryRepo) Create(ctx context.Context, deptID int, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -82,6 +82,7 @@ func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDT
 	dto := &input.DTO
 
 	q := tx.Category.Create().
+		SetNillableDepartmentID(&deptID).
 		SetNillableName(dto.Name).
 		SetNillableParentID(dto.ParentID).
 		SetNillableCategoryIDLv1(dto.CategoryIDLv1).
@@ -144,7 +145,7 @@ func (r *categoryRepo) Create(ctx context.Context, input *model.CategoryUpsertDT
 	return out, nil
 }
 
-func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
+func (r *categoryRepo) Update(ctx context.Context, deptID int, input *model.CategoryUpsertDTO) (*model.CategoryDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -162,6 +163,7 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 	prevCategory, err := tx.Category.Query().
 		Where(
 			category.ID(dto.ID),
+			category.DepartmentIDEQ(deptID),
 			category.DeletedAtIsNil(),
 		).
 		Only(ctx)
@@ -184,6 +186,7 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		parent, err := tx.Category.Query().
 			Where(
 				category.ID(*dto.ParentID),
+				category.DepartmentIDEQ(deptID),
 				category.DeletedAtIsNil(),
 			).
 			Only(ctx)
@@ -233,7 +236,7 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 		(prevCategory.ParentID != nil && (entity.ParentID == nil || *entity.ParentID != *prevCategory.ParentID))
 
 	if parentChanged {
-		if err = r.updateDescendantsLineage(ctx, tx, entity); err != nil {
+		if err = r.updateDescendantsLineage(ctx, tx, deptID, entity); err != nil {
 			return nil, err
 		}
 	}
@@ -281,10 +284,11 @@ func (r *categoryRepo) Update(ctx context.Context, input *model.CategoryUpsertDT
 	return out, nil
 }
 
-func (r *categoryRepo) GetByID(ctx context.Context, id int) (*model.CategoryDTO, error) {
+func (r *categoryRepo) GetByID(ctx context.Context, deptID int, id int) (*model.CategoryDTO, error) {
 	q := r.db.Category.Query().
 		Where(
 			category.ID(id),
+			category.DepartmentIDEQ(deptID),
 			category.DeletedAtIsNil(),
 		)
 
@@ -297,11 +301,14 @@ func (r *categoryRepo) GetByID(ctx context.Context, id int) (*model.CategoryDTO,
 	return dto, nil
 }
 
-func (r *categoryRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.CategoryDTO], error) {
+func (r *categoryRepo) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.CategoryDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Category.Query().
-			Where(category.DeletedAtIsNil()),
+			Where(
+				category.DeletedAtIsNil(),
+				category.DepartmentIDEQ(deptID),
+			),
 		query,
 		category.Table,
 		category.FieldID,
@@ -318,11 +325,14 @@ func (r *categoryRepo) List(ctx context.Context, query table.TableQuery) (table.
 	return list, nil
 }
 
-func (r *categoryRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.CategoryDTO], error) {
+func (r *categoryRepo) Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.CategoryDTO], error) {
 	return dbutils.Search(
 		ctx,
 		r.db.Category.Query().
-			Where(category.DeletedAtIsNil()),
+			Where(
+				category.DeletedAtIsNil(),
+				category.DepartmentIDEQ(deptID),
+			),
 		[]string{
 			dbutils.GetNormField(category.FieldName),
 		},
@@ -344,7 +354,7 @@ func (r *categoryRepo) Delete2(ctx context.Context, id int) error {
 		Exec(ctx)
 }
 
-func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
+func (r *categoryRepo) Delete(ctx context.Context, deptID int, id int) (err error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return err
@@ -361,6 +371,7 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
 	entity, err := tx.Category.Query().
 		Where(
 			category.ID(id),
+			category.DepartmentIDEQ(deptID),
 			category.DeletedAtIsNil(),
 		).
 		Only(ctx)
@@ -373,6 +384,7 @@ func (r *categoryRepo) Delete(ctx context.Context, id int) (err error) {
 	countChildren, err := tx.Category.Query().
 		Where(
 			category.ParentID(id),
+			category.DepartmentIDEQ(deptID),
 			category.DeletedAtIsNil(),
 		).
 		Count(ctx)
@@ -415,7 +427,7 @@ type categoryLineage struct {
 	lv3Name *string
 }
 
-func (r *categoryRepo) updateDescendantsLineage(ctx context.Context, tx *generated.Tx, entity *generated.Category) error {
+func (r *categoryRepo) updateDescendantsLineage(ctx context.Context, tx *generated.Tx, deptID int, entity *generated.Category) error {
 	ids, err := collectionutils.CollectDescendantIDs(
 		ctx,
 		tx,
@@ -432,6 +444,7 @@ func (r *categoryRepo) updateDescendantsLineage(ctx context.Context, tx *generat
 	descendants, err := tx.Category.Query().
 		Where(
 			category.IDIn(ids...),
+			category.DepartmentIDEQ(deptID),
 			category.DeletedAtIsNil(),
 		).
 		All(ctx)
@@ -447,7 +460,7 @@ func (r *categoryRepo) updateDescendantsLineage(ctx context.Context, tx *generat
 		childrenByParent[*child.ParentID] = append(childrenByParent[*child.ParentID], child)
 	}
 
-	baseLineage, err := r.buildCategoryLineage(ctx, tx, entity)
+	baseLineage, err := r.buildCategoryLineage(ctx, tx, deptID, entity)
 	if err != nil {
 		return err
 	}
@@ -493,7 +506,7 @@ func (r *categoryRepo) updateDescendantsLineage(ctx context.Context, tx *generat
 	return nil
 }
 
-func (r *categoryRepo) buildCategoryLineage(ctx context.Context, tx *generated.Tx, entity *generated.Category) (categoryLineage, error) {
+func (r *categoryRepo) buildCategoryLineage(ctx context.Context, tx *generated.Tx, deptID int, entity *generated.Category) (categoryLineage, error) {
 	if entity.ParentID == nil {
 		return categoryLineage{
 			level: 1,
@@ -503,6 +516,7 @@ func (r *categoryRepo) buildCategoryLineage(ctx context.Context, tx *generated.T
 	parent, err := tx.Category.Query().
 		Where(
 			category.ID(*entity.ParentID),
+			category.DepartmentIDEQ(deptID),
 			category.DeletedAtIsNil(),
 		).
 		Only(ctx)
@@ -510,7 +524,7 @@ func (r *categoryRepo) buildCategoryLineage(ctx context.Context, tx *generated.T
 		return categoryLineage{}, err
 	}
 
-	parentLineage, err := r.buildCategoryLineage(ctx, tx, parent)
+	parentLineage, err := r.buildCategoryLineage(ctx, tx, deptID, parent)
 	if err != nil {
 		return categoryLineage{}, err
 	}
