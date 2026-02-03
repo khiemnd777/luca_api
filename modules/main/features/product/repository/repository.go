@@ -22,13 +22,13 @@ import (
 )
 
 type ProductRepository interface {
-	Create(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
-	Update(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
-	GetByID(ctx context.Context, id int) (*model.ProductDTO, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
-	VariantList(ctx context.Context, templateID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
-	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProductDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
+	Update(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.ProductDTO, error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
+	VariantList(ctx context.Context, deptID int, templateID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error)
+	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProductDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type productRepo struct {
@@ -59,7 +59,7 @@ func toTreeNode(e *generated.Product) *collectionutils.TreeNode {
 	}
 }
 
-func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
+func (r *productRepo) Create(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -75,6 +75,7 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 	in := &input.DTO
 
 	q := tx.Product.Create().
+		SetNillableDepartmentID(&deptID).
 		SetNillableCode(in.Code).
 		SetNillableName(in.Name).
 		SetNillableCategoryID(in.CategoryID).
@@ -159,7 +160,7 @@ func (r *productRepo) Create(ctx context.Context, input *model.ProductUpsertDTO)
 	return out, nil
 }
 
-func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
+func (r *productRepo) Update(ctx context.Context, deptID int, input *model.ProductUpsertDTO) (*model.ProductDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -173,6 +174,17 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 	}()
 
 	in := &input.DTO
+
+	_, err = tx.Product.Query().
+		Where(
+			product.ID(in.ID),
+			product.DepartmentIDEQ(deptID),
+			product.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	q := tx.Product.UpdateOneID(in.ID).
 		SetNillableCode(in.Code).
@@ -251,10 +263,11 @@ func (r *productRepo) Update(ctx context.Context, input *model.ProductUpsertDTO)
 	return out, nil
 }
 
-func (r *productRepo) GetByID(ctx context.Context, id int) (*model.ProductDTO, error) {
+func (r *productRepo) GetByID(ctx context.Context, deptID int, id int) (*model.ProductDTO, error) {
 	q := r.db.Product.Query().
 		Where(
 			product.ID(id),
+			product.DepartmentIDEQ(deptID),
 			product.DeletedAtIsNil(),
 		)
 
@@ -267,11 +280,15 @@ func (r *productRepo) GetByID(ctx context.Context, id int) (*model.ProductDTO, e
 	return dto, nil
 }
 
-func (r *productRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.ProductDTO], error) {
+func (r *productRepo) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Product.Query().
-			Where(product.DeletedAtIsNil(), product.IsTemplate(true)),
+			Where(
+				product.DeletedAtIsNil(),
+				product.DepartmentIDEQ(deptID),
+				product.IsTemplate(true),
+			),
 		query,
 		product.Table,
 		product.FieldID,
@@ -287,11 +304,16 @@ func (r *productRepo) List(ctx context.Context, query table.TableQuery) (table.T
 	return list, nil
 }
 
-func (r *productRepo) VariantList(ctx context.Context, templateID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error) {
+func (r *productRepo) VariantList(ctx context.Context, deptID int, templateID int, query table.TableQuery) (table.TableListResult[model.ProductDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.Product.Query().
-			Where(product.DeletedAtIsNil(), product.TemplateIDEQ(templateID), product.IsTemplate(false)),
+			Where(
+				product.DeletedAtIsNil(),
+				product.DepartmentIDEQ(deptID),
+				product.TemplateIDEQ(templateID),
+				product.IsTemplate(false),
+			),
 		query,
 		product.Table,
 		product.FieldID,
@@ -307,11 +329,14 @@ func (r *productRepo) VariantList(ctx context.Context, templateID int, query tab
 	return list, nil
 }
 
-func (r *productRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProductDTO], error) {
+func (r *productRepo) Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.ProductDTO], error) {
 	return dbutils.Search(
 		ctx,
 		r.db.Product.Query().
-			Where(product.DeletedAtIsNil()),
+			Where(
+				product.DeletedAtIsNil(),
+				product.DepartmentIDEQ(deptID),
+			),
 		[]string{
 			dbutils.GetNormField(product.FieldCode),
 			dbutils.GetNormField(product.FieldName),
@@ -327,7 +352,7 @@ func (r *productRepo) Search(ctx context.Context, query dbutils.SearchQuery) (db
 	)
 }
 
-func (r *productRepo) Delete(ctx context.Context, id int) error {
+func (r *productRepo) Delete(ctx context.Context, deptID int, id int) error {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return err
@@ -344,6 +369,7 @@ func (r *productRepo) Delete(ctx context.Context, id int) error {
 	entity, err := tx.Product.Query().
 		Where(
 			product.IDEQ(id),
+			product.DepartmentIDEQ(deptID),
 			product.DeletedAtIsNil(),
 		).
 		Only(ctx)

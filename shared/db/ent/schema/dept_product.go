@@ -15,6 +15,10 @@ type Product struct {
 
 func (Product) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("department_id").
+			Optional().
+			Nillable(),
+
 		field.String("code").
 			Optional().
 			Nillable(),
@@ -87,6 +91,7 @@ func (Product) Edges() []ent.Edge {
 func (Product) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("id", "deleted_at"),
+		index.Fields("department_id", "deleted_at"),
 		index.Fields("code"),
 		index.Fields("code", "deleted_at").Unique(),
 		index.Fields("name", "deleted_at"),
