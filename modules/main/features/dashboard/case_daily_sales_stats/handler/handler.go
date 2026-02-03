@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
+	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_sales_stats/service"
 	"github.com/khiemnd777/andy_api/shared/app"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
@@ -25,6 +26,7 @@ func NewCaseDailySalesStatsHandler(svc service.CaseDailySalesStatsService, deps 
 func (h *CaseDailySalesStatsHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/dashboard/case-daily-sales-stats/summary", h.Summary)
 	app.RouterGet(router, "/:dept_id<int>/dashboard/case-daily-sales-stats/daily", h.Daily)
+	app.RouterGet(router, "/:dept_id<int>/dashboard/case-daily-sales-stats/report", h.GetReport)
 }
 
 func (h *CaseDailySalesStatsHandler) Summary(c *fiber.Ctx) error {
@@ -117,6 +119,36 @@ func (h *CaseDailySalesStatsHandler) Daily(c *fiber.Ctx) error {
 	}
 
 	res, err := h.svc.Daily(c.UserContext(), deptID, fromDate, toDate)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *CaseDailySalesStatsHandler) GetReport(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	deptID, err := resolveDepartmentID(c)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
+	}
+
+	rangeRaw := utils.GetQueryAsString(c, "range")
+	if rangeRaw == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid range")
+	}
+
+	r := model.Range(rangeRaw)
+	switch r {
+	case model.RangeToday, model.Range7d, model.Range30d:
+	default:
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid range")
+	}
+
+	res, err := h.svc.GetReport(c.UserContext(), deptID, r)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

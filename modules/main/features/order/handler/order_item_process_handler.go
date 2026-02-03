@@ -216,7 +216,9 @@ func (h *OrderItemProcessHandler) Assign(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
 	}
 
-	dto, err := h.svc.Assign(c.UserContext(), int64(inProgressID), payload.AssignedID, payload.AssignedName, payload.Note)
+	deptID, _ := utils.GetDeptIDInt(c)
+
+	dto, err := h.svc.Assign(c.UserContext(), deptID, int64(inProgressID), payload.AssignedID, payload.AssignedName, payload.Note)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

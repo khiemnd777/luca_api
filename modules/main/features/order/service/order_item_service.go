@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
@@ -10,6 +11,9 @@ import (
 	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/modules/realtime"
+	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
 )
 
 type OrderItemService interface {
@@ -26,7 +30,7 @@ type OrderItemService interface {
 
 	GetLatestOrderItemIDByOrderID(ctx context.Context, orderID int64) (int64, error)
 	GetOrderIDAndOrderItemIDByCode(ctx context.Context, code string) (int64, int64, error)
-	Delete(ctx context.Context, orderID, orderItemID int64) error
+	Delete(ctx context.Context, deptID int, orderID, orderItemID int64) error
 }
 
 type orderItemService struct {
@@ -85,7 +89,7 @@ func (s *orderItemService) GetOrderIDAndOrderItemIDByCode(ctx context.Context, c
 	return s.repo.GetOrderIDAndOrderItemIDByCode(ctx, code)
 }
 
-func (s *orderItemService) Delete(ctx context.Context, orderID, orderItemID int64) error {
+func (s *orderItemService) Delete(ctx context.Context, deptID int, orderID, orderItemID int64) error {
 	err := s.repo.Delete(ctx, orderItemID)
 	if err != nil {
 		return err
@@ -98,5 +102,31 @@ func (s *orderItemService) Delete(ctx context.Context, orderID, orderItemID int6
 		"order:search:*",
 	)
 
+	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
+	pubsub.PublishAsync("dashboard:daily:sales", &model.SalesDailyUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
+	realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:sales_summary", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:sales_daily", nil)
+
+	s.unlinkSearch(orderID)
+
 	return nil
+}
+
+func (s *orderItemService) unlinkSearch(id int64) {
+	pubsub.PublishAsync("search:unlink", &searchmodel.UnlinkDoc{
+		EntityType: "order",
+		EntityID:   id,
+	})
 }

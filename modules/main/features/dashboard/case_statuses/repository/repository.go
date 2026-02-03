@@ -46,7 +46,8 @@ SELECT
 FROM order_items oi
 JOIN orders o ON o.id = oi.order_id
 WHERE
-  o.department_id = $1
+  o.department_id = $1::INT
+	AND o.deleted_at IS NULL AND oi.deleted_at IS NULL
   AND oi.custom_fields->>'status' IN (
     'received',
     'in_progress',

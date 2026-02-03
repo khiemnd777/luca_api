@@ -77,6 +77,7 @@ type OrderItemProcessService interface {
 	) (*model.OrderItemProcessInProgressDTO, error)
 	Assign(
 		ctx context.Context,
+		deptID int,
 		inprogressID int64,
 		assignedID *int64,
 		assignedName *string,
@@ -248,11 +249,11 @@ func (s *orderItemProcessService) CheckInOrOut(
 		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.NextProcessID))
 	}
 	if dto.AssignedID != nil {
-		keys = append(keys, fmt.Sprintf("order:assigned:%d:*", *dto.AssignedID))
+		keys = append(keys, fmt.Sprintf("order:assigned:dpt%d:%d:*", deptID, *dto.AssignedID))
 	}
 
 	cache.InvalidateKeys(keys...)
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 
 	// notify to next process's leader
 	if dto.CompletedAt != nil && dto.NextProcessID != nil {
@@ -306,7 +307,7 @@ func (s *orderItemProcessService) CheckInOrOut(
 	return dto, nil
 }
 
-func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
+func (s *orderItemProcessService) Assign(ctx context.Context, deptID int, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
 	dto, _, _, _, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
 	if err != nil {
 		return nil, err
@@ -336,11 +337,11 @@ func (s *orderItemProcessService) Assign(ctx context.Context, inprogressID int64
 		keys = append(keys, fmt.Sprintf("order:process:id%d:*", *dto.NextProcessID))
 	}
 	if dto.AssignedID != nil {
-		keys = append(keys, fmt.Sprintf("order:assigned:%d:*", *dto.AssignedID))
+		keys = append(keys, fmt.Sprintf("order:assigned:dpt%d:%d:*", deptID, *dto.AssignedID))
 	}
 
 	cache.InvalidateKeys(keys...)
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 
 	return dto, nil
 }
@@ -371,7 +372,7 @@ func (s *orderItemProcessService) Update(ctx context.Context, deptID int, input 
 			fmt.Sprintf("order:id:%d:oid:%d:processes", *dto.OrderID, dto.OrderItemID),
 		)
 	}
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 
 	return dto, nil
 }

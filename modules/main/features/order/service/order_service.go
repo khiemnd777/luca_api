@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/modules/notification"
@@ -38,7 +39,7 @@ type OrderService interface {
 	NewestList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
 	CompletedList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.CompletedOrderDTO], error)
 	Search(ctx context.Context, deptID int, query dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error)
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, deptID int, id int64) error
 	SyncPrice(ctx context.Context, orderID int64) (float64, error)
 }
 
@@ -64,29 +65,29 @@ func kOrderByIDAll(id int64) string {
 	return fmt.Sprintf("order:id:%d:*", id)
 }
 
-func kOrderAll() []string {
+func kOrderAll(deptID int) []string {
 	return []string{
-		kOrderListAll(),
-		kOrderSearchAll(),
+		kOrderListAll(deptID),
+		kOrderSearchAll(deptID),
 		kOrderSectionAll(),
-		"order:assigned:*",
+		fmt.Sprintf("order:assigned:dpt%d:*", deptID),
 		"order:item:material:loaner:*",
-		"order:list:inprogress:*",
-		"order:list:newest:*",
-		"order:list:completed:*",
+		fmt.Sprintf("order:list:inprogress:dpt%d:*", deptID),
+		fmt.Sprintf("order:list:newest:dpt%d:*", deptID),
+		fmt.Sprintf("order:list:completed:dpt%d:*", deptID),
 	}
 }
 
-func kOrderListAll() string {
-	return "order:list:*"
+func kOrderListAll(deptID int) string {
+	return fmt.Sprintf("order:list:dpt%d:*", deptID)
 }
 
 func kOrderSectionAll() string {
 	return "order:section:*"
 }
 
-func kOrderSearchAll() string {
-	return "order:search:*"
+func kOrderSearchAll(deptID int) string {
+	return fmt.Sprintf("order:search:dpt%d:*", deptID)
 }
 
 func kOrderList(deptID int, q table.TableQuery) string {
@@ -117,16 +118,16 @@ func kOrderCompletedList(deptID int, q table.TableQuery) string {
 	return fmt.Sprintf("order:list:completed:dpt%d:l%d:p%d", deptID, q.Limit, q.Page)
 }
 
-func kOrderSearch(q dbutils.SearchQuery) string {
+func kOrderSearch(deptID int, q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("order:search:k%s:l%d:p%d:o%s:d%s", q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("order:search:dpt%d:k%s:l%d:p%d:o%s:d%s", deptID, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func (s *orderService) Create(ctx context.Context, deptID int, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
-	dto, err := s.repo.Create(ctx, userID, input)
+	dto, err := s.repo.Create(ctx, deptID, userID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +135,7 @@ func (s *orderService) Create(ctx context.Context, deptID int, userID int, input
 	if dto != nil && dto.ID > 0 {
 		cache.InvalidateKeys(kOrderByID(dto.ID), kOrderByIDAll(dto.ID))
 	}
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 
 	s.upsertSearch(ctx, deptID, dto)
 
@@ -155,16 +156,25 @@ func (s *orderService) Create(ctx context.Context, deptID int, userID int, input
 		StatAt:       time.Now(),
 	})
 
+	pubsub.PublishAsync("dashboard:daily:sales", &model.SalesDailyUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
 	realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
 	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
 	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
 	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:sales_summary", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:sales_daily", nil)
+
+	logger.Debug("[order_created]", "order_id", dto.ID, "created_by", userID)
 
 	return dto, nil
 }
 
 func (s *orderService) Update(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
-	dto, err := s.repo.Update(ctx, userID, input)
+	dto, err := s.repo.Update(ctx, deptID, userID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +182,7 @@ func (s *orderService) Update(ctx context.Context, deptID, userID int, input *mo
 	if dto != nil {
 		cache.InvalidateKeys(kOrderByID(dto.ID), kOrderByIDAll(dto.ID))
 	}
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 
 	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
 		DepartmentID: deptID,
@@ -201,9 +211,17 @@ func (s *orderService) UpdateStatus(ctx context.Context, deptID int, orderItemPr
 			kOrderByIDAll(out.OrderID),
 		)
 	}
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 
+	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
+	realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
 	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
 
 	return out, nil
 }
@@ -220,7 +238,7 @@ func (s *orderService) UpdateDeliveryStatus(ctx context.Context, deptID int, ord
 			kOrderByIDAll(out.OrderID),
 		)
 	}
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 
 	// Later: broadcast to delivery dashboard only
 	// realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
@@ -400,12 +418,31 @@ func (s *orderService) GetOrdersBySectionID(ctx context.Context, sectionID int, 
 	return *ptr, nil
 }
 
-func (s *orderService) Delete(ctx context.Context, id int64) error {
+func (s *orderService) Delete(ctx context.Context, deptID int, id int64) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
-	cache.InvalidateKeys(kOrderAll()...)
+	cache.InvalidateKeys(kOrderAll(deptID)...)
 	cache.InvalidateKeys(kOrderByID(id))
+
+	realtime.BroadcastAll("order:newest", nil)
+
+	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
+	pubsub.PublishAsync("dashboard:daily:sales", &model.SalesDailyUpsert{
+		DepartmentID: deptID,
+		StatAt:       time.Now(),
+	})
+
+	realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:sales_summary", nil)
+	realtime.BroadcastToDept(deptID, "dashboard:sales_daily", nil)
 
 	s.unlinkSearch(id)
 	return nil
@@ -413,7 +450,7 @@ func (s *orderService) Delete(ctx context.Context, id int64) error {
 
 func (s *orderService) Search(ctx context.Context, deptID int, q dbutils.SearchQuery) (dbutils.SearchResult[model.OrderDTO], error) {
 	type boxed = dbutils.SearchResult[model.OrderDTO]
-	key := kOrderSearch(q)
+	key := kOrderSearch(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
 		res, e := s.repo.Search(ctx, deptID, q)

@@ -27,7 +27,7 @@ type CaseDailyRemakeStatsRepository interface {
 
 	AvgRemakeRate(
 		ctx context.Context,
-		departmentID *int, // nil = all departments
+		departmentID *int,
 		fromDate time.Time,
 		toDate time.Time,
 		previousFrom time.Time,
@@ -67,7 +67,7 @@ INSERT INTO case_daily_remake_stats (
   remake_cases
 )
 VALUES (
-  $1,
+  $1::date,
   $2,
   1,
   CASE WHEN $3 THEN 1 ELSE 0 END
@@ -82,7 +82,7 @@ SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		completedAt.UTC().Truncate(24*time.Hour),
+		completedAt,
 		departmentID,
 		isRemake,
 	)
@@ -103,16 +103,16 @@ INSERT INTO case_daily_remake_stats (
   remake_cases
 )
 SELECT
-  DATE(completed_at)                                  AS stat_date,
+  completed_at::date                         AS stat_date,
   department_id,
-  COUNT(*)                                           AS completed_cases,
-  COUNT(*) FILTER (WHERE is_remake = true)           AS remake_cases
+  COUNT(*)                                  AS completed_cases,
+  COUNT(*) FILTER (WHERE is_remake = true)  AS remake_cases
 FROM cases
 WHERE
-  completed_at >= $1
-  AND completed_at <  $2
+  completed_at::date >= $1::date
+  AND completed_at::date <= $2::date
 GROUP BY
-  DATE(completed_at),
+  stat_date,
   department_id
 ON CONFLICT (stat_date, department_id) DO UPDATE
 SET
@@ -124,8 +124,8 @@ SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		fromDate.UTC(),
-		toDate.UTC(),
+		fromDate,
+		toDate,
 	)
 
 	return err
@@ -146,8 +146,8 @@ WITH current_period AS (
     SUM(remake_cases)::numeric / NULLIF(SUM(completed_cases), 0) AS rate
   FROM case_daily_remake_stats
   WHERE
-    stat_date >= $1
-    AND stat_date <  $2
+    stat_date >= $1::date
+    AND stat_date <= $2::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 ),
 previous_period AS (
@@ -155,13 +155,13 @@ previous_period AS (
     SUM(remake_cases)::numeric / NULLIF(SUM(completed_cases), 0) AS rate
   FROM case_daily_remake_stats
   WHERE
-    stat_date >= $4
-    AND stat_date <  $5
+    stat_date >= $4::date
+    AND stat_date <= $5::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 )
 SELECT
-  COALESCE(c.rate, 0)             AS rate,
-  COALESCE(c.rate - p.rate, 0)    AS delta_rate
+  COALESCE(c.rate, 0)          AS rate,
+  COALESCE(c.rate - p.rate, 0) AS delta_rate
 FROM current_period c
 CROSS JOIN previous_period p;
 `

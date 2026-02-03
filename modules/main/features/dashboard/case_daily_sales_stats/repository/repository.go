@@ -14,6 +14,7 @@ import (
 type CaseDailySalesStatsRepository interface {
 	UpsertOne(
 		ctx context.Context,
+		deptID int,
 		from time.Time,
 		to time.Time,
 	) error
@@ -55,6 +56,7 @@ func NewCaseDailySalesStatsRepository(
 
 func (r *caseDailySalesStatsRepository) UpsertOne(
 	ctx context.Context,
+	deptID int,
 	from time.Time,
 	to time.Time,
 ) error {
@@ -66,17 +68,47 @@ INSERT INTO sales_daily_stats (
   order_items_count
 )
 SELECT
-  date_trunc('day', o.created_at)::date AS date,
-  o.department_id,
-  SUM(o.total_price)                    AS total_revenue,
-  COUNT(oi.id)                          AS order_items_count
-FROM order_items oi
-JOIN orders o ON o.id = oi.order_id
-WHERE
-  oi.custom_fields->>'status' = 'completed'
-  AND o.created_at >= $1
-  AND o.created_at <  $2
-GROUP BY date, o.department_id
+  d.stat_date                                       AS date,
+  $1::INT                                           AS department_id,
+  COALESCE(ord.revenue, 0)::float8                  AS total_revenue,
+  COALESCE(item.order_items_count, 0)::int          AS order_items_count
+FROM (
+  SELECT
+    o.created_at::date AS stat_date
+  FROM orders o
+  WHERE
+    o.deleted_at IS NULL
+    AND o.created_at::date >= $2::date
+    AND o.created_at::date <= $3::date
+    AND o.department_id = $1::INT
+  GROUP BY stat_date
+) d
+LEFT JOIN (
+  SELECT
+    o.created_at::date AS stat_date,
+    SUM(o.total_price) AS revenue
+  FROM orders o
+  WHERE
+    o.deleted_at IS NULL
+    AND o.created_at::date >= $2::date
+    AND o.created_at::date <= $3::date
+    AND o.department_id = $1::INT
+  GROUP BY stat_date
+) ord ON ord.stat_date = d.stat_date
+LEFT JOIN (
+  SELECT
+    o.created_at::date AS stat_date,
+    COUNT(oi.id)       AS order_items_count
+  FROM order_items oi
+  JOIN orders o ON o.id = oi.order_id
+  WHERE
+    oi.deleted_at IS NULL
+    AND o.deleted_at IS NULL
+    AND o.created_at::date >= $2::date
+    AND o.created_at::date <= $3::date
+    AND o.department_id = $1::INT
+  GROUP BY stat_date
+) item ON item.stat_date = d.stat_date
 ON CONFLICT (date, department_id)
 DO UPDATE SET
   total_revenue     = EXCLUDED.total_revenue,
@@ -87,8 +119,9 @@ DO UPDATE SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		from.UTC(),
-		to.UTC(),
+		deptID,
+		from,
+		to,
 	)
 
 	return err
@@ -105,22 +138,22 @@ func (r *caseDailySalesStatsRepository) Summary(
 	const q = `
 WITH current_period AS (
   SELECT
-    COALESCE(SUM(total_revenue), 0)::float8     AS total_revenue,
-    COALESCE(SUM(order_items_count), 0)::int   AS order_items_count
+    COALESCE(SUM(total_revenue), 0)::float8    AS total_revenue,
+    COALESCE(SUM(order_items_count), 0)::int  AS order_items_count
   FROM sales_daily_stats
   WHERE
-    date >= $1
-    AND date <  $2
-    AND department_id = $3
+    date >= $1::date
+    AND date <= $2::date
+    AND department_id = $3::INT
 ),
 previous_period AS (
   SELECT
     COALESCE(SUM(total_revenue), 0)::float8 AS prev_revenue
   FROM sales_daily_stats
   WHERE
-    date >= $4
-    AND date <  $5
-    AND department_id = $3
+    date >= $4::date
+    AND date <= $5::date
+    AND department_id = $3::INT
 )
 SELECT
   c.total_revenue,
@@ -161,9 +194,9 @@ SELECT
   COALESCE(SUM(total_revenue), 0)::float8 AS revenue
 FROM sales_daily_stats
 WHERE
-  date >= $1
-  AND date <  $2
-  AND department_id = $3
+  date >= $1::date
+  AND date <= $2::date
+  AND department_id = $3::INT
 GROUP BY date
 ORDER BY date;
 `

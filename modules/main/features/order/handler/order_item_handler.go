@@ -158,7 +158,8 @@ func (h *OrderItemHandler) Delete(c *fiber.Ctx) error {
 	if orderItemID <= 0 {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
-	if err := h.svc.Delete(c.UserContext(), int64(orderID), int64(orderItemID)); err != nil {
+	deptID, _ := utils.GetDeptIDInt(c)
+	if err := h.svc.Delete(c.UserContext(), deptID, int64(orderID), int64(orderItemID)); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)

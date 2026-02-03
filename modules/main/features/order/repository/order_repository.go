@@ -40,8 +40,8 @@ type OrderRepository interface {
 	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	// -- general functions
-	Create(ctx context.Context, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
-	Update(ctx context.Context, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	Create(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
+	Update(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	PrepareForRemakeByOrderID(
 		ctx context.Context,
@@ -138,6 +138,7 @@ func (r *orderRepository) SyncPrice(ctx context.Context, orderID int64) (float64
 func (r *orderRepository) createNewOrder(
 	ctx context.Context,
 	tx *generated.Tx,
+	deptID,
 	userID int,
 	input *model.OrderUpsertDTO,
 ) (*model.OrderDTO, error) {
@@ -156,7 +157,7 @@ func (r *orderRepository) createNewOrder(
 	)
 
 	q := tx.Order.Create().
-		SetNillableDepartmentID(dto.DepartmentID).
+		SetNillableDepartmentID(&deptID).
 		SetNillableCode(dto.Code).
 		SetNillablePromotionCode(dto.PromotionCode).
 		SetNillablePromotionCodeID(dto.PromotionCodeID).
@@ -309,6 +310,7 @@ func (r *orderRepository) createNewOrder(
 func (r *orderRepository) upsertExistingOrder(
 	ctx context.Context,
 	tx *generated.Tx,
+	deptID,
 	userID int,
 	input *model.OrderUpsertDTO,
 ) (*model.OrderDTO, error) {
@@ -383,6 +385,7 @@ func (r *orderRepository) upsertExistingOrder(
 		SetNillableDeliveryDate(dlrDate).
 		SetNillableRemakeType(rmkType).
 		SetNillableRemakeCount(&rmkCount).
+		SetNillableDepartmentID(&deptID).
 		Save(ctx)
 
 	if err != nil {
@@ -433,7 +436,7 @@ func (r *orderRepository) upsertExistingOrder(
 }
 
 // -- general functions
-func (r *orderRepository) Create(ctx context.Context, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
+func (r *orderRepository) Create(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error) {
 	var err error
 
 	tx, err := r.db.Tx(ctx)
@@ -459,12 +462,12 @@ func (r *orderRepository) Create(ctx context.Context, userID int, input *model.O
 
 	var out *model.OrderDTO
 	if exists {
-		out, err = r.upsertExistingOrder(ctx, tx, userID, input)
+		out, err = r.upsertExistingOrder(ctx, tx, deptID, userID, input)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		out, err = r.createNewOrder(ctx, tx, userID, input)
+		out, err = r.createNewOrder(ctx, tx, deptID, userID, input)
 		if err != nil {
 			return nil, err
 		}
@@ -475,6 +478,7 @@ func (r *orderRepository) Create(ctx context.Context, userID int, input *model.O
 
 func (r *orderRepository) Update(
 	ctx context.Context,
+	deptID,
 	userID int,
 	input *model.OrderUpsertDTO,
 ) (*model.OrderDTO, error) {
@@ -502,7 +506,8 @@ func (r *orderRepository) Update(
 		SetNillablePatientID(output.PatientID).
 		SetNillablePatientName(output.PatientName).
 		SetNillableRefUserID(output.RefUserID).
-		SetNillableRefUserName(output.RefUserName)
+		SetNillableRefUserName(output.RefUserName).
+		SetNillableDepartmentID(&deptID)
 
 	if input.Collections != nil && len(*input.Collections) > 0 {
 		_, err = customfields.PrepareCustomFields(
@@ -975,15 +980,15 @@ func (r *orderRepository) InProgressList(ctx context.Context, deptID int, query 
 			out := make([]*model.InProcessOrderDTO, 0, len(src))
 			for _, item := range src {
 				out = append(out, &model.InProcessOrderDTO{
-					ID:                item.ID,
-					Code:              item.Code,
-					CodeLatest:        item.CodeLatest,
-					DeliveryDate:      item.DeliveryDate,
-					TotalPrice:        item.TotalPrice,
-					ProcessNameLatest: item.ProcessNameLatest,
-					StatusLatest:      item.StatusLatest,
+					ID:                   item.ID,
+					Code:                 item.Code,
+					CodeLatest:           item.CodeLatest,
+					DeliveryDate:         item.DeliveryDate,
+					TotalPrice:           item.TotalPrice,
+					ProcessNameLatest:    item.ProcessNameLatest,
+					StatusLatest:         item.StatusLatest,
 					DeliveryStatusLatest: item.DeliveryStatusLatest,
-					PriorityLatest:    item.PriorityLatest,
+					PriorityLatest:       item.PriorityLatest,
 				})
 			}
 			return out
@@ -1013,13 +1018,13 @@ func (r *orderRepository) NewestList(ctx context.Context, deptID int, query tabl
 			out := make([]*model.NewestOrderDTO, 0, len(src))
 			for _, item := range src {
 				out = append(out, &model.NewestOrderDTO{
-					ID:             item.ID,
-					Code:           item.Code,
-					CodeLatest:     item.CodeLatest,
-					CreatedAt:      item.CreatedAt,
-					StatusLatest:   item.StatusLatest,
+					ID:                   item.ID,
+					Code:                 item.Code,
+					CodeLatest:           item.CodeLatest,
+					CreatedAt:            item.CreatedAt,
+					StatusLatest:         item.StatusLatest,
 					DeliveryStatusLatest: item.DeliveryStatusLatest,
-					PriorityLatest: item.PriorityLatest,
+					PriorityLatest:       item.PriorityLatest,
 				})
 			}
 			return out
@@ -1049,13 +1054,13 @@ func (r *orderRepository) CompletedList(ctx context.Context, deptID int, query t
 			out := make([]*model.CompletedOrderDTO, 0, len(src))
 			for _, item := range src {
 				out = append(out, &model.CompletedOrderDTO{
-					ID:             item.ID,
-					Code:           item.Code,
-					CodeLatest:     item.CodeLatest,
-					CreatedAt:      item.CreatedAt,
-					StatusLatest:   item.StatusLatest,
+					ID:                   item.ID,
+					Code:                 item.Code,
+					CodeLatest:           item.CodeLatest,
+					CreatedAt:            item.CreatedAt,
+					StatusLatest:         item.StatusLatest,
 					DeliveryStatusLatest: item.DeliveryStatusLatest,
-					PriorityLatest: item.PriorityLatest,
+					PriorityLatest:       item.PriorityLatest,
 				})
 			}
 			return out

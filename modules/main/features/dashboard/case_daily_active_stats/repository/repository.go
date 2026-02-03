@@ -8,6 +8,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/module"
 )
 
@@ -59,23 +60,20 @@ INSERT INTO case_daily_active_stats (
   active_cases
 )
 SELECT
-  $1 AS stat_date,
-  $2 AS department_id,
+  $1::date AS stat_date,
+  $2       AS department_id,
   COUNT(*) AS active_cases
-FROM (
-  SELECT 1
-  FROM order_items oi
-  WHERE
-    oi.custom_fields->>'status' IN (
-      'received',
-      'in_progress',
-      'qc',
-      'issue',
-      'rework'
-    )
-) t
-ON CONFLICT (stat_date, department_id) DO UPDATE
-SET
+FROM order_items oi
+WHERE
+  oi.custom_fields->>'status' IN (
+    'received',
+    'in_progress',
+    'qc',
+    'issue',
+    'rework'
+  )
+ON CONFLICT (stat_date, department_id)
+DO UPDATE SET
   active_cases = EXCLUDED.active_cases,
   updated_at = now();
 `
@@ -83,7 +81,7 @@ SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		statDate.UTC(),
+		statDate,
 		departmentID,
 	)
 
@@ -105,8 +103,8 @@ WITH current_period AS (
     COALESCE(SUM(active_cases), 0) AS value
   FROM case_daily_active_stats
   WHERE
-    stat_date >= $1
-    AND stat_date <  $2
+    stat_date >= $1::date
+    AND stat_date <=  $2::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 ),
 previous_period AS (
@@ -114,8 +112,8 @@ previous_period AS (
     COALESCE(SUM(active_cases), 0) AS value
   FROM case_daily_active_stats
   WHERE
-    stat_date >= $4
-    AND stat_date <  $5
+    stat_date >= $4::date
+    AND stat_date <=  $5::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 )
 SELECT
@@ -126,6 +124,16 @@ CROSS JOIN previous_period p;
 `
 
 	var res model.ActiveCasesResult
+
+	logger.Debug(
+		"ActiveCases SQL",
+		"query", q,
+		"$1 fromDate", fromDate.Format("2006-01-02"),
+		"$2 toDate", toDate.Format("2006-01-02"),
+		"$3 departmentID", departmentID,
+		"$4 previousFrom", previousFrom.Format("2006-01-02"),
+		"$5 previousTo", previousTo.Format("2006-01-02"),
+	)
 
 	err := r.sqlDB.QueryRowContext(
 		ctx,

@@ -1,4 +1,4 @@
-CREATE TABLE sales_daily_stats (
+CREATE TABLE IF NOT EXISTS sales_daily_stats (
   date               date          NOT NULL,
   department_id      int           NOT NULL,
 
@@ -11,5 +11,5 @@ CREATE TABLE sales_daily_stats (
   PRIMARY KEY (date, department_id)
 );
 
-CREATE INDEX idx_sales_daily_stats_date
+CREATE INDEX IF NOT EXISTS idx_sales_daily_stats_date
   ON sales_daily_stats(date);

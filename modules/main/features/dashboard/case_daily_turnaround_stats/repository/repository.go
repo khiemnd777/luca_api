@@ -27,7 +27,7 @@ type CaseDailyStatsRepository interface {
 
 	AvgTurnaround(
 		ctx context.Context,
-		departmentID *int, // nil = all departments
+		departmentID *int,
 		fromDate time.Time,
 		toDate time.Time,
 		previousFrom time.Time,
@@ -67,7 +67,7 @@ INSERT INTO case_daily_stats (
   total_turnaround_sec
 )
 VALUES (
-  $1,
+  $1::date,
   $2,
   1,
   $3
@@ -82,7 +82,7 @@ SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		completedAt.UTC().Truncate(24*time.Hour),
+		completedAt,
 		departmentID,
 		turnaroundSec,
 	)
@@ -103,18 +103,18 @@ INSERT INTO case_daily_stats (
   total_turnaround_sec
 )
 SELECT
-  DATE(completed_at)                     AS stat_date,
+  completed_at::date                   AS stat_date,
   department_id,
-  COUNT(*)                               AS completed_cases,
+  COUNT(*)                             AS completed_cases,
   SUM(EXTRACT(EPOCH FROM (completed_at - received_at)))::bigint
 FROM cases
 WHERE
-  completed_at >= $1
-  AND completed_at <  $2
+  completed_at::date >= $1::date
+  AND completed_at::date <= $2::date
   AND completed_at IS NOT NULL
   AND received_at IS NOT NULL
 GROUP BY
-  DATE(completed_at),
+  stat_date,
   department_id
 ON CONFLICT (stat_date, department_id) DO UPDATE
 SET
@@ -126,8 +126,8 @@ SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		fromDate.UTC(),
-		toDate.UTC(),
+		fromDate,
+		toDate,
 	)
 
 	return err
@@ -149,8 +149,8 @@ WITH current_period AS (
       / NULLIF(SUM(completed_cases), 0) AS avg_sec
   FROM case_daily_stats
   WHERE
-    stat_date >= $1
-    AND stat_date <  $2
+    stat_date >= $1::date
+    AND stat_date <= $2::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 ),
 previous_period AS (
@@ -159,13 +159,13 @@ previous_period AS (
       / NULLIF(SUM(completed_cases), 0) AS avg_sec
   FROM case_daily_stats
   WHERE
-    stat_date >= $4
-    AND stat_date <  $5
+    stat_date >= $4::date
+    AND stat_date <= $5::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 )
 SELECT
-  COALESCE(c.avg_sec / 86400, 0)                   AS avg_days,
-  COALESCE((c.avg_sec - p.avg_sec) / 86400, 0)     AS delta_days
+  COALESCE(c.avg_sec / 86400, 0)               AS avg_days,
+  COALESCE((c.avg_sec - p.avg_sec) / 86400, 0) AS delta_days
 FROM current_period c
 CROSS JOIN previous_period p;
 `
@@ -177,7 +177,7 @@ CROSS JOIN previous_period p;
 		q,
 		fromDate,
 		toDate,
-		departmentID, // $3
+		departmentID,
 		previousFrom,
 		previousTo,
 	).Scan(&res.AvgDays, &res.DeltaDays)

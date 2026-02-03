@@ -678,7 +678,7 @@ func (r *orderItemProcessRepository) getRawProcessesByProductIDs(
 ranked_sections AS (
     SELECT
 				sp.process_id,
-				s.id AS section_id
+				s.id AS section_id,
         s.leader_id,
         s.leader_name,
         ROW_NUMBER() OVER (
@@ -697,7 +697,7 @@ SELECT
     p.name,
     p.color,
     p.section_name,
-		rs.section_id
+		rs.section_id,
     rs.leader_id,
     rs.leader_name
 FROM product_categories pc

@@ -64,7 +64,7 @@ INSERT INTO case_daily_active_stats (
   active_cases
 )
 SELECT
-  $1 AS stat_date,
+  $1::date AS stat_date,
   COUNT(*) AS active_cases
 FROM order_items oi
 WHERE
@@ -84,7 +84,7 @@ SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		statDate.UTC(),
+		statDate,
 	)
 
 	return err
@@ -102,15 +102,15 @@ INSERT INTO case_daily_completed_stats (
   completed_cases
 )
 SELECT
-  DATE(completed_at),
+  completed_at::date AS stat_date,
   department_id,
   COUNT(*)
 FROM cases
 WHERE
-  completed_at >= $1
-  AND completed_at <  $2
+  completed_at::date >= $1::date
+  AND completed_at::date <=  $2::date
 GROUP BY
-  DATE(completed_at),
+  stat_date,
   department_id
 ON CONFLICT (stat_date, department_id) DO UPDATE
 SET
@@ -120,8 +120,8 @@ SET
 	_, err := r.sqlDB.ExecContext(
 		ctx,
 		q,
-		fromDate.UTC(),
-		toDate.UTC(),
+		fromDate,
+		toDate,
 	)
 	return err
 }
@@ -140,16 +140,16 @@ WITH current_period AS (
   SELECT COALESCE(SUM(completed_cases), 0) AS value
   FROM case_daily_completed_stats
   WHERE
-    stat_date >= $1
-    AND stat_date <  $2
+    stat_date >= $1::date
+    AND stat_date <= $2::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 ),
 previous_period AS (
   SELECT COALESCE(SUM(completed_cases), 0) AS value
   FROM case_daily_completed_stats
   WHERE
-    stat_date >= $4
-    AND stat_date <  $5
+    stat_date >= $4::date
+    AND stat_date <= $5::date
     AND ($3::INT IS NULL OR department_id = $3::INT)
 )
 SELECT
