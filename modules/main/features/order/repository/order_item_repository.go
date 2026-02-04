@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"maps"
 	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -472,7 +471,8 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 		SetOrderID(in.OrderID).
 		SetNillableCodeOriginal(in.CodeOriginal).
 		SetNillableTotalPrice(in.TotalPrice).
-		SetNillableDeliveryStatus(in.DeliveryStatus)
+		SetNillableDeliveryStatus(in.DeliveryStatus).
+		SetStatus("received")
 
 	if in.DeliveryStatus != nil {
 		now := time.Now()
@@ -497,7 +497,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 
 	// metadata
 	// new order is as `received`
-	cf := maps.Clone(in.CustomFields)
+	cf := utils.CloneOrInit(in.CustomFields)
 	cf["status"] = "received"
 	in.CustomFields = cf
 
@@ -691,7 +691,7 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, orde
 	if primaryProductID > 0 {
 		priority := utils.SafeGetString(entity.CustomFields, "priority")
 		oipOut, err := r.orderItemProcessRepo.UpdateManyWithProps(ctx, tx, entity.ID, func(prop *model.OrderItemProcessDTO) error {
-			cf := maps.Clone(prop.CustomFields)
+			cf := utils.CloneOrInit(prop.CustomFields)
 			if cf != nil {
 				if priority != "" {
 					cf["priority"] = priority

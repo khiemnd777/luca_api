@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"maps"
 	"sort"
 
 	"entgo.io/ent/dialect/sql"
@@ -18,6 +17,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/utils"
 	"github.com/lib/pq"
 )
 
@@ -187,11 +187,7 @@ func (r *orderItemProcessRepository) CreateManyByProductIDs(
 	col := []string{"order-item-process"}
 
 	for i, p := range uniqueProcesses {
-		cf := maps.Clone(p.CustomFields)
-		if cf == nil {
-			cf = make(map[string]any)
-		}
-
+		cf := utils.CloneOrInit(p.CustomFields)
 		if _, ok := cf["status"]; !ok {
 			cf["status"] = "waiting"
 		}
@@ -447,7 +443,7 @@ func (r *orderItemProcessRepository) UpdateStatus(
 		return nil, err
 	}
 
-	cf := maps.Clone(oip.CustomFields)
+	cf := utils.CloneOrInit(oip.CustomFields)
 	cf["status"] = status
 
 	entity, err := tx.OrderItemProcess.
@@ -480,7 +476,7 @@ func (r *orderItemProcessRepository) UpdateStatusAndAssign(
 		return nil, err
 	}
 
-	cf := maps.Clone(oip.CustomFields)
+	cf := utils.CloneOrInit(oip.CustomFields)
 	cf["status"] = status
 
 	entity, err := tx.OrderItemProcess.

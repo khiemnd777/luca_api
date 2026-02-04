@@ -2,7 +2,9 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -393,4 +395,20 @@ func SafeGetDateTime(m map[string]any, key string) time.Time {
 
 func SafeGetDateTimePtr(m map[string]any, key string) *time.Time {
 	return SafeParseDateTimePtr(SafeGet(m, key))
+}
+
+func CloneOrInit(m map[string]any) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	return maps.Clone(m)
+}
+
+var ErrNilMap = errors.New("cannot clone nil map")
+
+func SafeClone[K comparable, V any](m map[K]V) (map[K]V, bool, error) {
+	if m == nil {
+		return map[K]V{}, false, ErrNilMap
+	}
+	return maps.Clone(m), true, nil
 }

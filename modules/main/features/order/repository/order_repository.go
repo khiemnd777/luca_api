@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"maps"
 	"math"
 	"time"
 
@@ -175,14 +174,14 @@ func (r *orderRepository) createNewOrder(
 		if _, err := customfields.PrepareCustomFields(
 			ctx, r.cfMgr, *input.Collections, dto.CustomFields, q, false,
 		); err != nil {
-			return nil, err
+			return nil, logger.PrintError("[ERROR]", err)
 		}
 	}
 
 	// save order
 	orderEnt, err := q.Save(ctx)
 	if err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 
 	// map back
@@ -195,7 +194,7 @@ func (r *orderRepository) createNewOrder(
 
 	latest, err := r.orderItemRepo.Create(ctx, tx, out, loi)
 	if err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 
 	out.LatestOrderItem = latest
@@ -212,7 +211,7 @@ func (r *orderRepository) createNewOrder(
 	// total price
 	totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(ctx, tx, out.ID)
 	if err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 	prdTotalPrice := totalPrice
 
@@ -235,7 +234,7 @@ func (r *orderRepository) createNewOrder(
 		Save(ctx)
 
 	if err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 
 	// Assign latest ones to output
@@ -257,7 +256,7 @@ func (r *orderRepository) createNewOrder(
 			"orderItemID", out.LatestOrderItem.ID,
 			"err", err,
 		)
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 
 	if len(processes) > 0 {
@@ -271,7 +270,7 @@ func (r *orderRepository) createNewOrder(
 
 	err = r.orderCodeRepo.ConfirmReservation(ctx, tx, *dto.Code)
 	if err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 
 	// relation
@@ -279,16 +278,16 @@ func (r *orderRepository) createNewOrder(
 	// 	return nil, err
 	// }
 	if err = relation.Upsert1(ctx, tx, "orders_clinics", orderEnt, &input.DTO, out); err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 	if err = relation.Upsert1(ctx, tx, "orders_dentists", orderEnt, &input.DTO, out); err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 	if err = relation.Upsert1(ctx, tx, "orders_patients", orderEnt, &input.DTO, out); err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 	if err = relation.Upsert1(ctx, tx, "orders_ref_users", orderEnt, &input.DTO, out); err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 
 	if promoSnapshot != nil {
@@ -300,7 +299,7 @@ func (r *orderRepository) createNewOrder(
 			out.RefUserID,
 			promoSnapshot,
 		); err != nil {
-			return nil, err
+			return nil, logger.PrintError("[ERROR]", err)
 		}
 	}
 
@@ -441,7 +440,7 @@ func (r *orderRepository) Create(ctx context.Context, deptID, userID int, input 
 
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 	defer func() {
 		if err != nil {
@@ -457,19 +456,19 @@ func (r *orderRepository) Create(ctx context.Context, deptID, userID int, input 
 
 	exists, err := r.ExistsByCode(ctx, *code)
 	if err != nil {
-		return nil, err
+		return nil, logger.PrintError("[ERROR]", err)
 	}
 
 	var out *model.OrderDTO
 	if exists {
 		out, err = r.upsertExistingOrder(ctx, tx, deptID, userID, input)
 		if err != nil {
-			return nil, err
+			return nil, logger.PrintError("[ERROR]", err)
 		}
 	} else {
 		out, err = r.createNewOrder(ctx, tx, deptID, userID, input)
 		if err != nil {
-			return nil, err
+			return nil, logger.PrintError("[ERROR]", err)
 		}
 	}
 
@@ -834,7 +833,7 @@ func (r *orderRepository) recalculateOrderStatusByProcesses(
 		return nil, err
 	}
 
-	cf := maps.Clone(oi.CustomFields)
+	cf := utils.CloneOrInit(oi.CustomFields)
 	cf["status"] = orderStatus
 
 	updated, err := tx.OrderItem.

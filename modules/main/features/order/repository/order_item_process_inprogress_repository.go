@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"maps"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -880,10 +879,7 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 		return nil, nil, err
 	}
 
-	cf := maps.Clone(orderItem.CustomFields)
-	if cf == nil {
-		cf = make(map[string]any)
-	}
+	cf := utils.CloneOrInit(orderItem.CustomFields)
 	cf["status"] = orderStatus
 
 	if _, err := tx.OrderItem.

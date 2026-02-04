@@ -39,3 +39,8 @@ func LogAndPrint(level string, msg string, err error) {
 		Info(msg)
 	}
 }
+
+func PrintError(msg string, err error) error {
+	LogAndPrint("error", msg, err)
+	return err
+}
