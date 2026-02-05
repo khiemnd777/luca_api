@@ -31,6 +31,12 @@ type OrderItemProcessService interface {
 		ctx context.Context,
 		assignedID int64,
 	) ([]*model.OrderItemProcessDTO, error)
+	GetProcessesByStaffTimeline(
+		ctx context.Context,
+		staffID int64,
+		from time.Time,
+		to time.Time,
+	) ([]*model.OrderItemProcessDTO, error)
 
 	GetInProgressByID(
 		ctx context.Context,
@@ -53,6 +59,12 @@ type OrderItemProcessService interface {
 		assignedID int64,
 		query table.TableQuery,
 	) (table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO], error)
+	GetInProgressesByStaffTimeline(
+		ctx context.Context,
+		staffID int64,
+		from time.Time,
+		to time.Time,
+	) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetCheckoutLatest(
 		ctx context.Context,
 		orderItemID int64,
@@ -145,6 +157,18 @@ func (s *orderItemProcessService) GetProcessesByAssignedID(
 	})
 }
 
+func (s *orderItemProcessService) GetProcessesByStaffTimeline(
+	ctx context.Context,
+	staffID int64,
+	from time.Time,
+	to time.Time,
+) ([]*model.OrderItemProcessDTO, error) {
+	key := fmt.Sprintf("order:assigned:%d:timeline:%d:%d", staffID, from.Unix(), to.Unix())
+	return cache.GetList(key, cache.TTLShort, func() ([]*model.OrderItemProcessDTO, error) {
+		return s.repo.GetProcessesByStaffTimeline(ctx, nil, staffID, from, to)
+	})
+}
+
 func (s *orderItemProcessService) GetInProgressByID(ctx context.Context, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {
 	return cache.Get(fmt.Sprintf("order:process:inprogress:id%d", inProgressID), cache.TTLMedium, func() (*model.OrderItemProcessInProgressAndProcessDTO, error) {
 		return s.inprogressRepo.GetInProgressByID(ctx, nil, inProgressID)
@@ -187,6 +211,18 @@ func (s *orderItemProcessService) GetInProgressesByAssignedID(
 		return zero, err
 	}
 	return *ptr, nil
+}
+
+func (s *orderItemProcessService) GetInProgressesByStaffTimeline(
+	ctx context.Context,
+	staffID int64,
+	from time.Time,
+	to time.Time,
+) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+	key := fmt.Sprintf("order:assigned:%d:inprogresses:timeline:%d:%d", staffID, from.Unix(), to.Unix())
+	return cache.GetList(key, cache.TTLShort, func() ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+		return s.inprogressRepo.GetInProgressesByStaffTimeline(ctx, nil, staffID, from, to)
+	})
 }
 
 func (s *orderItemProcessService) GetCheckoutLatest(ctx context.Context, orderItemID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error) {

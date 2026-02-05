@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/khiemnd777/andy_api/modules/main/config"
@@ -100,6 +101,13 @@ type OrderItemProcessRepository interface {
 		ctx context.Context,
 		tx *generated.Tx,
 		assignedID int64,
+	) ([]*model.OrderItemProcessDTO, error)
+	GetProcessesByStaffTimeline(
+		ctx context.Context,
+		tx *generated.Tx,
+		staffID int64,
+		from time.Time,
+		to time.Time,
 	) ([]*model.OrderItemProcessDTO, error)
 
 	GetProcessesByOrderID(
@@ -552,6 +560,40 @@ func (r *orderItemProcessRepository) GetProcessesByAssignedID(
 
 	out := mapper.MapListAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](items)
 	return out, nil
+}
+
+func (r *orderItemProcessRepository) GetProcessesByStaffTimeline(
+	ctx context.Context,
+	tx *generated.Tx,
+	staffID int64,
+	from time.Time,
+	to time.Time,
+) ([]*model.OrderItemProcessDTO, error) {
+
+	var oipC *generated.OrderItemProcessClient
+	if tx != nil {
+		oipC = tx.OrderItemProcess
+	} else {
+		oipC = r.db.OrderItemProcess
+	}
+
+	items, err := oipC.
+		Query().
+		Where(
+			orderitemprocess.AssignedID(staffID),
+			orderitemprocess.StartedAtGTE(from),
+			orderitemprocess.StartedAtLT(to),
+		).
+		Order(
+			orderitemprocess.ByStartedAt(sql.OrderAsc()),
+		).
+		All(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return mapper.MapListAs[*generated.OrderItemProcess, *model.OrderItemProcessDTO](items), nil
 }
 
 func (r *orderItemProcessRepository) GetProcessesByOrderID(

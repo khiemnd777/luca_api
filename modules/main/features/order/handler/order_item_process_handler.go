@@ -26,7 +26,9 @@ func NewOrderItemProcessHandler(svc service.OrderItemProcessService, deps *modul
 
 func (h *OrderItemProcessHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes", h.ProcessesForStaff)
+	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes/timeline", h.ProcessesForStaffTimeline)
 	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes/in-progresses", h.GetInProgressesByAssignedID)
+	app.RouterGet(router, "/:dept_id<int>/staff/:staff_id/order/processes/in-progresses/timeline", h.GetInProgressesByStaffTimeline)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes", h.Processes)
 	app.RouterGet(router, "/:dept_id<int>/order/:order_id<int>/historical/:order_item_id<int>/processes/in-progresses", h.GetInProgressesByOrderItemID)
 	app.RouterGet(router, "/:dept_id<int>/order/processes/in-progress/:in_progress_id<int>", h.GetInProgressByID)
@@ -237,6 +239,40 @@ func (h *OrderItemProcessHandler) ProcessesForStaff(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(res)
 }
 
+func (h *OrderItemProcessHandler) ProcessesForStaffTimeline(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	staffID, _ := utils.GetParamAsInt(c, "staff_id")
+	if staffID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
+	}
+
+	fromDateRaw := utils.GetQueryAsString(c, "from_date")
+	if fromDateRaw == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid from_date")
+	}
+	fromDate, err := utils.ParseDate(fromDateRaw)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid from_date")
+	}
+
+	toDateRaw := utils.GetQueryAsString(c, "to_date")
+	if toDateRaw == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid to_date")
+	}
+	toDate, err := utils.ParseDate(toDateRaw)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid to_date")
+	}
+
+	res, err := h.svc.GetProcessesByStaffTimeline(c.UserContext(), int64(staffID), fromDate, toDate)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
 func (h *OrderItemProcessHandler) GetInProgressesByAssignedID(c *fiber.Ctx) error {
 	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.development"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
@@ -244,6 +280,40 @@ func (h *OrderItemProcessHandler) GetInProgressesByAssignedID(c *fiber.Ctx) erro
 	staffID, _ := utils.GetParamAsInt(c, "staff_id")
 	q := table.ParseTableQuery(c, 20)
 	res, err := h.svc.GetInProgressesByAssignedID(c.UserContext(), int64(staffID), q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderItemProcessHandler) GetInProgressesByStaffTimeline(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	staffID, _ := utils.GetParamAsInt(c, "staff_id")
+	if staffID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
+	}
+
+	fromDateRaw := utils.GetQueryAsString(c, "from_date")
+	if fromDateRaw == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid from_date")
+	}
+	fromDate, err := utils.ParseDate(fromDateRaw)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid from_date")
+	}
+
+	toDateRaw := utils.GetQueryAsString(c, "to_date")
+	if toDateRaw == "" {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid to_date")
+	}
+	toDate, err := utils.ParseDate(toDateRaw)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid to_date")
+	}
+
+	res, err := h.svc.GetInProgressesByStaffTimeline(c.UserContext(), int64(staffID), fromDate, toDate)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

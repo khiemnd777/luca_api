@@ -32,6 +32,7 @@ type OrderItemProcessInProgressRepository interface {
 	GetInProgressesByProcessID(ctx context.Context, tx *generated.Tx, processID int64) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetInProgressByID(ctx context.Context, tx *generated.Tx, inProgressID int64) (*model.OrderItemProcessInProgressAndProcessDTO, error)
 	GetInProgressesByAssignedID(ctx context.Context, tx *generated.Tx, assignedID int64, query table.TableQuery) (table.TableListResult[model.OrderItemProcessInProgressAndProcessDTO], error)
+	GetInProgressesByStaffTimeline(ctx context.Context, tx *generated.Tx, staffID int64, from time.Time, to time.Time) ([]*model.OrderItemProcessInProgressAndProcessDTO, error)
 	ProcessInfoByProcessID(ctx context.Context, tx *generated.Tx, processID *int64) (*int, *string, *string, *string, error)
 }
 
@@ -1223,4 +1224,73 @@ func (r *orderItemProcessInProgressRepository) GetInProgressesByAssignedID(
 		Items: out,
 		Total: list.Total,
 	}, nil
+}
+
+func (r *orderItemProcessInProgressRepository) GetInProgressesByStaffTimeline(
+	ctx context.Context,
+	tx *generated.Tx,
+	staffID int64,
+	from time.Time,
+	to time.Time,
+) ([]*model.OrderItemProcessInProgressAndProcessDTO, error) {
+
+	items, err := r.inprogressClient(tx).
+		Query().
+		Where(
+			orderitemprocessinprogress.AssignedID(staffID),
+			orderitemprocessinprogress.StartedAtGTE(from),
+			orderitemprocessinprogress.StartedAtLT(to),
+		).
+		Order(orderitemprocessinprogress.ByStartedAt(sql.OrderAsc())).
+		Select(
+			orderitemprocessinprogress.FieldID,
+			orderitemprocessinprogress.FieldOrderID,
+			orderitemprocessinprogress.FieldOrderItemID,
+			orderitemprocessinprogress.FieldOrderItemCode,
+			orderitemprocessinprogress.FieldCheckInNote,
+			orderitemprocessinprogress.FieldCheckOutNote,
+			orderitemprocessinprogress.FieldAssignedID,
+			orderitemprocessinprogress.FieldAssignedName,
+			orderitemprocessinprogress.FieldStartedAt,
+			orderitemprocessinprogress.FieldCompletedAt,
+		).
+		WithProcess(func(q *generated.OrderItemProcessQuery) {
+			q.Select(
+				orderitemprocess.FieldID,
+				orderitemprocess.FieldProcessName,
+				orderitemprocess.FieldSectionName,
+				orderitemprocess.FieldColor,
+			)
+		}).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*model.OrderItemProcessInProgressAndProcessDTO, 0, len(items))
+	for _, item := range items {
+		proc, err := item.Edges.ProcessOrErr()
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, &model.OrderItemProcessInProgressAndProcessDTO{
+			ID:            item.ID,
+			OrderID:       item.OrderID,
+			OrderItemID:   item.OrderItemID,
+			OrderItemCode: item.OrderItemCode,
+			CheckInNote:   item.CheckInNote,
+			CheckOutNote:  item.CheckOutNote,
+			AssignedID:    item.AssignedID,
+			AssignedName:  item.AssignedName,
+			StartedAt:     item.StartedAt,
+			CompletedAt:   item.CompletedAt,
+			ProcessName:   proc.ProcessName,
+			SectionName:   proc.SectionName,
+			SectionID:     proc.SectionID,
+			Color:         proc.Color,
+		})
+	}
+
+	return out, nil
 }

@@ -65,5 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_oim_material_id
 
 -- order_item_processes indexes
 CREATE INDEX IF NOT EXISTS idx_oip_section_order_item
-ON order_item_processes (section_id, order_item_id);
+  ON order_item_processes (section_id, order_item_id);
 
+CREATE INDEX idx_oip_staff_start_at
+  ON order_item_processes (assigned_id, started_at);
