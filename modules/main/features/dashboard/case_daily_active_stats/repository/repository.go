@@ -19,6 +19,12 @@ type CaseDailyActiveStatsRepository interface {
 		departmentID int,
 	) error
 
+	RebuildRange(
+		ctx context.Context,
+		fromDate time.Time,
+		toDate time.Time,
+	) error
+
 	ActiveCases(
 		ctx context.Context,
 		departmentID *int,
@@ -83,6 +89,62 @@ DO UPDATE SET
 		q,
 		statDate,
 		departmentID,
+	)
+
+	return err
+}
+
+func (r *caseDailyActiveStatsRepository) RebuildRange(
+	ctx context.Context,
+	fromDate time.Time,
+	toDate time.Time,
+) error {
+	const q = `
+WITH dates AS (
+  SELECT d::date AS stat_date
+  FROM generate_series($1::date, $2::date, interval '1 day') d
+),
+active AS (
+  SELECT
+    o.department_id,
+    COUNT(*) AS active_cases
+  FROM order_items oi
+  JOIN orders o ON o.id = oi.order_id
+  WHERE
+    oi.deleted_at IS NULL
+    AND o.deleted_at IS NULL
+    AND o.department_id IS NOT NULL
+    AND oi.custom_fields->>'status' IN (
+      'received',
+      'in_progress',
+      'qc',
+      'issue',
+      'rework'
+    )
+  GROUP BY o.department_id
+)
+INSERT INTO case_daily_active_stats (
+  stat_date,
+  department_id,
+  active_cases
+)
+SELECT
+  d.stat_date,
+  a.department_id,
+  a.active_cases
+FROM dates d
+JOIN active a ON true
+ON CONFLICT (stat_date, department_id) DO UPDATE
+SET
+  active_cases = EXCLUDED.active_cases,
+  updated_at = now();
+`
+
+	_, err := r.sqlDB.ExecContext(
+		ctx,
+		q,
+		fromDate,
+		toDate,
 	)
 
 	return err

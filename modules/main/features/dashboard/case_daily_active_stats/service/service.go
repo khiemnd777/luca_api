@@ -18,6 +18,12 @@ type CaseDailyActiveStatsService interface {
 		departmentID int,
 	) error
 
+	RebuildRange(
+		ctx context.Context,
+		fromDate time.Time,
+		toDate time.Time,
+	) error
+
 	ActiveCases(
 		ctx context.Context,
 		departmentID *int,
@@ -53,6 +59,14 @@ func (s *caseDailyActiveStatsService) UpsertOne(
 	departmentID int,
 ) error {
 	return s.repo.UpsertOne(ctx, activeAt, departmentID)
+}
+
+func (s *caseDailyActiveStatsService) RebuildRange(
+	ctx context.Context,
+	fromDate time.Time,
+	toDate time.Time,
+) error {
+	return s.repo.RebuildRange(ctx, fromDate, toDate)
 }
 
 func (s *caseDailyActiveStatsService) ActiveCases(

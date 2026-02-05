@@ -1,0 +1,48 @@
+package jobs
+
+import (
+	"context"
+	"time"
+
+	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_active_stats/service"
+	"github.com/khiemnd777/andy_api/shared/logger"
+)
+
+type CaseDailyActiveStatsRebuildRangeJob struct {
+	svc service.CaseDailyActiveStatsService
+}
+
+func NewCaseDailyActiveStatsRebuildRangeJob(svc service.CaseDailyActiveStatsService) *CaseDailyActiveStatsRebuildRangeJob {
+	return &CaseDailyActiveStatsRebuildRangeJob{svc: svc}
+}
+
+func (j CaseDailyActiveStatsRebuildRangeJob) Name() string {
+	return "DashboardCaseDailyActiveStatsRebuildRangeJob"
+}
+func (j CaseDailyActiveStatsRebuildRangeJob) DefaultSchedule() string { return "13 0 * * *" }
+func (j CaseDailyActiveStatsRebuildRangeJob) ConfigKey() string {
+	return "cron.dashboard_case_daily_active_stats"
+}
+
+func (j CaseDailyActiveStatsRebuildRangeJob) Run() error {
+	logger.Debug("[DashboardCaseDailyActiveStatsRebuildRangeJob] Dashboard case daily active stats rebuilds range starting...")
+
+	now := time.Now()
+	today := time.Date(
+		now.Year(), now.Month(), now.Day(),
+		0, 0, 0, 0,
+		now.Location(),
+	)
+
+	if err := j.svc.RebuildRange(
+		context.Background(),
+		today.Add(-24*time.Hour),
+		today.Add(24*time.Hour),
+	); err != nil {
+		logger.Error("[DashboardCaseDailyActiveStatsRebuildRangeJob] Dashboard case daily active stats rebuilds range failed", err)
+		return err
+	}
+
+	logger.Debug("[DashboardCaseDailyActiveStatsRebuildRangeJob] Done.")
+	return nil
+}

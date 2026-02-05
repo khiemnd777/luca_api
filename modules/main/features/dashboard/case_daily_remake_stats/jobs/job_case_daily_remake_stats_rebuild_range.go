@@ -27,7 +27,12 @@ func (j CaseDailyRemakeStatsRebuildRangeJob) ConfigKey() string {
 func (j CaseDailyRemakeStatsRebuildRangeJob) Run() error {
 	logger.Debug("[DashboardCaseDailyRemakeStatsRebuildRangeJob] Dashboard case daily remake stats rebuilds range starting...")
 
-	today := time.Now().UTC().Truncate(24 * time.Hour)
+	now := time.Now()
+	today := time.Date(
+		now.Year(), now.Month(), now.Day(),
+		0, 0, 0, 0,
+		now.Location(),
+	)
 
 	if err := j.svc.RebuildRange(
 		context.Background(),
