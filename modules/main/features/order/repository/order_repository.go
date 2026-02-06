@@ -47,6 +47,7 @@ type OrderRepository interface {
 		orderID int64,
 	) (*model.OrderDTO, error)
 	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
+	ListByPromotionCodeID(ctx context.Context, deptID int, promotionCodeID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	GetOrdersBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	InProgressList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
 	NewestList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
@@ -914,6 +915,35 @@ func (r *orderRepository) List(ctx context.Context, deptID int, query table.Tabl
 		ctx,
 		r.db.Order.Query().
 			Where(order.DepartmentIDEQ(deptID),
+				order.DeletedAtIsNil(),
+			),
+		query,
+		order.Table,
+		order.FieldID,
+		order.FieldID,
+		func(src []*generated.Order) []*model.OrderDTO {
+			return mapper.MapListAs[*generated.Order, *model.OrderDTO](src)
+		},
+	)
+	if err != nil {
+		var zero table.TableListResult[model.OrderDTO]
+		return zero, err
+	}
+	return list, nil
+}
+
+func (r *orderRepository) ListByPromotionCodeID(
+	ctx context.Context,
+	deptID int,
+	promotionCodeID int,
+	query table.TableQuery,
+) (table.TableListResult[model.OrderDTO], error) {
+	list, err := table.TableList(
+		ctx,
+		r.db.Order.Query().
+			Where(
+				order.DepartmentIDEQ(deptID),
+				order.PromotionCodeIDEQ(promotionCodeID),
 				order.DeletedAtIsNil(),
 			),
 		query,

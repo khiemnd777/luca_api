@@ -11,6 +11,10 @@ CREATE INDEX IF NOT EXISTS ix_orders_code_not_deleted
   ON orders(code)
   WHERE deleted_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS ix_orders_promotion_code_id_not_deleted
+  ON orders(promotion_code_id)
+  WHERE deleted_at IS NULL;
+
 CREATE INDEX IF NOT EXISTS ix_orders_customer_not_deleted
   ON orders(customer_id)
   WHERE deleted_at IS NULL;

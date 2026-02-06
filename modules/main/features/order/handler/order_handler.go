@@ -29,6 +29,7 @@ func NewOrderHandler(svc service.OrderService, deps *module.ModuleDeps[config.Mo
 
 func (h *OrderHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/order/list", h.List)
+	app.RouterGet(router, "/:dept_id<int>/order/promotion/:promotion_code_id<int>/list", h.ListByPromotionCodeID)
 	app.RouterGet(router, "/:dept_id<int>/order/in-progress/list", h.InProgressList)
 	app.RouterGet(router, "/:dept_id<int>/order/newest/list", h.NewestList)
 	app.RouterGet(router, "/:dept_id<int>/order/completed/list", h.CompletedList)
@@ -55,6 +56,23 @@ func (h *OrderHandler) List(c *fiber.Ctx) error {
 	q := table.ParseTableQuery(c, 20)
 	deptID, _ := utils.GetDeptIDInt(c)
 	res, err := h.svc.List(c.UserContext(), deptID, q)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+	return c.Status(fiber.StatusOK).JSON(res)
+}
+
+func (h *OrderHandler) ListByPromotionCodeID(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "order.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	q := table.ParseTableQuery(c, 20)
+	deptID, _ := utils.GetDeptIDInt(c)
+	promotionCodeID, _ := utils.GetParamAsInt(c, "promotion_code_id")
+	if promotionCodeID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid promotion code id")
+	}
+	res, err := h.svc.ListByPromotionCodeID(c.UserContext(), deptID, promotionCodeID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

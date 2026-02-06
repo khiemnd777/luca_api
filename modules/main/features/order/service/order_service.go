@@ -34,6 +34,7 @@ type OrderService interface {
 	GetAllOrderProducts(ctx context.Context, orderID int64) ([]*model.OrderItemProductDTO, error)
 	GetAllOrderMaterials(ctx context.Context, orderID int64) ([]*model.OrderItemMaterialDTO, error)
 	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
+	ListByPromotionCodeID(ctx context.Context, deptID int, promotionCodeID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	GetOrdersBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.OrderDTO], error)
 	InProgressList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.InProcessOrderDTO], error)
 	NewestList(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.NewestOrderDTO], error)
@@ -70,6 +71,7 @@ func kOrderAll(deptID int) []string {
 		kOrderListAll(deptID),
 		kOrderSearchAll(deptID),
 		kOrderSectionAll(),
+		kOrderPromotionAll(),
 		fmt.Sprintf("order:assigned:dpt%d:*", deptID),
 		"order:item:material:loaner:*",
 		fmt.Sprintf("order:list:inprogress:dpt%d:*", deptID),
@@ -84,6 +86,10 @@ func kOrderListAll(deptID int) string {
 
 func kOrderSectionAll() string {
 	return "order:section:*"
+}
+
+func kOrderPromotionAll() string {
+	return "order:promotion:*"
 }
 
 func kOrderSearchAll(deptID int) string {
@@ -104,6 +110,14 @@ func kOrderSectionList(sectionID int, q table.TableQuery) string {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("order:section:%d:list:l%d:p%d:o%s:d%s", sectionID, q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func kOrderPromotionList(deptID int, promotionCodeID int, q table.TableQuery) string {
+	orderBy := ""
+	if q.OrderBy != nil {
+		orderBy = *q.OrderBy
+	}
+	return fmt.Sprintf("order:promotion:dpt%d:%d:list:l%d:p%d:o%s:d%s", deptID, promotionCodeID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kOrderInProgressList(deptID int, q table.TableQuery) string {
@@ -388,6 +402,24 @@ func (s *orderService) List(ctx context.Context, deptID int, q table.TableQuery)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
 		res, e := s.repo.List(ctx, deptID, q)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
+	})
+	if err != nil {
+		var zero boxed
+		return zero, err
+	}
+	return *ptr, nil
+}
+
+func (s *orderService) ListByPromotionCodeID(ctx context.Context, deptID int, promotionCodeID int, q table.TableQuery) (table.TableListResult[model.OrderDTO], error) {
+	type boxed = table.TableListResult[model.OrderDTO]
+	key := kOrderPromotionList(deptID, promotionCodeID, q)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.ListByPromotionCodeID(ctx, deptID, promotionCodeID, q)
 		if e != nil {
 			return nil, e
 		}
