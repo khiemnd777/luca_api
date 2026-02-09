@@ -23,6 +23,11 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	svc := service.NewCategoryService(repo, deps, cfMgr)
 	h := handler.NewCategoryHandler(svc, deps)
 	h.RegisterRoutes(router)
+
+	importRepo := repository.NewCategoryImportRepository(deps.DB)
+	importSvc := service.NewCategoryImportService(importRepo, deps.DB)
+	importHandler := handler.NewCategoryImportHandler(importSvc, deps)
+	importHandler.RegisterRoutes(router)
 	return nil
 }
 
