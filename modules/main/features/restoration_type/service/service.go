@@ -19,10 +19,10 @@ import (
 type RestorationTypeService interface {
 	Create(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error)
 	Update(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error)
-	GetByID(ctx context.Context, id int) (*model.RestorationTypeDTO, error)
-	List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error)
-	Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error)
-	Delete(ctx context.Context, id int) error
+	GetByID(ctx context.Context, deptID int, id int) (*model.RestorationTypeDTO, error)
+	List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error)
+	Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type restorationTypeService struct {
@@ -38,22 +38,22 @@ func kRestorationTypeByID(id int) string {
 	return fmt.Sprintf("restoration_type:id:%d", id)
 }
 
-func kRestorationTypeAll() []string {
+func kRestorationTypeAll(deptID int) []string {
 	return []string{
-		kRestorationTypeListAll(),
-		kRestorationTypeSearchAll(),
+		kRestorationTypeListAll(deptID),
+		kRestorationTypeSearchAll(deptID),
 	}
 }
 
-func kRestorationTypeListAll() string {
-	return "restoration_type:list:*"
+func kRestorationTypeListAll(deptID int) string {
+	return fmt.Sprintf("restoration_type:list:dpt%d:*", deptID)
 }
 
-func kRestorationTypeSearchAll() string {
-	return "restoration_type:search:*"
+func kRestorationTypeSearchAll(deptID int) string {
+	return fmt.Sprintf("restoration_type:search:dpt%d:*", deptID)
 }
 
-func kRestorationTypeList(categoryID *int, q table.TableQuery) string {
+func kRestorationTypeList(deptID int, categoryID *int, q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
@@ -62,10 +62,10 @@ func kRestorationTypeList(categoryID *int, q table.TableQuery) string {
 	if categoryID != nil {
 		cid = *categoryID
 	}
-	return fmt.Sprintf("restoration_type:list:c%d:l%d:p%d:o%s:d%s", cid, q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("restoration_type:list:dpt%d:c%d:l%d:p%d:o%s:d%s", deptID, cid, q.Limit, q.Page, orderBy, q.Direction)
 }
 
-func kRestorationTypeSearch(categoryID *int, q dbutils.SearchQuery) string {
+func kRestorationTypeSearch(deptID int, categoryID *int, q dbutils.SearchQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
@@ -74,11 +74,11 @@ func kRestorationTypeSearch(categoryID *int, q dbutils.SearchQuery) string {
 	if categoryID != nil {
 		cid = *categoryID
 	}
-	return fmt.Sprintf("restoration_type:search:c%d:k%s:l%d:p%d:o%s:d%s", cid, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("restoration_type:search:dpt%d:c%d:k%s:l%d:p%d:o%s:d%s", deptID, cid, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func (s *restorationTypeService) Create(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error) {
-	dto, err := s.repo.Create(ctx, input)
+	dto, err := s.repo.Create(ctx, deptID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (s *restorationTypeService) Create(ctx context.Context, deptID int, input m
 	if dto != nil && dto.ID > 0 {
 		cache.InvalidateKeys(kRestorationTypeByID(dto.ID))
 	}
-	cache.InvalidateKeys(kRestorationTypeAll()...)
+	cache.InvalidateKeys(kRestorationTypeAll(deptID)...)
 
 	s.upsertSearch(deptID, dto)
 
@@ -94,7 +94,7 @@ func (s *restorationTypeService) Create(ctx context.Context, deptID int, input m
 }
 
 func (s *restorationTypeService) Update(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error) {
-	dto, err := s.repo.Update(ctx, input)
+	dto, err := s.repo.Update(ctx, deptID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (s *restorationTypeService) Update(ctx context.Context, deptID int, input m
 	if dto != nil {
 		cache.InvalidateKeys(kRestorationTypeByID(dto.ID))
 	}
-	cache.InvalidateKeys(kRestorationTypeAll()...)
+	cache.InvalidateKeys(kRestorationTypeAll(deptID)...)
 
 	s.upsertSearch(deptID, dto)
 
@@ -133,18 +133,18 @@ func (s *restorationTypeService) unlinkSearch(id int) {
 	})
 }
 
-func (s *restorationTypeService) GetByID(ctx context.Context, id int) (*model.RestorationTypeDTO, error) {
+func (s *restorationTypeService) GetByID(ctx context.Context, deptID, id int) (*model.RestorationTypeDTO, error) {
 	return cache.Get(kRestorationTypeByID(id), cache.TTLMedium, func() (*model.RestorationTypeDTO, error) {
-		return s.repo.GetByID(ctx, id)
+		return s.repo.GetByID(ctx, deptID, id)
 	})
 }
 
-func (s *restorationTypeService) List(ctx context.Context, categoryID *int, q table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error) {
+func (s *restorationTypeService) List(ctx context.Context, deptID int, categoryID *int, q table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error) {
 	type boxed = table.TableListResult[model.RestorationTypeDTO]
-	key := kRestorationTypeList(categoryID, q)
+	key := kRestorationTypeList(deptID, categoryID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.List(ctx, categoryID, q)
+		res, e := s.repo.List(ctx, deptID, categoryID, q)
 		if e != nil {
 			return nil, e
 		}
@@ -157,23 +157,23 @@ func (s *restorationTypeService) List(ctx context.Context, categoryID *int, q ta
 	return *ptr, nil
 }
 
-func (s *restorationTypeService) Delete(ctx context.Context, id int) error {
+func (s *restorationTypeService) Delete(ctx context.Context, deptID int, id int) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
-	cache.InvalidateKeys(kRestorationTypeAll()...)
+	cache.InvalidateKeys(kRestorationTypeAll(deptID)...)
 	cache.InvalidateKeys(kRestorationTypeByID(id))
 
 	s.unlinkSearch(id)
 	return nil
 }
 
-func (s *restorationTypeService) Search(ctx context.Context, categoryID *int, q dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error) {
+func (s *restorationTypeService) Search(ctx context.Context, deptID int, categoryID *int, q dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error) {
 	type boxed = dbutils.SearchResult[model.RestorationTypeDTO]
-	key := kRestorationTypeSearch(categoryID, q)
+	key := kRestorationTypeSearch(deptID, categoryID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.Search(ctx, categoryID, q)
+		res, e := s.repo.Search(ctx, deptID, categoryID, q)
 		if e != nil {
 			return nil, e
 		}

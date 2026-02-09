@@ -1,14 +1,14 @@
 -- Unique partial indexes to prevent duplicates by level
 CREATE UNIQUE INDEX IF NOT EXISTS categories_lv1_name_uq
-ON categories (name)
+ON categories (department_id, name)
 WHERE level = 1 AND deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS categories_lv2_parent_name_uq
-ON categories (parent_id, name)
+ON categories (department_id, parent_id, name)
 WHERE level = 2 AND deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS categories_lv3_parent_name_uq
-ON categories (parent_id, name)
+ON categories (department_id, parent_id, name)
 WHERE level = 3 AND deleted_at IS NULL;
 
 -- Seed base categories (additive only)

@@ -15,11 +15,11 @@ import (
 )
 
 type RestorationTypeRepository interface {
-	Create(ctx context.Context, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error)
-	Update(ctx context.Context, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error)
-	GetByID(ctx context.Context, id int) (*model.RestorationTypeDTO, error)
-	List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error)
-	Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error)
+	Create(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error)
+	Update(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.RestorationTypeDTO, error)
+	List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error)
+	Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -32,7 +32,7 @@ func NewRestorationTypeRepository(db *generated.Client, deps *module.ModuleDeps[
 	return &restorationTypeRepo{db: db, deps: deps}
 }
 
-func (r *restorationTypeRepo) Create(ctx context.Context, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error) {
+func (r *restorationTypeRepo) Create(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -48,6 +48,7 @@ func (r *restorationTypeRepo) Create(ctx context.Context, input model.Restoratio
 	entity, err := tx.RestorationType.Create().
 		SetNillableCategoryID(input.CategoryID).
 		SetNillableName(input.Name).
+		SetNillableDepartmentID(&deptID).
 		Save(ctx)
 	if err != nil {
 		return nil, err
@@ -57,7 +58,7 @@ func (r *restorationTypeRepo) Create(ctx context.Context, input model.Restoratio
 	return dto, nil
 }
 
-func (r *restorationTypeRepo) Update(ctx context.Context, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error) {
+func (r *restorationTypeRepo) Update(ctx context.Context, deptID int, input model.RestorationTypeDTO) (*model.RestorationTypeDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -73,6 +74,7 @@ func (r *restorationTypeRepo) Update(ctx context.Context, input model.Restoratio
 	entity, err := tx.RestorationType.UpdateOneID(input.ID).
 		SetNillableCategoryID(input.CategoryID).
 		SetNillableName(input.Name).
+		SetNillableDepartmentID(&deptID).
 		Save(ctx)
 	if err != nil {
 		return nil, err
@@ -82,10 +84,11 @@ func (r *restorationTypeRepo) Update(ctx context.Context, input model.Restoratio
 	return dto, nil
 }
 
-func (r *restorationTypeRepo) GetByID(ctx context.Context, id int) (*model.RestorationTypeDTO, error) {
+func (r *restorationTypeRepo) GetByID(ctx context.Context, deptID, id int) (*model.RestorationTypeDTO, error) {
 	entity, err := r.db.RestorationType.Query().
 		Where(
 			restorationtype.ID(id),
+			restorationtype.DepartmentIDEQ(deptID),
 			restorationtype.DeletedAtIsNil(),
 		).
 		Only(ctx)
@@ -97,9 +100,9 @@ func (r *restorationTypeRepo) GetByID(ctx context.Context, id int) (*model.Resto
 	return dto, nil
 }
 
-func (r *restorationTypeRepo) List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error) {
+func (r *restorationTypeRepo) List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.RestorationTypeDTO], error) {
 	q := r.db.RestorationType.Query().
-		Where(restorationtype.DeletedAtIsNil())
+		Where(restorationtype.DepartmentIDEQ(deptID), restorationtype.DeletedAtIsNil())
 	if categoryID != nil {
 		q = q.Where(restorationtype.CategoryIDEQ(*categoryID))
 	}
@@ -122,9 +125,9 @@ func (r *restorationTypeRepo) List(ctx context.Context, categoryID *int, query t
 	return list, nil
 }
 
-func (r *restorationTypeRepo) Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error) {
+func (r *restorationTypeRepo) Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RestorationTypeDTO], error) {
 	q := r.db.RestorationType.Query().
-		Where(restorationtype.DeletedAtIsNil())
+		Where(restorationtype.DepartmentIDEQ(deptID), restorationtype.DeletedAtIsNil())
 	if categoryID != nil {
 		q = q.Where(restorationtype.CategoryIDEQ(*categoryID))
 	}
