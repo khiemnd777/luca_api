@@ -23,6 +23,11 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	svc := service.NewRawMaterialService(repo, deps)
 	h := handler.NewRawMaterialHandler(svc, deps)
 	h.RegisterRoutes(router)
+
+	importRepo := repository.NewRawMaterialImportRepository(deps.DB)
+	importSvc := service.NewRawMaterialImportService(importRepo, deps.DB)
+	importHandler := handler.NewRawMaterialImportHandler(importSvc, deps)
+	importHandler.RegisterRoutes(router)
 	return nil
 }
 

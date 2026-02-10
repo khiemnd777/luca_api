@@ -23,6 +23,11 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	svc := service.NewBrandNameService(repo, deps)
 	h := handler.NewBrandNameHandler(svc, deps)
 	h.RegisterRoutes(router)
+
+	importRepo := repository.NewBrandNameImportRepository(deps.DB)
+	importSvc := service.NewBrandNameImportService(importRepo, deps.DB)
+	importHandler := handler.NewBrandNameImportHandler(importSvc, deps)
+	importHandler.RegisterRoutes(router)
 	return nil
 }
 

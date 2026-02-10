@@ -7,6 +7,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/category"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/technique"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
@@ -15,12 +16,12 @@ import (
 )
 
 type TechniqueRepository interface {
-	Create(ctx context.Context, input model.TechniqueDTO) (*model.TechniqueDTO, error)
-	Update(ctx context.Context, input model.TechniqueDTO) (*model.TechniqueDTO, error)
-	GetByID(ctx context.Context, id int) (*model.TechniqueDTO, error)
-	List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.TechniqueDTO], error)
-	Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.TechniqueDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input model.TechniqueDTO) (*model.TechniqueDTO, error)
+	Update(ctx context.Context, deptID int, input model.TechniqueDTO) (*model.TechniqueDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.TechniqueDTO, error)
+	List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.TechniqueDTO], error)
+	Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.TechniqueDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type techniqueRepo struct {
@@ -32,7 +33,7 @@ func NewTechniqueRepository(db *generated.Client, deps *module.ModuleDeps[config
 	return &techniqueRepo{db: db, deps: deps}
 }
 
-func (r *techniqueRepo) Create(ctx context.Context, input model.TechniqueDTO) (*model.TechniqueDTO, error) {
+func (r *techniqueRepo) Create(ctx context.Context, deptID int, input model.TechniqueDTO) (*model.TechniqueDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -44,9 +45,25 @@ func (r *techniqueRepo) Create(ctx context.Context, input model.TechniqueDTO) (*
 			_ = tx.Commit()
 		}
 	}()
+
+	categoryName := input.CategoryName
+	if categoryName == nil && input.CategoryID != nil {
+		cat, err := tx.Category.Query().
+			Where(
+				category.ID(*input.CategoryID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		categoryName = cat.Name
+	}
 
 	entity, err := tx.Technique.Create().
+		SetNillableDepartmentID(&deptID).
 		SetNillableCategoryID(input.CategoryID).
+		SetNillableCategoryName(categoryName).
 		SetNillableName(input.Name).
 		Save(ctx)
 	if err != nil {
@@ -57,7 +74,7 @@ func (r *techniqueRepo) Create(ctx context.Context, input model.TechniqueDTO) (*
 	return dto, nil
 }
 
-func (r *techniqueRepo) Update(ctx context.Context, input model.TechniqueDTO) (*model.TechniqueDTO, error) {
+func (r *techniqueRepo) Update(ctx context.Context, deptID int, input model.TechniqueDTO) (*model.TechniqueDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -70,8 +87,24 @@ func (r *techniqueRepo) Update(ctx context.Context, input model.TechniqueDTO) (*
 		}
 	}()
 
+	categoryName := input.CategoryName
+	if categoryName == nil && input.CategoryID != nil {
+		cat, err := tx.Category.Query().
+			Where(
+				category.ID(*input.CategoryID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		categoryName = cat.Name
+	}
+
 	entity, err := tx.Technique.UpdateOneID(input.ID).
+		SetNillableDepartmentID(&deptID).
 		SetNillableCategoryID(input.CategoryID).
+		SetNillableCategoryName(categoryName).
 		SetNillableName(input.Name).
 		Save(ctx)
 	if err != nil {
@@ -82,10 +115,11 @@ func (r *techniqueRepo) Update(ctx context.Context, input model.TechniqueDTO) (*
 	return dto, nil
 }
 
-func (r *techniqueRepo) GetByID(ctx context.Context, id int) (*model.TechniqueDTO, error) {
+func (r *techniqueRepo) GetByID(ctx context.Context, deptID int, id int) (*model.TechniqueDTO, error) {
 	entity, err := r.db.Technique.Query().
 		Where(
 			technique.ID(id),
+			technique.DepartmentIDEQ(deptID),
 			technique.DeletedAtIsNil(),
 		).
 		Only(ctx)
@@ -97,9 +131,12 @@ func (r *techniqueRepo) GetByID(ctx context.Context, id int) (*model.TechniqueDT
 	return dto, nil
 }
 
-func (r *techniqueRepo) List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.TechniqueDTO], error) {
+func (r *techniqueRepo) List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.TechniqueDTO], error) {
 	q := r.db.Technique.Query().
-		Where(technique.DeletedAtIsNil())
+		Where(
+			technique.DeletedAtIsNil(),
+			technique.DepartmentIDEQ(deptID),
+		)
 	if categoryID != nil {
 		q = q.Where(technique.CategoryIDEQ(*categoryID))
 	}
@@ -122,9 +159,12 @@ func (r *techniqueRepo) List(ctx context.Context, categoryID *int, query table.T
 	return list, nil
 }
 
-func (r *techniqueRepo) Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.TechniqueDTO], error) {
+func (r *techniqueRepo) Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.TechniqueDTO], error) {
 	q := r.db.Technique.Query().
-		Where(technique.DeletedAtIsNil())
+		Where(
+			technique.DeletedAtIsNil(),
+			technique.DepartmentIDEQ(deptID),
+		)
 	if categoryID != nil {
 		q = q.Where(technique.CategoryIDEQ(*categoryID))
 	}
@@ -146,8 +186,9 @@ func (r *techniqueRepo) Search(ctx context.Context, categoryID *int, query dbuti
 	)
 }
 
-func (r *techniqueRepo) Delete(ctx context.Context, id int) error {
+func (r *techniqueRepo) Delete(ctx context.Context, deptID int, id int) error {
 	return r.db.Technique.UpdateOneID(id).
+		Where(technique.DepartmentIDEQ(deptID)).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
 }

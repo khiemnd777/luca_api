@@ -7,6 +7,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/config"
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/category"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/rawmaterial"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
@@ -15,12 +16,12 @@ import (
 )
 
 type RawMaterialRepository interface {
-	Create(ctx context.Context, input model.RawMaterialDTO) (*model.RawMaterialDTO, error)
-	Update(ctx context.Context, input model.RawMaterialDTO) (*model.RawMaterialDTO, error)
-	GetByID(ctx context.Context, id int) (*model.RawMaterialDTO, error)
-	List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.RawMaterialDTO], error)
-	Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RawMaterialDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input model.RawMaterialDTO) (*model.RawMaterialDTO, error)
+	Update(ctx context.Context, deptID int, input model.RawMaterialDTO) (*model.RawMaterialDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.RawMaterialDTO, error)
+	List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.RawMaterialDTO], error)
+	Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RawMaterialDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type rawMaterialRepo struct {
@@ -32,7 +33,7 @@ func NewRawMaterialRepository(db *generated.Client, deps *module.ModuleDeps[conf
 	return &rawMaterialRepo{db: db, deps: deps}
 }
 
-func (r *rawMaterialRepo) Create(ctx context.Context, input model.RawMaterialDTO) (*model.RawMaterialDTO, error) {
+func (r *rawMaterialRepo) Create(ctx context.Context, deptID int, input model.RawMaterialDTO) (*model.RawMaterialDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -44,9 +45,25 @@ func (r *rawMaterialRepo) Create(ctx context.Context, input model.RawMaterialDTO
 			_ = tx.Commit()
 		}
 	}()
+
+	categoryName := input.CategoryName
+	if categoryName == nil && input.CategoryID != nil {
+		cat, err := tx.Category.Query().
+			Where(
+				category.ID(*input.CategoryID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		categoryName = cat.Name
+	}
 
 	entity, err := tx.RawMaterial.Create().
+		SetNillableDepartmentID(&deptID).
 		SetNillableCategoryID(input.CategoryID).
+		SetNillableCategoryName(categoryName).
 		SetNillableName(input.Name).
 		Save(ctx)
 	if err != nil {
@@ -57,7 +74,7 @@ func (r *rawMaterialRepo) Create(ctx context.Context, input model.RawMaterialDTO
 	return dto, nil
 }
 
-func (r *rawMaterialRepo) Update(ctx context.Context, input model.RawMaterialDTO) (*model.RawMaterialDTO, error) {
+func (r *rawMaterialRepo) Update(ctx context.Context, deptID int, input model.RawMaterialDTO) (*model.RawMaterialDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -70,8 +87,24 @@ func (r *rawMaterialRepo) Update(ctx context.Context, input model.RawMaterialDTO
 		}
 	}()
 
+	categoryName := input.CategoryName
+	if categoryName == nil && input.CategoryID != nil {
+		cat, err := tx.Category.Query().
+			Where(
+				category.ID(*input.CategoryID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		categoryName = cat.Name
+	}
+
 	entity, err := tx.RawMaterial.UpdateOneID(input.ID).
+		SetNillableDepartmentID(&deptID).
 		SetNillableCategoryID(input.CategoryID).
+		SetNillableCategoryName(categoryName).
 		SetNillableName(input.Name).
 		Save(ctx)
 	if err != nil {
@@ -82,10 +115,11 @@ func (r *rawMaterialRepo) Update(ctx context.Context, input model.RawMaterialDTO
 	return dto, nil
 }
 
-func (r *rawMaterialRepo) GetByID(ctx context.Context, id int) (*model.RawMaterialDTO, error) {
+func (r *rawMaterialRepo) GetByID(ctx context.Context, deptID int, id int) (*model.RawMaterialDTO, error) {
 	entity, err := r.db.RawMaterial.Query().
 		Where(
 			rawmaterial.ID(id),
+			rawmaterial.DepartmentIDEQ(deptID),
 			rawmaterial.DeletedAtIsNil(),
 		).
 		Only(ctx)
@@ -97,9 +131,12 @@ func (r *rawMaterialRepo) GetByID(ctx context.Context, id int) (*model.RawMateri
 	return dto, nil
 }
 
-func (r *rawMaterialRepo) List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.RawMaterialDTO], error) {
+func (r *rawMaterialRepo) List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.RawMaterialDTO], error) {
 	q := r.db.RawMaterial.Query().
-		Where(rawmaterial.DeletedAtIsNil())
+		Where(
+			rawmaterial.DeletedAtIsNil(),
+			rawmaterial.DepartmentIDEQ(deptID),
+		)
 	if categoryID != nil {
 		q = q.Where(rawmaterial.CategoryIDEQ(*categoryID))
 	}
@@ -122,9 +159,12 @@ func (r *rawMaterialRepo) List(ctx context.Context, categoryID *int, query table
 	return list, nil
 }
 
-func (r *rawMaterialRepo) Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RawMaterialDTO], error) {
+func (r *rawMaterialRepo) Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.RawMaterialDTO], error) {
 	q := r.db.RawMaterial.Query().
-		Where(rawmaterial.DeletedAtIsNil())
+		Where(
+			rawmaterial.DeletedAtIsNil(),
+			rawmaterial.DepartmentIDEQ(deptID),
+		)
 	if categoryID != nil {
 		q = q.Where(rawmaterial.CategoryIDEQ(*categoryID))
 	}
@@ -146,8 +186,9 @@ func (r *rawMaterialRepo) Search(ctx context.Context, categoryID *int, query dbu
 	)
 }
 
-func (r *rawMaterialRepo) Delete(ctx context.Context, id int) error {
+func (r *rawMaterialRepo) Delete(ctx context.Context, deptID int, id int) error {
 	return r.db.RawMaterial.UpdateOneID(id).
+		Where(rawmaterial.DepartmentIDEQ(deptID)).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
 }

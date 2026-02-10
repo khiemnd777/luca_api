@@ -15,7 +15,15 @@ type BrandName struct {
 
 func (BrandName) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("department_id").
+			Optional().
+			Nillable(),
+
 		field.Int("category_id").
+			Optional().
+			Nillable(),
+
+		field.String("category_name").
 			Optional().
 			Nillable(),
 
@@ -45,9 +53,9 @@ func (BrandName) Edges() []ent.Edge {
 
 func (BrandName) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("id", "deleted_at"),
-		index.Fields("category_id", "deleted_at"),
-		index.Fields("name", "deleted_at"),
+		index.Fields("department_id", "id", "deleted_at"),
+		index.Fields("department_id", "category_id", "deleted_at"),
+		index.Fields("department_id", "name", "deleted_at"),
 		index.Fields("deleted_at"),
 	}
 }

@@ -8,6 +8,7 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/brandname"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/category"
 	dbutils "github.com/khiemnd777/andy_api/shared/db/utils"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -15,12 +16,12 @@ import (
 )
 
 type BrandNameRepository interface {
-	Create(ctx context.Context, input model.BrandNameDTO) (*model.BrandNameDTO, error)
-	Update(ctx context.Context, input model.BrandNameDTO) (*model.BrandNameDTO, error)
-	GetByID(ctx context.Context, id int) (*model.BrandNameDTO, error)
-	List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.BrandNameDTO], error)
-	Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.BrandNameDTO], error)
-	Delete(ctx context.Context, id int) error
+	Create(ctx context.Context, deptID int, input model.BrandNameDTO) (*model.BrandNameDTO, error)
+	Update(ctx context.Context, deptID int, input model.BrandNameDTO) (*model.BrandNameDTO, error)
+	GetByID(ctx context.Context, deptID int, id int) (*model.BrandNameDTO, error)
+	List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.BrandNameDTO], error)
+	Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.BrandNameDTO], error)
+	Delete(ctx context.Context, deptID int, id int) error
 }
 
 type brandNameRepo struct {
@@ -32,7 +33,7 @@ func NewBrandNameRepository(db *generated.Client, deps *module.ModuleDeps[config
 	return &brandNameRepo{db: db, deps: deps}
 }
 
-func (r *brandNameRepo) Create(ctx context.Context, input model.BrandNameDTO) (*model.BrandNameDTO, error) {
+func (r *brandNameRepo) Create(ctx context.Context, deptID int, input model.BrandNameDTO) (*model.BrandNameDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -44,9 +45,25 @@ func (r *brandNameRepo) Create(ctx context.Context, input model.BrandNameDTO) (*
 			_ = tx.Commit()
 		}
 	}()
+
+	categoryName := input.CategoryName
+	if categoryName == nil && input.CategoryID != nil {
+		cat, err := tx.Category.Query().
+			Where(
+				category.ID(*input.CategoryID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		categoryName = cat.Name
+	}
 
 	entity, err := tx.BrandName.Create().
+		SetNillableDepartmentID(&deptID).
 		SetNillableCategoryID(input.CategoryID).
+		SetNillableCategoryName(categoryName).
 		SetNillableName(input.Name).
 		Save(ctx)
 	if err != nil {
@@ -57,7 +74,7 @@ func (r *brandNameRepo) Create(ctx context.Context, input model.BrandNameDTO) (*
 	return dto, nil
 }
 
-func (r *brandNameRepo) Update(ctx context.Context, input model.BrandNameDTO) (*model.BrandNameDTO, error) {
+func (r *brandNameRepo) Update(ctx context.Context, deptID int, input model.BrandNameDTO) (*model.BrandNameDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -70,8 +87,24 @@ func (r *brandNameRepo) Update(ctx context.Context, input model.BrandNameDTO) (*
 		}
 	}()
 
+	categoryName := input.CategoryName
+	if categoryName == nil && input.CategoryID != nil {
+		cat, err := tx.Category.Query().
+			Where(
+				category.ID(*input.CategoryID),
+				category.DeletedAtIsNil(),
+			).
+			Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		categoryName = cat.Name
+	}
+
 	entity, err := tx.BrandName.UpdateOneID(input.ID).
+		SetNillableDepartmentID(&deptID).
 		SetNillableCategoryID(input.CategoryID).
+		SetNillableCategoryName(categoryName).
 		SetNillableName(input.Name).
 		Save(ctx)
 	if err != nil {
@@ -82,10 +115,11 @@ func (r *brandNameRepo) Update(ctx context.Context, input model.BrandNameDTO) (*
 	return dto, nil
 }
 
-func (r *brandNameRepo) GetByID(ctx context.Context, id int) (*model.BrandNameDTO, error) {
+func (r *brandNameRepo) GetByID(ctx context.Context, deptID int, id int) (*model.BrandNameDTO, error) {
 	entity, err := r.db.BrandName.Query().
 		Where(
 			brandname.ID(id),
+			brandname.DepartmentIDEQ(deptID),
 			brandname.DeletedAtIsNil(),
 		).
 		Only(ctx)
@@ -97,9 +131,12 @@ func (r *brandNameRepo) GetByID(ctx context.Context, id int) (*model.BrandNameDT
 	return dto, nil
 }
 
-func (r *brandNameRepo) List(ctx context.Context, categoryID *int, query table.TableQuery) (table.TableListResult[model.BrandNameDTO], error) {
+func (r *brandNameRepo) List(ctx context.Context, deptID int, categoryID *int, query table.TableQuery) (table.TableListResult[model.BrandNameDTO], error) {
 	q := r.db.BrandName.Query().
-		Where(brandname.DeletedAtIsNil())
+		Where(
+			brandname.DeletedAtIsNil(),
+			brandname.DepartmentIDEQ(deptID),
+		)
 	if categoryID != nil {
 		q = q.Where(brandname.CategoryIDEQ(*categoryID))
 	}
@@ -122,9 +159,12 @@ func (r *brandNameRepo) List(ctx context.Context, categoryID *int, query table.T
 	return list, nil
 }
 
-func (r *brandNameRepo) Search(ctx context.Context, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.BrandNameDTO], error) {
+func (r *brandNameRepo) Search(ctx context.Context, deptID int, categoryID *int, query dbutils.SearchQuery) (dbutils.SearchResult[model.BrandNameDTO], error) {
 	q := r.db.BrandName.Query().
-		Where(brandname.DeletedAtIsNil())
+		Where(
+			brandname.DeletedAtIsNil(),
+			brandname.DepartmentIDEQ(deptID),
+		)
 	if categoryID != nil {
 		q = q.Where(brandname.CategoryIDEQ(*categoryID))
 	}
@@ -146,8 +186,9 @@ func (r *brandNameRepo) Search(ctx context.Context, categoryID *int, query dbuti
 	)
 }
 
-func (r *brandNameRepo) Delete(ctx context.Context, id int) error {
+func (r *brandNameRepo) Delete(ctx context.Context, deptID int, id int) error {
 	return r.db.BrandName.UpdateOneID(id).
+		Where(brandname.DepartmentIDEQ(deptID)).
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
 }

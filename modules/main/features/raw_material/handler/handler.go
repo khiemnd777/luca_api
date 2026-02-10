@@ -39,12 +39,13 @@ func (h *RawMaterialHandler) List(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
+	deptID, _ := utils.GetDeptIDInt(c)
 	categoryID := utils.GetQueryAsInt(c, "category_id")
 	var categoryPtr *int
 	if categoryID > 0 {
 		categoryPtr = &categoryID
 	}
-	res, err := h.svc.List(c.UserContext(), categoryPtr, q)
+	res, err := h.svc.List(c.UserContext(), deptID, categoryPtr, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -56,12 +57,13 @@ func (h *RawMaterialHandler) Search(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := dbutils.ParseSearchQuery(c, 20)
+	deptID, _ := utils.GetDeptIDInt(c)
 	categoryID := utils.GetQueryAsInt(c, "category_id")
 	var categoryPtr *int
 	if categoryID > 0 {
 		categoryPtr = &categoryID
 	}
-	res, err := h.svc.Search(c.UserContext(), categoryPtr, q)
+	res, err := h.svc.Search(c.UserContext(), deptID, categoryPtr, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -77,7 +79,8 @@ func (h *RawMaterialHandler) GetByID(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
 
-	dto, err := h.svc.GetByID(c.UserContext(), id)
+	deptID, _ := utils.GetDeptIDInt(c)
+	dto, err := h.svc.GetByID(c.UserContext(), deptID, id)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -95,6 +98,7 @@ func (h *RawMaterialHandler) Create(c *fiber.Ctx) error {
 	}
 
 	deptID, _ := utils.GetDeptIDInt(c)
+	payload.DepartmentID = &deptID
 
 	dto, err := h.svc.Create(c.UserContext(), deptID, payload)
 	if err != nil {
@@ -121,6 +125,7 @@ func (h *RawMaterialHandler) Update(c *fiber.Ctx) error {
 	payload.ID = id
 
 	deptID, _ := utils.GetDeptIDInt(c)
+	payload.DepartmentID = &deptID
 
 	dto, err := h.svc.Update(c.UserContext(), deptID, payload)
 	if err != nil {
@@ -138,7 +143,8 @@ func (h *RawMaterialHandler) Delete(c *fiber.Ctx) error {
 	if id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
 	}
-	if err := h.svc.Delete(c.UserContext(), id); err != nil {
+	deptID, _ := utils.GetDeptIDInt(c)
+	if err := h.svc.Delete(c.UserContext(), deptID, id); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.SendStatus(fiber.StatusNoContent)

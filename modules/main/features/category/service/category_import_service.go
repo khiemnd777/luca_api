@@ -12,6 +12,7 @@ import (
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/category/repository"
+	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/logger"
 )
 
@@ -100,6 +101,9 @@ func (s *categoryImportService) ImportFromExcel(ctx context.Context, deptID int,
 		return result, err
 	}
 	committed = true
+
+	cache.InvalidateKeys(kCategoryAll(deptID)...)
+
 	return result, nil
 }
 
