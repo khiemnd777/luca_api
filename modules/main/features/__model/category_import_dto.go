@@ -1,9 +1,14 @@
 package model
 
 type CategoryExcelRow struct {
-	LV1 string `json:"lv1"`
-	LV2 string `json:"lv2"`
-	LV3 string `json:"lv3"`
+	LV1    string `json:"lv1"`
+	LV2    string `json:"lv2"`
+	LV3    string `json:"lv3"`
+	Field1 string `json:"field1,omitempty"`
+	Field2 string `json:"field2,omitempty"`
+	Field3 string `json:"field3,omitempty"`
+	Field4 string `json:"field4,omitempty"`
+	Field5 string `json:"field5,omitempty"`
 }
 
 type CategoryImportRowResult struct {

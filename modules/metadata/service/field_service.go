@@ -41,21 +41,27 @@ func keyCollectionByID(id int, withFields bool) string {
 }
 
 func (s *FieldService) ListByCollection(ctx context.Context, collectionID int) ([]*model.FieldDTO, error) {
-	key := keyFieldsByCollection(collectionID)
+	// key := keyFieldsByCollection(collectionID)
 
 	type fieldList = []*model.FieldDTO
-	list, err := cache.Get(key, ttlFieldList, func() (*fieldList, error) {
-		items, err := s.fields.ListByCollectionID(ctx, collectionID)
-		if err != nil {
-			return nil, err
-		}
-		l := fieldList(items)
-		return &l, nil
-	})
+	// list, err := cache.Get(key, ttlFieldList, func() (*fieldList, error) {
+	// 	items, err := s.fields.ListByCollectionID(ctx, collectionID)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	l := fieldList(items)
+	// 	return &l, nil
+	// })
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return *list, nil
+	items, err := s.fields.ListByCollectionID(ctx, collectionID)
 	if err != nil {
 		return nil, err
 	}
-	return *list, nil
+	l := fieldList(items)
+	return l, nil
 }
 
 func (s *FieldService) Get(ctx context.Context, id int) (*model.FieldDTO, error) {

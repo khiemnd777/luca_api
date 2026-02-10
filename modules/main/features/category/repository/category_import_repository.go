@@ -7,25 +7,31 @@ import (
 	"strings"
 
 	"github.com/lib/pq"
+
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	collectionutils "github.com/khiemnd777/andy_api/shared/metadata/collection"
 )
 
 type CategoryImportRepository interface {
 	GetOrCreateLV1(ctx context.Context, deptID int, name string) (id int, created bool, err error)
 	GetOrCreateLV2(ctx context.Context, deptID int, lv1ID int, lv1Name, name string) (id int, created bool, err error)
 	GetOrCreateLV3(ctx context.Context, deptID int, lv1ID, lv2ID int, lv1Name, lv2Name, name string) (id int, created bool, err error)
+	GetTreeNode(ctx context.Context, deptID int, id int) (*collectionutils.TreeNode, error)
+	GetCollectionID(ctx context.Context, deptID int, id int) (*int, error)
+	UpsertFields(ctx context.Context, collectionID int, fields []CategoryFieldSpec) (int, error)
 }
 
 type categoryImportRepo struct {
-	db *sql.DB
+	db *generated.Client
 }
 
-func NewCategoryImportRepository(db *sql.DB) CategoryImportRepository {
+func NewCategoryImportRepository(db *generated.Client) CategoryImportRepository {
 	return &categoryImportRepo{db: db}
 }
 
 type sqlRunner interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
 func (r *categoryImportRepo) runner(ctx context.Context) sqlRunner {
@@ -51,7 +57,7 @@ func (r *categoryImportRepo) GetOrCreateLV1(ctx context.Context, deptID int, nam
 	`
 
 	runner := r.runner(ctx)
-	if err := runner.QueryRowContext(ctx, query, name, deptID).Scan(&id); err != nil {
+	if err := queryRow(ctx, runner, query, []any{&id}, name, deptID); err != nil {
 		if isUniqueViolation(err) {
 			id, selErr := r.selectLV1(ctx, deptID, name)
 			if selErr != nil {
@@ -85,7 +91,7 @@ func (r *categoryImportRepo) GetOrCreateLV2(ctx context.Context, deptID int, lv1
 	`
 
 	runner := r.runner(ctx)
-	if err := runner.QueryRowContext(ctx, query, name, lv1ID, lv1ID, lv1Name, deptID).Scan(&id); err != nil {
+	if err := queryRow(ctx, runner, query, []any{&id}, name, lv1ID, lv1ID, lv1Name, deptID); err != nil {
 		if isUniqueViolation(err) {
 			id, selErr := r.selectLV2(ctx, deptID, lv1ID, name)
 			if selErr != nil {
@@ -120,7 +126,7 @@ func (r *categoryImportRepo) GetOrCreateLV3(ctx context.Context, deptID int, lv1
 	`
 
 	runner := r.runner(ctx)
-	if err := runner.QueryRowContext(ctx, query, name, lv2ID, lv1ID, lv1Name, lv2ID, lv2Name, deptID).Scan(&id); err != nil {
+	if err := queryRow(ctx, runner, query, []any{&id}, name, lv2ID, lv1ID, lv1Name, lv2ID, lv2Name, deptID); err != nil {
 		if isUniqueViolation(err) {
 			id, selErr := r.selectLV3(ctx, deptID, lv2ID, name)
 			if selErr != nil {
@@ -144,7 +150,7 @@ func (r *categoryImportRepo) selectLV1(ctx context.Context, deptID int, name str
 
 	var id int
 	runner := r.runner(ctx)
-	return id, runner.QueryRowContext(ctx, query, deptID, name).Scan(&id)
+	return id, queryRow(ctx, runner, query, []any{&id}, deptID, name)
 }
 
 func (r *categoryImportRepo) selectLV2(ctx context.Context, deptID int, parentID int, name string) (int, error) {
@@ -157,7 +163,7 @@ func (r *categoryImportRepo) selectLV2(ctx context.Context, deptID int, parentID
 
 	var id int
 	runner := r.runner(ctx)
-	return id, runner.QueryRowContext(ctx, query, deptID, parentID, name).Scan(&id)
+	return id, queryRow(ctx, runner, query, []any{&id}, deptID, parentID, name)
 }
 
 func (r *categoryImportRepo) selectLV3(ctx context.Context, deptID int, parentID int, name string) (int, error) {
@@ -170,7 +176,177 @@ func (r *categoryImportRepo) selectLV3(ctx context.Context, deptID int, parentID
 
 	var id int
 	runner := r.runner(ctx)
-	return id, runner.QueryRowContext(ctx, query, deptID, parentID, name).Scan(&id)
+	return id, queryRow(ctx, runner, query, []any{&id}, deptID, parentID, name)
+}
+
+func (r *categoryImportRepo) GetTreeNode(ctx context.Context, deptID int, id int) (*collectionutils.TreeNode, error) {
+	query := `
+		SELECT id, parent_id, name, collection_id
+		FROM categories
+		WHERE department_id = $1::INT AND id = $2 AND deleted_at IS NULL
+		LIMIT 1
+	`
+
+	var node collectionutils.TreeNode
+	var parentID sql.NullInt64
+	var name sql.NullString
+	var collectionID sql.NullInt64
+
+	runner := r.runner(ctx)
+	if err := queryRow(ctx, runner, query, []any{&node.ID, &parentID, &name, &collectionID}, deptID, id); err != nil {
+		return nil, err
+	}
+
+	if parentID.Valid {
+		v := int(parentID.Int64)
+		node.ParentID = &v
+	}
+	if name.Valid {
+		v := name.String
+		node.Name = &v
+	}
+	if collectionID.Valid {
+		v := int(collectionID.Int64)
+		node.CollectionID = &v
+	}
+	return &node, nil
+}
+
+func (r *categoryImportRepo) GetCollectionID(ctx context.Context, deptID int, id int) (*int, error) {
+	query := `
+		SELECT collection_id
+		FROM categories
+		WHERE department_id = $1::INT AND id = $2 AND deleted_at IS NULL
+		LIMIT 1
+	`
+	var collectionID sql.NullInt64
+	runner := r.runner(ctx)
+	if err := queryRow(ctx, runner, query, []any{&collectionID}, deptID, id); err != nil {
+		return nil, err
+	}
+	if !collectionID.Valid {
+		return nil, nil
+	}
+	v := int(collectionID.Int64)
+	return &v, nil
+}
+
+type CategoryFieldSpec struct {
+	Name         string
+	Label        string
+	Type         string
+	Required     bool
+	Unique       bool
+	Tag          *string
+	Table        bool
+	Form         bool
+	Search       bool
+	DefaultValue *string
+	Options      *string
+	OrderIndex   int
+	Visibility   string
+	Relation     *string
+}
+
+func (r *categoryImportRepo) UpsertFields(ctx context.Context, collectionID int, fields []CategoryFieldSpec) (int, error) {
+	if len(fields) == 0 {
+		return 0, nil
+	}
+
+	runner := r.runner(ctx)
+	changed := 0
+
+	for _, f := range fields {
+		var existsID int
+		if err := queryRow(ctx, runner, `
+			SELECT id FROM fields WHERE collection_id = $1 AND name = $2 LIMIT 1
+		`, []any{&existsID}, collectionID, f.Name); err == nil {
+			_, err := runner.ExecContext(ctx, `
+				UPDATE fields
+				SET name=$1,
+				    label=$2,
+				    type=$3,
+				    required=$4,
+				    "unique"=$5,
+				    tag=$6,
+				    "table"=$7,
+				    form=$8,
+				    search=$9,
+				    default_value=$10,
+				    options=$11,
+				    order_index=$12,
+				    visibility=$13,
+				    relation=$14
+				WHERE id=$15
+			`,
+				f.Name,
+				f.Label,
+				f.Type,
+				f.Required,
+				f.Unique,
+				f.Tag,
+				f.Table,
+				f.Form,
+				f.Search,
+				f.DefaultValue,
+				f.Options,
+				f.OrderIndex,
+				f.Visibility,
+				f.Relation,
+				existsID,
+			)
+			if err != nil {
+				return changed, err
+			}
+			changed++
+			continue
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return changed, err
+		}
+
+		_, err := runner.ExecContext(ctx, `
+			INSERT INTO fields (
+				collection_id,
+				name,
+				label,
+				type,
+				required,
+				"unique",
+				tag,
+				"table",
+				form,
+				search,
+				default_value,
+				options,
+				order_index,
+				visibility,
+				relation
+			)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		`,
+			collectionID,
+			f.Name,
+			f.Label,
+			f.Type,
+			f.Required,
+			f.Unique,
+			f.Tag,
+			f.Table,
+			f.Form,
+			f.Search,
+			f.DefaultValue,
+			f.Options,
+			f.OrderIndex,
+			f.Visibility,
+			f.Relation,
+		)
+		if err != nil {
+			return changed, err
+		}
+		changed++
+	}
+
+	return changed, nil
 }
 
 func isUniqueViolation(err error) bool {
@@ -182,11 +358,11 @@ func isUniqueViolation(err error) bool {
 	return strings.Contains(msg, "duplicate key value") || strings.Contains(msg, "unique constraint")
 }
 
-func txFromContext(ctx context.Context) *sql.Tx {
+func txFromContext(ctx context.Context) *generated.Tx {
 	if ctx == nil {
 		return nil
 	}
-	if tx, ok := ctx.Value(txContextKey{}).(*sql.Tx); ok {
+	if tx, ok := ctx.Value(txContextKey{}).(*generated.Tx); ok {
 		return tx
 	}
 	return nil
@@ -194,9 +370,24 @@ func txFromContext(ctx context.Context) *sql.Tx {
 
 type txContextKey struct{}
 
-func WithTx(ctx context.Context, tx *sql.Tx) context.Context {
+func WithTx(ctx context.Context, tx *generated.Tx) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, txContextKey{}, tx)
+}
+
+func queryRow(ctx context.Context, runner sqlRunner, query string, dests []any, args ...any) error {
+	rows, err := runner.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return sql.ErrNoRows
+	}
+	return rows.Scan(dests...)
 }

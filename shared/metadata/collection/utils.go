@@ -98,7 +98,6 @@ func UpsertCollectionForNode(
 	conds []customfields.ShowIfCondition,
 ) error {
 
-	// ===== Fallback logic (BIT-EXACT với code cũ) =====
 	if len(conds) == 0 {
 
 		// ROOT node → self + descendants (giống Update cũ)
