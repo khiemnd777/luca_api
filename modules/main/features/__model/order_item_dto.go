@@ -21,6 +21,10 @@ type OrderItemDTO struct {
 	DeliveryInProgressAt *time.Time `json:"delivery_in_progress_at,omitempty"`
 	DeliveredAt          *time.Time `json:"delivered_at,omitempty"`
 	DeliveryReturnedAt   *time.Time `json:"delivery_returned_at,omitempty"`
+	// completed
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	// status
+	Status *string `json:"status,omitempty"`
 	// products
 	Products []*OrderItemProductDTO `json:"products,omitempty"`
 	// materials

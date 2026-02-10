@@ -464,7 +464,7 @@ func (r *orderItemProcessInProgressRepository) Assign(
 	}
 
 	// sync status back to order and order item
-	orderstatus, orderitem, err := r.syncOrderAndItemStatus(ctx, tx, current.OrderItemID, current.OrderID)
+	orderstatus, orderitem, err := r.syncOrderAndItemStatus(ctx, tx, current.OrderItemID, current.OrderID, nil)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -534,7 +534,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(
 		}
 
 		// sync status back to order and order item
-		orderstatus, ordercreatedat, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID)
+		orderstatus, ordercreatedat, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID, &completedAt)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -605,7 +605,7 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(
 	}
 
 	// sync status back to order and order item
-	orderstatus, orderitem, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID)
+	orderstatus, orderitem, err := r.syncOrderAndItemStatus(ctx, tx, checkInOrOutData.OrderItemID, checkInOrOutData.OrderID, nil)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -825,6 +825,7 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 	tx *generated.Tx,
 	orderItemID int64,
 	orderID *int64,
+	completedAt *time.Time,
 ) (*string, *generated.OrderItem, error) {
 	processes, err := r.processClient(tx).
 		Query().
@@ -883,10 +884,16 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 	cf := utils.CloneOrInit(orderItem.CustomFields)
 	cf["status"] = orderStatus
 
-	if _, err := tx.OrderItem.
+	qoi := tx.OrderItem.
 		UpdateOneID(orderItemID).
 		SetCustomFields(cf).
-		SetStatus(orderStatus).
+		SetStatus(orderStatus)
+
+	if orderStatus == "completed" && completedAt != nil {
+		qoi = qoi.SetNillableCompletedAt(completedAt)
+	}
+
+	if _, err := qoi.
 		Save(ctx); err != nil {
 		return nil, nil, err
 	}

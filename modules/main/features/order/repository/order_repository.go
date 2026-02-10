@@ -837,9 +837,16 @@ func (r *orderRepository) recalculateOrderStatusByProcesses(
 	cf := utils.CloneOrInit(oi.CustomFields)
 	cf["status"] = orderStatus
 
-	updated, err := tx.OrderItem.
+	qoi := tx.OrderItem.
 		UpdateOne(oi).
-		SetCustomFields(cf).
+		SetCustomFields(cf)
+
+	if orderStatus == "completed" {
+		now := time.Now()
+		qoi = qoi.SetNillableCompletedAt(&now)
+	}
+
+	updated, err := qoi.
 		Save(ctx)
 	if err != nil {
 		return nil, err

@@ -95,7 +95,13 @@ func (r *caseDailyRemakeStatsRepository) RebuildRange(
 	fromDate time.Time,
 	toDate time.Time,
 ) error {
+
 	const q = `
+DELETE FROM case_daily_remake_stats
+WHERE
+  stat_date >= $1::date
+  AND stat_date <  $2::date;
+
 INSERT INTO case_daily_remake_stats (
   stat_date,
   department_id,
@@ -103,31 +109,25 @@ INSERT INTO case_daily_remake_stats (
   remake_cases
 )
 SELECT
-  completed_at::date                         AS stat_date,
-  department_id,
-  COUNT(*)                                  AS completed_cases,
-  COUNT(*) FILTER (WHERE is_remake = true)  AS remake_cases
-FROM cases
+  oi.completed_at::date                       AS stat_date,
+  o.department_id,
+  COUNT(*)                                   AS completed_cases,
+  COUNT(*) FILTER (WHERE oi.remake_count > 0) AS remake_cases
+FROM order_items oi
+JOIN orders o ON o.id = oi.order_id
 WHERE
-  completed_at::date >= $1::date
-  AND completed_at::date <= $2::date
+  oi.completed_at >= $1
+  AND oi.completed_at <  $2
+  AND oi.completed_at IS NOT NULL
+  AND oi.custom_fields->>'status' = 'completed'
+  AND oi.deleted_at IS NULL
+  AND o.deleted_at IS NULL
 GROUP BY
   stat_date,
-  department_id
-ON CONFLICT (stat_date, department_id) DO UPDATE
-SET
-  completed_cases = EXCLUDED.completed_cases,
-  remake_cases    = EXCLUDED.remake_cases,
-  updated_at      = now();
+  o.department_id;
 `
 
-	_, err := r.sqlDB.ExecContext(
-		ctx,
-		q,
-		fromDate,
-		toDate,
-	)
-
+	_, err := r.sqlDB.ExecContext(ctx, q, fromDate, toDate)
 	return err
 }
 

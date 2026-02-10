@@ -2,10 +2,10 @@ package jobs
 
 import (
 	"context"
-	"time"
 
 	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
 	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
 type CaseDailyStatsRebuildRangeJob struct {
@@ -23,17 +23,12 @@ func (j CaseDailyStatsRebuildRangeJob) ConfigKey() string       { return "cron.d
 func (j CaseDailyStatsRebuildRangeJob) Run() error {
 	logger.Debug("[DashboardCaseDailyStatsRebuildRangeJob] Dashboard case daily stats rebuilds range starting...")
 
-	now := time.Now()
-	today := time.Date(
-		now.Year(), now.Month(), now.Day(),
-		0, 0, 0, 0,
-		now.Location(),
-	)
+	from, to := utils.DayRange(-1, 1)
 
 	if err := j.svc.RebuildRange(
 		context.Background(),
-		today.Add(-24*time.Hour),
-		today.Add(24*time.Hour),
+		from,
+		to,
 	); err != nil {
 		logger.Error("[DashboardCaseDailyStatsRebuildRangeJob] Dashboard case daily stats rebuilds range failed", err)
 		return err

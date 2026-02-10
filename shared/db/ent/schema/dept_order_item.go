@@ -80,6 +80,10 @@ func (OrderItem) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.Time("completed_at").
+			Optional().
+			Nillable(),
+
 		field.Time("created_at").
 			Default(time.Now),
 		field.Time("updated_at").

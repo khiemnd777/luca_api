@@ -31,3 +31,19 @@ func ParseNillableDate(s string) (*time.Time, error) {
 	}
 	return &t, nil
 }
+
+func DayRange(offsetFrom, offsetTo int) (time.Time, time.Time) {
+	now := time.Now()
+	loc := now.Location()
+
+	today := time.Date(
+		now.Year(), now.Month(), now.Day(),
+		0, 0, 0, 0,
+		loc,
+	)
+
+	start := today.AddDate(0, 0, offsetFrom)
+	end := today.AddDate(0, 0, offsetTo)
+
+	return start, end
+}
