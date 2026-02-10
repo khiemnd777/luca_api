@@ -23,6 +23,11 @@ func (feature) Register(router fiber.Router, deps *module.ModuleDeps[config.Modu
 	svc := service.NewProcessService(repo, deps, cfMgr)
 	h := handler.NewProcessHandler(svc, deps)
 	h.RegisterRoutes(router)
+
+	importRepo := repository.NewProcessImportRepository(deps.DB)
+	importSvc := service.NewProcessImportService(importRepo, deps.DB)
+	importHandler := handler.NewProcessImportHandler(importSvc, deps)
+	importHandler.RegisterRoutes(router)
 	return nil
 }
 

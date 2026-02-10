@@ -36,22 +36,22 @@ func kSectionByID(id int) string {
 	return fmt.Sprintf("section:id:%d", id)
 }
 
-func kSectionAll() []string {
+func kSectionAll(deptID int) []string {
 	return []string{
-		kSectionListAll(),
-		kSectionSearchAll(),
+		kSectionListAll(deptID),
+		kSectionSearchAll(deptID),
 		"process:list:*",
 		"product_process:list:*",
 		"category_process:list:*",
 	}
 }
 
-func kSectionListAll() string {
-	return "section:list:*"
+func kSectionListAll(deptID int) string {
+	return fmt.Sprintf("section:list:dept:%d:*", deptID)
 }
 
-func kSectionSearchAll() string {
-	return "section:search:*"
+func kSectionSearchAll(deptID int) string {
+	return fmt.Sprintf("section:search:dept:%d:*", deptID)
 }
 
 func kSectionList(deptID int, q table.TableQuery) string {
@@ -78,13 +78,35 @@ func kSectionSearch(deptID int, q dbutils.SearchQuery) string {
 	return fmt.Sprintf("section:search:dept:%d:k%s:l%d:p%d:o%s:d%s", deptID, q.Keyword, q.Limit, q.Page, orderBy, q.Direction)
 }
 
+func kProcessAll(deptID int) []string {
+	return []string{
+		kProcessListAll(deptID),
+		kProcessSearchAll(deptID),
+		kProcessSectionAll(deptID),
+		"product_process:list:*",
+		"category_process:list:*",
+	}
+}
+
+func kProcessListAll(deptID int) string {
+	return fmt.Sprintf("process:list:dpt%d:*", deptID)
+}
+
+func kProcessSearchAll(deptID int) string {
+	return fmt.Sprintf("process:search:dpt%d:*", deptID)
+}
+
+func kProcessSectionAll(deptID int) string {
+	return fmt.Sprintf("process:section:dpt%d:*", deptID)
+}
+
 func (s *sectionService) Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
 	dto, err := s.repo.Create(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 
-	cache.InvalidateKeys(kSectionAll()...)
+	cache.InvalidateKeys(kSectionAll(dto.DepartmentID)...)
 	if dto != nil && dto.ID > 0 {
 		cache.InvalidateKeys(kSectionByID(dto.ID), fmt.Sprintf("section:id:%d:*", dto.ID))
 	}
@@ -100,7 +122,7 @@ func (s *sectionService) Update(ctx context.Context, input model.SectionDTO) (*m
 	if dto != nil {
 		cache.InvalidateKeys(kSectionByID(dto.ID), fmt.Sprintf("section:id:%d:*", dto.ID))
 	}
-	cache.InvalidateKeys(kSectionAll()...)
+	cache.InvalidateKeys(kSectionAll(dto.DepartmentID)...)
 	return dto, nil
 }
 
@@ -147,10 +169,14 @@ func (s *sectionService) ListByStaffID(ctx context.Context, staffID int, q table
 }
 
 func (s *sectionService) Delete(ctx context.Context, id int) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
+	st, err := s.repo.GetByID(ctx, id)
+	if err != nil {
 		return err
 	}
-	cache.InvalidateKeys(kSectionAll()...)
+	if err = s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	cache.InvalidateKeys(kSectionAll(st.DepartmentID)...)
 	cache.InvalidateKeys(kSectionByID(id), fmt.Sprintf("section:id:%d:*", id))
 	return nil
 }
