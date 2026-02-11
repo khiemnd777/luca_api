@@ -8,9 +8,9 @@ AS $$ SELECT unaccent('unaccent'::regdictionary, $1) $$;
 
 -- Users
 ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(name)))  STORED,
-  ADD COLUMN IF NOT EXISTS phone_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(phone)))  STORED,
-  ADD COLUMN IF NOT EXISTS email_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(email)))  STORED;
+  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (lower(unaccent_immutable(name)))  STORED,
+  ADD COLUMN IF NOT EXISTS phone_norm  text GENERATED ALWAYS AS (lower(unaccent_immutable(phone)))  STORED,
+  ADD COLUMN IF NOT EXISTS email_norm  text GENERATED ALWAYS AS (lower(unaccent_immutable(email)))  STORED;
 
 CREATE INDEX IF NOT EXISTS idx_user_name_trgm_norm  ON users USING gin (name_norm gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_user_phone_trgm_norm  ON users USING gin (phone_norm gin_trgm_ops);

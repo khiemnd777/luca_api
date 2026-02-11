@@ -7,6 +7,6 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURNS NULL ON NULL INPUT
 AS $$ SELECT unaccent('unaccent'::regdictionary, $1) $$;
 
 ALTER TABLE categories
-	ADD COLUMN IF NOT EXISTS name_norm text GENERATED ALWAYS AS (unaccent_immutable(lower(name))) STORED;
+	ADD COLUMN IF NOT EXISTS name_norm text GENERATED ALWAYS AS (lower(unaccent_immutable(name))) STORED;
 
 CREATE INDEX IF NOT EXISTS idx_category_name_trgm_norm  ON categories USING gin (name_norm gin_trgm_ops);

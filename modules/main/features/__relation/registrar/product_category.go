@@ -11,7 +11,7 @@ import (
 func init() {
 	logger.Debug("[RELATION] Register product - category")
 	policy.Register1("product_category", policy.Config1{
-		MainTable:      "product",
+		MainTable:      "products",
 		MainIDProp:     "ID",
 		MainRefIDCol:   "category_id",
 		MainRefNameCol: utils.Ptr("category_name"),

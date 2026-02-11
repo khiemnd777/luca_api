@@ -8,18 +8,18 @@ AS $$ SELECT unaccent('unaccent'::regdictionary, $1) $$;
 
 -- Clinic
 ALTER TABLE clinics
-  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(name)))  STORED;
+  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (lower(unaccent_immutable(name)))  STORED;
 
 CREATE INDEX IF NOT EXISTS idx_clinic_name_trgm_norm  ON clinics USING gin (name_norm gin_trgm_ops);
 
 -- Dentist
 ALTER TABLE dentists
-  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(name)))  STORED;
+  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (lower(unaccent_immutable(name)))  STORED;
 
 CREATE INDEX IF NOT EXISTS idx_dentist_name_trgm_norm  ON dentists USING gin (name_norm gin_trgm_ops);
 
 -- Patient
 ALTER TABLE patients
-  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (unaccent_immutable(lower(name)))  STORED;
+  ADD COLUMN IF NOT EXISTS name_norm  text GENERATED ALWAYS AS (lower(unaccent_immutable(name)))  STORED;
 
 CREATE INDEX IF NOT EXISTS idx_patient_name_trgm_norm  ON patients USING gin (name_norm gin_trgm_ops);

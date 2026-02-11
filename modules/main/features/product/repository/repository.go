@@ -79,7 +79,9 @@ func (r *productRepo) Create(ctx context.Context, deptID int, input *model.Produ
 		SetNillableCode(in.Code).
 		SetNillableName(in.Name).
 		SetNillableCategoryID(in.CategoryID).
-		SetNillableCategoryName(in.CategoryName)
+		SetNillableCategoryName(in.CategoryName).
+		SetNillableRetailPrice(in.RetailPrice).
+		SetNillableCostPrice(in.CostPrice)
 
 	if in.TemplateID == nil {
 		q.SetIsTemplate(true).
@@ -190,7 +192,9 @@ func (r *productRepo) Update(ctx context.Context, deptID int, input *model.Produ
 		SetNillableCode(in.Code).
 		SetNillableName(in.Name).
 		SetNillableCategoryID(in.CategoryID).
-		SetNillableCategoryName(in.CategoryName)
+		SetNillableCategoryName(in.CategoryName).
+		SetNillableRetailPrice(in.RetailPrice).
+		SetNillableCostPrice(in.CostPrice)
 
 	if in.TemplateID == nil {
 		q.SetIsTemplate(true)

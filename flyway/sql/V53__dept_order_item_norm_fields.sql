@@ -7,6 +7,6 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURNS NULL ON NULL INPUT
 AS $$ SELECT unaccent('unaccent'::regdictionary, $1) $$;
 
 ALTER TABLE order_items
-  ADD COLUMN IF NOT EXISTS code_norm text GENERATED ALWAYS AS (unaccent_immutable(lower(code))) STORED;
+  ADD COLUMN IF NOT EXISTS code_norm text GENERATED ALWAYS AS (lower(unaccent_immutable(code))) STORED;
 
 CREATE INDEX IF NOT EXISTS idx_order_item_code_trgm_norm  ON order_items USING gin (code_norm gin_trgm_ops);

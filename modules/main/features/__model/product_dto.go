@@ -20,6 +20,8 @@ type ProductDTO struct {
 	RestorationTypeNames *string        `json:"restoration_type_names,omitempty"`
 	CategoryID           *int           `json:"category_id,omitempty"`
 	CategoryName         *string        `json:"category_name,omitempty"`
+	RetailPrice          *float64       `json:"retail_price,omitempty"`
+	CostPrice            *float64       `json:"cost_price,omitempty"`
 	// template
 	CollectionID *int `json:"collection_id,omitempty"`
 	TemplateID   *int `json:"template_id,omitempty"`

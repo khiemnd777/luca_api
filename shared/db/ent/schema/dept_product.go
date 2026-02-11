@@ -56,6 +56,14 @@ func (Product) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.Float("retail_price").
+			Optional().
+			Nillable(),
+
+		field.Float("cost_price").
+			Optional().
+			Nillable(),
+
 		// cache
 		field.String("process_names").
 			Optional().

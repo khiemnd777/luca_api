@@ -75,7 +75,14 @@ func Singular(input string) string {
 	if strings.HasSuffix(input, "ies") {
 		return input[:len(input)-3] + "y"
 	}
-	if strings.HasSuffix(input, "es") {
+
+	// Remove "es" only for common English plural endings.
+	// Example: "processes" -> "process", but "names" -> "name".
+	if strings.HasSuffix(input, "ses") ||
+		strings.HasSuffix(input, "xes") ||
+		strings.HasSuffix(input, "zes") ||
+		strings.HasSuffix(input, "ches") ||
+		strings.HasSuffix(input, "shes") {
 		return input[:len(input)-2]
 	}
 	if strings.HasSuffix(input, "s") {
