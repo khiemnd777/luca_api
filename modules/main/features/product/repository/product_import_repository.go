@@ -13,6 +13,7 @@ import (
 type ProductImportRepository interface {
 	FindProductByCode(ctx context.Context, deptID int, code string) (*ProductImportProductRef, error)
 	ResolveCategoryBranch(ctx context.Context, deptID int, lv1, lv2, lv3 string) (id int, name string, err error)
+	ResolveCategoryLV1(ctx context.Context, deptID int, lv1 string) (id int, name string, err error)
 	GetOrCreateBrandName(ctx context.Context, deptID int, categoryID int, categoryName, name string) (id int, created bool, err error)
 	GetOrCreateRawMaterial(ctx context.Context, deptID int, categoryID int, categoryName, name string) (id int, created bool, err error)
 	GetOrCreateTechnique(ctx context.Context, deptID int, categoryID int, categoryName, name string) (id int, created bool, err error)
@@ -85,6 +86,10 @@ func (r *productImportRepo) ResolveCategoryBranch(ctx context.Context, deptID in
 	}
 
 	return targetID, strings.Join(pathParts, " > "), nil
+}
+
+func (r *productImportRepo) ResolveCategoryLV1(ctx context.Context, deptID int, lv1 string) (int, string, error) {
+	return r.selectCategory(ctx, deptID, 1, nil, lv1)
 }
 
 func (r *productImportRepo) selectCategory(

@@ -65,10 +65,19 @@ func (s *productImportService) ImportFromExcel(ctx context.Context, deptID int, 
 			}
 			return result, fmt.Errorf("row %d: cannot resolve category: %w", rowIndex, err)
 		}
+		lv1ID, lv1Name, err := s.repo.ResolveCategoryLV1(ctx, deptID, row.CategoryLV1)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				result.Skipped++
+				result.Errors = append(result.Errors, fmt.Sprintf("row %d: category level 1 not found [%s]", rowIndex, row.CategoryLV1))
+				continue
+			}
+			return result, fmt.Errorf("row %d: cannot resolve category level 1: %w", rowIndex, err)
+		}
 
 		var brandIDs []int
 		if row.HasBrandField {
-			brandIDs, err = s.resolveCategoryRefIDs(ctx, deptID, categoryID, categoryName, row.BrandNames, s.repo.GetOrCreateBrandName)
+			brandIDs, err = s.resolveCategoryRefIDs(ctx, deptID, lv1ID, lv1Name, row.BrandNames, s.repo.GetOrCreateBrandName)
 			if err != nil {
 				return result, fmt.Errorf("row %d: cannot resolve brand names: %w", rowIndex, err)
 			}
@@ -76,7 +85,7 @@ func (s *productImportService) ImportFromExcel(ctx context.Context, deptID int, 
 
 		var rawMaterialIDs []int
 		if row.HasRawMaterialField {
-			rawMaterialIDs, err = s.resolveCategoryRefIDs(ctx, deptID, categoryID, categoryName, row.RawMaterialNames, s.repo.GetOrCreateRawMaterial)
+			rawMaterialIDs, err = s.resolveCategoryRefIDs(ctx, deptID, lv1ID, lv1Name, row.RawMaterialNames, s.repo.GetOrCreateRawMaterial)
 			if err != nil {
 				return result, fmt.Errorf("row %d: cannot resolve raw materials: %w", rowIndex, err)
 			}
@@ -84,7 +93,7 @@ func (s *productImportService) ImportFromExcel(ctx context.Context, deptID int, 
 
 		var techniqueIDs []int
 		if row.HasTechniqueField {
-			techniqueIDs, err = s.resolveCategoryRefIDs(ctx, deptID, categoryID, categoryName, row.TechniqueNames, s.repo.GetOrCreateTechnique)
+			techniqueIDs, err = s.resolveCategoryRefIDs(ctx, deptID, lv1ID, lv1Name, row.TechniqueNames, s.repo.GetOrCreateTechnique)
 			if err != nil {
 				return result, fmt.Errorf("row %d: cannot resolve techniques: %w", rowIndex, err)
 			}
@@ -92,7 +101,7 @@ func (s *productImportService) ImportFromExcel(ctx context.Context, deptID int, 
 
 		var restorationTypeIDs []int
 		if row.HasRestorationTypeField {
-			restorationTypeIDs, err = s.resolveCategoryRefIDs(ctx, deptID, categoryID, categoryName, row.RestorationTypeNames, s.repo.GetOrCreateRestorationType)
+			restorationTypeIDs, err = s.resolveCategoryRefIDs(ctx, deptID, lv1ID, lv1Name, row.RestorationTypeNames, s.repo.GetOrCreateRestorationType)
 			if err != nil {
 				return result, fmt.Errorf("row %d: cannot resolve restoration types: %w", rowIndex, err)
 			}
