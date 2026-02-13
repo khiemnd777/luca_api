@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type DepartmentService interface {
@@ -17,8 +18,8 @@ type DepartmentService interface {
 	Update(ctx context.Context, input model.DepartmentDTO, userID int) (*model.DepartmentDTO, error)
 	GetByID(ctx context.Context, id int) (*model.DepartmentDTO, error)
 	GetBySlug(ctx context.Context, slug string) (*model.DepartmentDTO, error)
-	List(ctx context.Context, limit, offset int) ([]*model.DepartmentDTO, int, error)
-	ChildrenList(ctx context.Context, parentID, limit, offset int) ([]*model.DepartmentDTO, int, error)
+	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error)
+	ChildrenList(ctx context.Context, parentID int, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error)
 	Delete(ctx context.Context, id int) error
 	GetFirstDepartmentOfUser(ctx context.Context, userID int) (*model.DepartmentDTO, error)
 }
@@ -40,22 +41,44 @@ func keyDeptSlug(slug string) string {
 	return fmt.Sprintf("department:slug:%s", slug)
 }
 
-func keyDeptList(limit, offset int) string {
-	return fmt.Sprintf("department:list:l%d:o%d", limit, offset)
+func keyDeptList(query table.TableQuery) string {
+	orderBy := ""
+	if query.OrderBy != nil {
+		orderBy = *query.OrderBy
+	}
+	return fmt.Sprintf(
+		"department:list:l%d:p%d:o%d:ob%s:d%s",
+		query.Limit,
+		query.Page,
+		query.Offset,
+		orderBy,
+		query.Direction,
+	)
 }
 
-func keyDeptChildren(parentID, limit, offset int) string {
-	return fmt.Sprintf("department:children:p%d:l%d:o%d", parentID, limit, offset)
+func keyDeptChildren(parentID int, query table.TableQuery) string {
+	orderBy := ""
+	if query.OrderBy != nil {
+		orderBy = *query.OrderBy
+	}
+	return fmt.Sprintf(
+		"department:children:p%d:l%d:p%d:o%d:ob%s:d%s",
+		parentID,
+		query.Limit,
+		query.Page,
+		query.Offset,
+		orderBy,
+		query.Direction,
+	)
 }
 
 func keyMyFirstDept(userID int) string {
 	return fmt.Sprintf("department:first_of_user:%d", userID)
 }
 
-func invalidateDept(id int, slug string) {
+func invalidateDept(id int) {
 	cache.InvalidateKeys(
 		keyDept(id),
-		keyDeptSlug(slug),
 		"department:list:*",
 		"department:children:*",
 	)
@@ -64,7 +87,7 @@ func invalidateDept(id int, slug string) {
 func (s *departmentService) Create(ctx context.Context, input model.DepartmentDTO) (*model.DepartmentDTO, error) {
 	res, err := s.repo.Create(ctx, input)
 	if err == nil {
-		invalidateDept(res.ID, *res.Slug)
+		invalidateDept(res.ID)
 	}
 	return res, err
 }
@@ -72,7 +95,7 @@ func (s *departmentService) Create(ctx context.Context, input model.DepartmentDT
 func (s *departmentService) Update(ctx context.Context, input model.DepartmentDTO, userID int) (*model.DepartmentDTO, error) {
 	res, err := s.repo.Update(ctx, input)
 	if err == nil {
-		invalidateDept(res.ID, *res.Slug)
+		invalidateDept(res.ID)
 		cache.InvalidateKeys(keyMyFirstDept(userID))
 	}
 	return res, err
@@ -90,41 +113,51 @@ func (s *departmentService) GetBySlug(ctx context.Context, slug string) (*model.
 	})
 }
 
-func (s *departmentService) List(ctx context.Context, limit, offset int) ([]*model.DepartmentDTO, int, error) {
-	var totalRes = 0
-	res, err := cache.GetList(keyDeptList(limit, offset), cache.TTLMedium, func() ([]*model.DepartmentDTO, error) {
-		res, total, err := s.repo.List(ctx, limit, offset)
-		totalRes = total
-		return res, err
+func (s *departmentService) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error) {
+	type boxed = table.TableListResult[model.DepartmentDTO]
+	key := keyDeptList(query)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.List(ctx, query)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
 	})
 	if err != nil {
-		return nil, 0, err
+		var zero boxed
+		return zero, err
 	}
-	return res, totalRes, nil
+	return *ptr, nil
 }
 
-func (s *departmentService) ChildrenList(ctx context.Context, parentID, limit, offset int) ([]*model.DepartmentDTO, int, error) {
-	var totalRes = 0
-	res, err := cache.GetList(keyDeptChildren(parentID, limit, offset), cache.TTLMedium, func() ([]*model.DepartmentDTO, error) {
-		res, total, err := s.repo.ChildrenList(ctx, parentID, limit, offset)
-		totalRes = total
-		return res, err
+func (s *departmentService) ChildrenList(ctx context.Context, parentID int, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error) {
+	type boxed = table.TableListResult[model.DepartmentDTO]
+	key := keyDeptChildren(parentID, query)
+
+	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
+		res, e := s.repo.ChildrenList(ctx, parentID, query)
+		if e != nil {
+			return nil, e
+		}
+		return &res, nil
 	})
 	if err != nil {
-		return nil, 0, err
+		var zero boxed
+		return zero, err
 	}
-	return res, totalRes, nil
+	return *ptr, nil
 }
 
 func (s *departmentService) Delete(ctx context.Context, id int) error {
-	res, err := s.GetByID(ctx, id)
+	_, err := s.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
-	invalidateDept(id, *res.Slug)
+	invalidateDept(id)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/khiemnd777/andy_api/modules/main/features/dashboard/case_daily_turnaround_stats/service"
 	"github.com/khiemnd777/andy_api/shared/logger"
@@ -30,7 +31,7 @@ func (j CaseDailyStatsRebuildRangeJob) Run() error {
 		from,
 		to,
 	); err != nil {
-		logger.Error("[DashboardCaseDailyStatsRebuildRangeJob] Dashboard case daily stats rebuilds range failed", err)
+		logger.Error(fmt.Sprintf("[DashboardCaseDailyStatsRebuildRangeJob] Dashboard case daily stats rebuilds range failed: %v", err))
 		return err
 	}
 

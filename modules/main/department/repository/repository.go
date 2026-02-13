@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/departmentmember"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/module"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type DepartmentRepository interface {
@@ -17,8 +18,8 @@ type DepartmentRepository interface {
 	Update(ctx context.Context, input model.DepartmentDTO) (*model.DepartmentDTO, error)
 	GetByID(ctx context.Context, id int) (*model.DepartmentDTO, error)
 	GetBySlug(ctx context.Context, slug string) (*model.DepartmentDTO, error)
-	List(ctx context.Context, limit, offset int) ([]*model.DepartmentDTO, int, error)
-	ChildrenList(ctx context.Context, parentID, limit, offset int) ([]*model.DepartmentDTO, int, error)
+	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error)
+	ChildrenList(ctx context.Context, parentID int, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error)
 	Delete(ctx context.Context, id int) error
 	ExistsMembership(ctx context.Context, userID, deptID int) (bool, error)
 	GetFirstDepartmentOfUser(ctx context.Context, userID int) (*model.DepartmentDTO, error)
@@ -37,7 +38,6 @@ func (r *departmentRepo) Create(ctx context.Context, input model.DepartmentDTO) 
 	q := r.db.Department.Create().
 		SetActive(input.Active).
 		SetName(input.Name).
-		SetNillableSlug(input.Slug).
 		SetNillableLogo(input.Logo).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
@@ -58,7 +58,6 @@ func (r *departmentRepo) Update(ctx context.Context, input model.DepartmentDTO) 
 	entity, err := r.db.Department.UpdateOneID(input.ID).
 		SetActive(input.Active).
 		SetName(input.Name).
-		SetNillableSlug(input.Slug).
 		SetNillableLogo(input.Logo).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
@@ -102,52 +101,53 @@ func (r *departmentRepo) GetBySlug(ctx context.Context, slug string) (*model.Dep
 	return departmentDTO, nil
 }
 
-func (r *departmentRepo) List(ctx context.Context, limit, offset int) ([]*model.DepartmentDTO, int, error) {
-	q := r.db.Department.Query().
-		Where(department.Deleted(false))
-
-	total, err := q.Clone().Count(ctx)
+func (r *departmentRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error) {
+	list, err := table.TableListV2(
+		ctx,
+		r.db.Department.Query().
+			Where(department.Deleted(false)),
+		query,
+		department.Table,
+		department.FieldID,
+		department.FieldID,
+		func(q *generated.DepartmentQuery) *generated.DepartmentQuery {
+			return q
+		},
+		func(src []*generated.Department) []*model.DepartmentDTO {
+			return mapper.MapListAs[*generated.Department, *model.DepartmentDTO](src)
+		},
+	)
 	if err != nil {
-		return nil, 0, err
+		var zero table.TableListResult[model.DepartmentDTO]
+		return zero, err
 	}
-	entities, err := q.Limit(limit).
-		Offset(offset).
-		All(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if len(entities) == 0 {
-		return []*model.DepartmentDTO{}, total, nil
-	}
-
-	departmentDTOs := mapper.MapListAs[*generated.Department, *model.DepartmentDTO](entities)
-
-	return departmentDTOs, total, nil
+	return list, nil
 }
 
-func (r *departmentRepo) ChildrenList(ctx context.Context, parentID, limit, offset int) ([]*model.DepartmentDTO, int, error) {
-	q := r.db.Department.Query().
-		Where(department.Deleted(false), department.ParentIDEQ(parentID))
-
-	total, err := q.Clone().Count(ctx)
+func (r *departmentRepo) ChildrenList(ctx context.Context, parentID int, query table.TableQuery) (table.TableListResult[model.DepartmentDTO], error) {
+	list, err := table.TableListV2(
+		ctx,
+		r.db.Department.Query().
+			Where(
+				department.Deleted(false),
+				department.ParentIDEQ(parentID),
+			),
+		query,
+		department.Table,
+		department.FieldID,
+		department.FieldID,
+		func(q *generated.DepartmentQuery) *generated.DepartmentQuery {
+			return q
+		},
+		func(src []*generated.Department) []*model.DepartmentDTO {
+			return mapper.MapListAs[*generated.Department, *model.DepartmentDTO](src)
+		},
+	)
 	if err != nil {
-		return nil, 0, err
+		var zero table.TableListResult[model.DepartmentDTO]
+		return zero, err
 	}
-	entities, err := q.Limit(limit).
-		Offset(offset).
-		All(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if len(entities) == 0 {
-		return []*model.DepartmentDTO{}, total, nil
-	}
-
-	departmentDTOs := mapper.MapListAs[*generated.Department, *model.DepartmentDTO](entities)
-
-	return departmentDTOs, total, nil
+	return list, nil
 }
 
 func (r *departmentRepo) Delete(ctx context.Context, id int) error {

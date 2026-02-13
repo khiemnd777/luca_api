@@ -13,6 +13,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/middleware/rbac"
 	"github.com/khiemnd777/andy_api/shared/module"
 	"github.com/khiemnd777/andy_api/shared/utils"
+	"github.com/khiemnd777/andy_api/shared/utils/table"
 )
 
 type DepartmentHandler struct {
@@ -25,30 +26,32 @@ func NewDepartmentHandler(svc service.DepartmentService, deps *module.ModuleDeps
 }
 func (h *DepartmentHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>", h.List)
-	app.RouterGet(router, "/:dept_id<int>", h.GetByID)
+	app.RouterGet(router, "/:dept_id<int>/child/:child_dept_id<int>", h.GetByID)
 	app.RouterGet(router, "/:dept_id<int>/children", h.ChildrenList)
-	app.RouterPost(router, "/:dept_id<int>", h.Create)
-	app.RouterPut(router, "/:dept_id<int>", h.Update)
-	app.RouterDelete(router, "/:dept_id<int>", h.Delete)
+	app.RouterPost(router, "/:dept_id<int>/child/:child_dept_id<int>", h.Create)
+	app.RouterPut(router, "/:dept_id<int>/child/:child_dept_id<int>", h.Update)
+	app.RouterDelete(router, "/:dept_id<int>/child/:child_dept_id<int>", h.Delete)
 	app.RouterGet(router, "/me", h.MyFirstDepartment)
 }
 
 func (h *DepartmentHandler) List(c *fiber.Ctx) error {
-	limit := parseIntDefault(c.Query("limit"), 50, 1, 200)
-	offset := parseIntDefault(c.Query("offset"), 0, 0, 1<<31-1)
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	q := table.ParseTableQuery(c, table.DefaultLimit)
 
-	items, total, err := h.svc.List(c.UserContext(), limit, offset)
+	res, err := h.svc.List(c.UserContext(), q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(fiber.Map{
-		"items": items,
-		"total": total,
-	})
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *DepartmentHandler) GetByID(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("dept_id"))
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+	id, err := strconv.Atoi(c.Params("child_dept_id"))
 	if err != nil || id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
@@ -56,47 +59,52 @@ func (h *DepartmentHandler) GetByID(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(res)
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *DepartmentHandler) GetBySlug(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	slug := c.Params("slug")
 	res, err := h.svc.GetBySlug(c.UserContext(), slug)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(res)
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *DepartmentHandler) MyFirstDepartment(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	userID, _ := utils.GetUserIDInt(c)
 	res, err := h.svc.GetFirstDepartmentOfUser(c.UserContext(), userID)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(res)
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *DepartmentHandler) ChildrenList(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.view"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
 	parentID, err := strconv.Atoi(c.Params("dept_id"))
 	if err != nil || parentID <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
-	limit := parseIntDefault(c.Query("limit"), 50, 1, 200)
-	offset := parseIntDefault(c.Query("offset"), 0, 0, 1<<31-1)
+	q := table.ParseTableQuery(c, table.DefaultLimit)
 
-	items, total, err := h.svc.ChildrenList(c.UserContext(), parentID, limit, offset)
+	res, err := h.svc.ChildrenList(c.UserContext(), parentID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(fiber.Map{
-		"items": items,
-		"total": total,
-	})
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *DepartmentHandler) Create(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "settings.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.create"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	var in model.DepartmentDTO
@@ -110,15 +118,15 @@ func (h *DepartmentHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, nil, err.Error())
 	}
-	return c.Status(fiber.StatusCreated).JSON(res)
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *DepartmentHandler) Update(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "settings.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.update"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 
-	id, err := strconv.Atoi(c.Params("dept_id"))
+	id, err := strconv.Atoi(c.Params("child_dept_id"))
 	if err != nil || id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
@@ -136,32 +144,21 @@ func (h *DepartmentHandler) Update(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.JSON(res)
+	return c.Status(fiber.StatusOK).JSON(res)
 }
 
 func (h *DepartmentHandler) Delete(c *fiber.Ctx) error {
-	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "settings.update"); err != nil {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "department.delete"); err != nil {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
-	id, err := strconv.Atoi(c.Params("dept_id"))
+	id, err := strconv.Atoi(c.Params("child_dept_id"))
 	if err != nil || id <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid id")
 	}
 	if err := h.svc.Delete(c.UserContext(), id); err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
-	return c.SendStatus(fiber.StatusNoContent)
-}
-
-func parseIntDefault(s string, def, min, max int) int {
-	if v, err := strconv.Atoi(s); err == nil {
-		if v < min {
-			return min
-		}
-		if v > max {
-			return max
-		}
-		return v
-	}
-	return def
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success": true,
+	})
 }
