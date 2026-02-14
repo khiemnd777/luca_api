@@ -21,6 +21,7 @@ import (
 type StaffService interface {
 	Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
 	Update(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
+	AssignStaffToDepartment(ctx context.Context, staffID int, departmentID int) (*model.StaffDTO, error)
 	ChangePassword(ctx context.Context, id int, newPassword string) error
 	GetByID(ctx context.Context, id int) (*model.StaffDTO, error)
 	CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error)
@@ -120,7 +121,7 @@ func kStaffSearchWithRoleName(roleName string, q dbutils.SearchQuery) string {
 }
 
 func (s *staffService) Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error) {
-	dto, err := s.repo.Create(ctx, input)
+	dto, err := s.repo.Create(ctx, deptID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +138,8 @@ func (s *staffService) Create(ctx context.Context, deptID int, input model.Staff
 }
 
 func (s *staffService) Update(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error) {
+	input.DepartmentID = utils.Ptr(deptID)
+
 	dto, err := s.repo.Update(ctx, input)
 	if err != nil {
 		return nil, err
@@ -149,6 +152,22 @@ func (s *staffService) Update(ctx context.Context, deptID int, input model.Staff
 
 	// search index
 	s.upsertSearch(ctx, deptID, dto)
+
+	return dto, nil
+}
+
+func (s *staffService) AssignStaffToDepartment(ctx context.Context, staffID int, departmentID int) (*model.StaffDTO, error) {
+	dto, err := s.repo.AssignStaffToDepartment(ctx, staffID, departmentID)
+	if err != nil {
+		return nil, err
+	}
+
+	cache.InvalidateKeys(kStaffAll()...)
+	cache.InvalidateKeys(kStaffByID(staffID), kStaffSectionList(staffID), kUserRoleList(staffID), kSectionStaffAll(staffID))
+
+	if dto != nil {
+		s.upsertSearch(ctx, departmentID, dto)
+	}
 
 	return dto, nil
 }

@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type Staff struct {
@@ -14,6 +15,10 @@ type Staff struct {
 
 func (Staff) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("department_id").
+			Optional().
+			Nillable(),
+
 		field.String("section_names").
 			Optional().
 			Nillable(),
@@ -30,6 +35,12 @@ func (Staff) Fields() []ent.Field {
 		field.Time("updated_at").
 			Default(time.Now).
 			UpdateDefault(time.Now),
+	}
+}
+
+func (Staff) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("department_id"),
 	}
 }
 

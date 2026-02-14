@@ -34,6 +34,7 @@ func (h *StaffHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterGet(router, "/:dept_id<int>/staff/:id<int>", h.GetByID)
 	app.RouterPost(router, "/:dept_id<int>/staff", h.Create)
 	app.RouterPost(router, "/:dept_id<int>/staff/change-password", h.ChangePassword)
+	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/assign-department", h.AssignStaffToDepartment)
 	app.RouterPut(router, "/:dept_id<int>/staff/:id<int>", h.Update)
 	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/exists-phone", h.ExistsPhone)
 	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/exists-email", h.ExistsEmail)
@@ -215,6 +216,36 @@ func (h *StaffHandler) Update(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
+	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *StaffHandler) AssignStaffToDepartment(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	id, _ := utils.GetParamAsInt(c, "id")
+	if id <= 0 {
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
+	}
+
+	type AssignDepartmentRequest struct {
+		DepartmentID int `json:"department_id"`
+	}
+
+	var payload AssignDepartmentRequest
+	if err := c.BodyParser(&payload); err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+	}
+	if payload.DepartmentID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "department_id is required")
+	}
+
+	dto, err := h.svc.AssignStaffToDepartment(c.UserContext(), id, payload.DepartmentID)
+	if err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
 	return c.Status(fiber.StatusOK).JSON(dto)
 }
 

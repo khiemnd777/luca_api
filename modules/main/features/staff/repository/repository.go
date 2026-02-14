@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -25,8 +26,9 @@ import (
 )
 
 type StaffRepository interface {
-	Create(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
+	Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
 	Update(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
+	AssignStaffToDepartment(ctx context.Context, staffID int, departmentID int) (*model.StaffDTO, error)
 	ChangePassword(ctx context.Context, id int, newPassword string) error
 	GetByID(ctx context.Context, id int) (*model.StaffDTO, error)
 	CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error)
@@ -49,7 +51,64 @@ func NewStaffRepository(db *generated.Client, deps *module.ModuleDeps[config.Mod
 	return &staffRepo{db: db, deps: deps, cfMgr: cfMgr}
 }
 
-func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error) {
+func (r *staffRepo) getDepartmentIDByUserID(ctx context.Context, userID int) (*int, error) {
+	row := r.deps.DB.QueryRowContext(ctx, "SELECT department_id FROM staffs WHERE user_staff = $1 LIMIT 1", userID)
+	var dept sql.NullInt64
+	if err := row.Scan(&dept); err != nil {
+		return nil, err
+	}
+	if !dept.Valid {
+		return nil, nil
+	}
+	deptID := int(dept.Int64)
+	return &deptID, nil
+}
+
+func (r *staffRepo) getDepartmentMapByUserIDs(ctx context.Context, userIDs []int) (map[int]*int, error) {
+	out := make(map[int]*int, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+
+	placeholders := make([]string, 0, len(userIDs))
+	args := make([]any, 0, len(userIDs))
+	for i, userID := range userIDs {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+		args = append(args, userID)
+	}
+
+	q := fmt.Sprintf(
+		"SELECT user_staff, department_id FROM staffs WHERE user_staff IN (%s)",
+		strings.Join(placeholders, ","),
+	)
+
+	rows, err := r.deps.DB.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var uid int
+		var dept sql.NullInt64
+		if err := rows.Scan(&uid, &dept); err != nil {
+			return nil, err
+		}
+		if dept.Valid {
+			deptID := int(dept.Int64)
+			out[uid] = &deptID
+			continue
+		}
+		out[uid] = nil
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (r *staffRepo) Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error) {
 	tx, err := r.db.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -82,6 +141,7 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 	}
 
 	staffQ := tx.Staff.Create().
+		SetDepartmentID(deptID).
 		SetUserID(userEnt.ID)
 
 	// customfields
@@ -173,6 +233,7 @@ func (r *staffRepo) Create(ctx context.Context, input model.StaffDTO) (*model.St
 	}
 
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
+	dto.DepartmentID = input.DepartmentID
 	dto.SectionIDs = input.SectionIDs
 	dto.SectionNames = sectionNames
 	dto.RoleIDs = input.RoleIDs
@@ -313,12 +374,31 @@ func (r *staffRepo) Update(ctx context.Context, input model.StaffDTO) (*model.St
 	}
 
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
+	dto.DepartmentID = input.DepartmentID
 	dto.SectionIDs = input.SectionIDs
 	dto.SectionNames = sectionNames
 	dto.RoleIDs = input.RoleIDs
 	dto.CustomFields = input.CustomFields
 
 	return dto, nil
+}
+
+func (r *staffRepo) AssignStaffToDepartment(ctx context.Context, staffID int, departmentID int) (*model.StaffDTO, error) {
+	const updateQuery = `UPDATE staffs SET department_id = $2 WHERE user_staff = $1`
+	result, err := r.deps.DB.ExecContext(ctx, updateQuery, staffID, departmentID)
+	if err != nil {
+		return nil, err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, fmt.Errorf("staff not found")
+	}
+
+	return r.GetByID(ctx, staffID)
 }
 
 func (r *staffRepo) ChangePassword(ctx context.Context, id int, newPassword string) error {
@@ -381,6 +461,11 @@ func (r *staffRepo) GetByID(ctx context.Context, id int) (*model.StaffDTO, error
 	}
 
 	dto := mapper.MapAs[*generated.User, *model.StaffDTO](userEnt)
+	departmentID, err := r.getDepartmentIDByUserID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	dto.DepartmentID = departmentID
 	dto.SectionIDs = sectionIDs
 	dto.RoleIDs = roleIDs
 
@@ -415,9 +500,19 @@ func (r *staffRepo) List(ctx context.Context, query table.TableQuery) (table.Tab
 		user.FieldID,
 		user.FieldID,
 		func(src []*generated.User) []*model.StaffDTO {
+			userIDs := make([]int, 0, len(src))
+			for _, u := range src {
+				userIDs = append(userIDs, u.ID)
+			}
+			deptByUserID, err := r.getDepartmentMapByUserIDs(ctx, userIDs)
+			if err != nil {
+				deptByUserID = map[int]*int{}
+			}
+
 			out := make([]*model.StaffDTO, 0, len(src))
 			for _, u := range src {
 				dto := mapper.MapAs[*generated.User, *model.StaffDTO](u)
+				dto.DepartmentID = deptByUserID[u.ID]
 				if u.Edges.Staff != nil {
 					st := u.Edges.Staff
 
@@ -468,9 +563,19 @@ func (r *staffRepo) ListBySectionID(ctx context.Context, sectionID int, query ta
 		user.FieldID,
 		user.FieldID,
 		func(src []*generated.User) []*model.StaffDTO {
+			userIDs := make([]int, 0, len(src))
+			for _, u := range src {
+				userIDs = append(userIDs, u.ID)
+			}
+			deptByUserID, err := r.getDepartmentMapByUserIDs(ctx, userIDs)
+			if err != nil {
+				deptByUserID = map[int]*int{}
+			}
+
 			out := make([]*model.StaffDTO, 0, len(src))
 			for _, u := range src {
 				dto := mapper.MapAs[*generated.User, *model.StaffDTO](u)
+				dto.DepartmentID = deptByUserID[u.ID]
 				if u.Edges.Staff != nil {
 					st := u.Edges.Staff
 
@@ -512,9 +617,19 @@ func (r *staffRepo) ListByRoleName(ctx context.Context, roleName string, query t
 		user.FieldID,
 		user.FieldID,
 		func(src []*generated.User) []*model.StaffDTO {
+			userIDs := make([]int, 0, len(src))
+			for _, u := range src {
+				userIDs = append(userIDs, u.ID)
+			}
+			deptByUserID, err := r.getDepartmentMapByUserIDs(ctx, userIDs)
+			if err != nil {
+				deptByUserID = map[int]*int{}
+			}
+
 			out := make([]*model.StaffDTO, 0, len(src))
 			for _, u := range src {
 				dto := mapper.MapAs[*generated.User, *model.StaffDTO](u)
+				dto.DepartmentID = deptByUserID[u.ID]
 				if u.Edges.Staff != nil {
 					st := u.Edges.Staff
 
@@ -552,6 +667,17 @@ func (r *staffRepo) Search(ctx context.Context, query dbutils.SearchQuery) (dbut
 		user.Or,
 		func(src []*generated.User) []*model.StaffDTO {
 			mapped := mapper.MapListAs[*generated.User, *model.StaffDTO](src)
+			userIDs := make([]int, 0, len(src))
+			for _, u := range src {
+				userIDs = append(userIDs, u.ID)
+			}
+			deptByUserID, err := r.getDepartmentMapByUserIDs(ctx, userIDs)
+			if err != nil {
+				return mapped
+			}
+			for _, dto := range mapped {
+				dto.DepartmentID = deptByUserID[dto.ID]
+			}
 			return mapped
 		},
 	)
@@ -577,6 +703,17 @@ func (r *staffRepo) SearchWithRoleName(ctx context.Context, roleName string, que
 		user.Or,
 		func(src []*generated.User) []*model.StaffDTO {
 			mapped := mapper.MapListAs[*generated.User, *model.StaffDTO](src)
+			userIDs := make([]int, 0, len(src))
+			for _, u := range src {
+				userIDs = append(userIDs, u.ID)
+			}
+			deptByUserID, err := r.getDepartmentMapByUserIDs(ctx, userIDs)
+			if err != nil {
+				return mapped
+			}
+			for _, dto := range mapped {
+				dto.DepartmentID = deptByUserID[dto.ID]
+			}
 			return mapped
 		},
 	)
