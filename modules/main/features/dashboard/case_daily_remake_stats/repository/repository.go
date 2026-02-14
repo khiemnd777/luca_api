@@ -96,12 +96,23 @@ func (r *caseDailyRemakeStatsRepository) RebuildRange(
 	toDate time.Time,
 ) error {
 
-	const q = `
+	tx, err := r.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	const deleteQ = `
 DELETE FROM case_daily_remake_stats
 WHERE
   stat_date >= $1::date
   AND stat_date <  $2::date;
+`
+	if _, err := tx.ExecContext(ctx, deleteQ, fromDate, toDate); err != nil {
+		return err
+	}
 
+	const insertQ = `
 INSERT INTO case_daily_remake_stats (
   stat_date,
   department_id,
@@ -109,10 +120,10 @@ INSERT INTO case_daily_remake_stats (
   remake_cases
 )
 SELECT
-  oi.completed_at::date                       AS stat_date,
+  oi.completed_at::date                        AS stat_date,
   o.department_id,
-  COUNT(*)                                   AS completed_cases,
-  COUNT(*) FILTER (WHERE oi.remake_count > 0) AS remake_cases
+  COUNT(*)                                     AS completed_cases,
+  COUNT(*) FILTER (WHERE oi.remake_count > 0)  AS remake_cases
 FROM order_items oi
 JOIN orders o ON o.id = oi.order_id
 WHERE
@@ -126,9 +137,11 @@ GROUP BY
   stat_date,
   o.department_id;
 `
+	if _, err := tx.ExecContext(ctx, insertQ, fromDate, toDate); err != nil {
+		return err
+	}
 
-	_, err := r.sqlDB.ExecContext(ctx, q, fromDate, toDate)
-	return err
+	return tx.Commit()
 }
 
 func (r *caseDailyRemakeStatsRepository) AvgRemakeRate(
