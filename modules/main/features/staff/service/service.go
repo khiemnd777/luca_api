@@ -22,11 +22,12 @@ type StaffService interface {
 	Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
 	Update(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
 	AssignStaffToDepartment(ctx context.Context, staffID int, departmentID int) (*model.StaffDTO, error)
+	AssignAdminToDepartment(ctx context.Context, adminID int, departmentID int) error
 	ChangePassword(ctx context.Context, id int, newPassword string) error
 	GetByID(ctx context.Context, id int) (*model.StaffDTO, error)
 	CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error)
 	CheckEmailExists(ctx context.Context, userID int, email string) (bool, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
@@ -80,12 +81,12 @@ func kUserRoleList(staffID int) string {
 	return fmt.Sprintf("rbac:roles:user:%d:*", staffID)
 }
 
-func kStaffList(q table.TableQuery) string {
+func kStaffList(deptID int, q table.TableQuery) string {
 	orderBy := ""
 	if q.OrderBy != nil {
 		orderBy = *q.OrderBy
 	}
-	return fmt.Sprintf("staff:list:l%d:p%d:o%s:d%s", q.Limit, q.Page, orderBy, q.Direction)
+	return fmt.Sprintf("staff:list:dept:%d:l%d:p%d:o%s:d%s", deptID, q.Limit, q.Page, orderBy, q.Direction)
 }
 
 func kSectionStaffList(sectionID int, q table.TableQuery) string {
@@ -172,6 +173,15 @@ func (s *staffService) AssignStaffToDepartment(ctx context.Context, staffID int,
 	return dto, nil
 }
 
+func (s *staffService) AssignAdminToDepartment(ctx context.Context, adminID int, departmentID int) error {
+	if err := s.repo.AssignAdminToDepartment(ctx, adminID, departmentID); err != nil {
+		return err
+	}
+
+	cache.InvalidateKeys(fmt.Sprintf("department:first_of_user:%d", adminID))
+	return nil
+}
+
 func (s *staffService) upsertSearch(ctx context.Context, deptID int, dto *model.StaffDTO) {
 	kwPtr, _ := searchutils.BuildKeywords(ctx, s.cfMgr, "clinic", []any{dto.SectionNames, dto.Phone}, dto.CustomFields)
 
@@ -207,12 +217,12 @@ func (s *staffService) GetByID(ctx context.Context, id int) (*model.StaffDTO, er
 	})
 }
 
-func (s *staffService) List(ctx context.Context, q table.TableQuery) (table.TableListResult[model.StaffDTO], error) {
+func (s *staffService) List(ctx context.Context, deptID int, q table.TableQuery) (table.TableListResult[model.StaffDTO], error) {
 	type boxed = table.TableListResult[model.StaffDTO]
-	key := kStaffList(q)
+	key := kStaffList(deptID, q)
 
 	ptr, err := cache.Get(key, cache.TTLMedium, func() (*boxed, error) {
-		res, e := s.repo.List(ctx, q)
+		res, e := s.repo.List(ctx, deptID, q)
 		if e != nil {
 			return nil, e
 		}

@@ -29,11 +29,12 @@ type StaffRepository interface {
 	Create(ctx context.Context, deptID int, input model.StaffDTO) (*model.StaffDTO, error)
 	Update(ctx context.Context, input model.StaffDTO) (*model.StaffDTO, error)
 	AssignStaffToDepartment(ctx context.Context, staffID int, departmentID int) (*model.StaffDTO, error)
+	AssignAdminToDepartment(ctx context.Context, adminID int, departmentID int) error
 	ChangePassword(ctx context.Context, id int, newPassword string) error
 	GetByID(ctx context.Context, id int) (*model.StaffDTO, error)
 	CheckPhoneExists(ctx context.Context, userID int, phone string) (bool, error)
 	CheckEmailExists(ctx context.Context, userID int, email string) (bool, error)
-	List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
+	List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListBySectionID(ctx context.Context, sectionID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	ListByRoleName(ctx context.Context, roleName string, query table.TableQuery) (table.TableListResult[model.StaffDTO], error)
 	Search(ctx context.Context, query dbutils.SearchQuery) (dbutils.SearchResult[model.StaffDTO], error)
@@ -401,6 +402,46 @@ func (r *staffRepo) AssignStaffToDepartment(ctx context.Context, staffID int, de
 	return r.GetByID(ctx, staffID)
 }
 
+func (r *staffRepo) AssignAdminToDepartment(ctx context.Context, adminID int, departmentID int) error {
+	isAdmin, err := r.db.User.Query().
+		Where(
+			user.IDEQ(adminID),
+			user.DeletedAtIsNil(),
+			user.HasRolesWith(role.RoleNameEQ("admin")),
+		).
+		Exist(ctx)
+	if err != nil {
+		return err
+	}
+	if !isAdmin {
+		return fmt.Errorf("user is not admin")
+	}
+
+	tx, err := r.db.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			_ = tx.Commit()
+		}
+	}()
+
+	const deleteQuery = `DELETE FROM department_members WHERE user_id = $1`
+	if _, err = tx.ExecContext(ctx, deleteQuery, adminID); err != nil {
+		return err
+	}
+
+	const insertQuery = `INSERT INTO department_members (user_id, department_id, created_at) VALUES ($1, $2, NOW())`
+	if _, err = tx.ExecContext(ctx, insertQuery, adminID, departmentID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *staffRepo) ChangePassword(ctx context.Context, id int, newPassword string) error {
 	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -482,13 +523,13 @@ func (r *staffRepo) GetByID(ctx context.Context, id int) (*model.StaffDTO, error
 	return dto, nil
 }
 
-func (r *staffRepo) List(ctx context.Context, query table.TableQuery) (table.TableListResult[model.StaffDTO], error) {
+func (r *staffRepo) List(ctx context.Context, deptID int, query table.TableQuery) (table.TableListResult[model.StaffDTO], error) {
 	list, err := table.TableList(
 		ctx,
 		r.db.User.Query().
 			Where(
 				user.DeletedAtIsNil(),
-				user.HasStaff(),
+				user.HasStaffWith(staff.DepartmentIDEQ(deptID)),
 			).
 			WithStaff(func(sq *generated.StaffQuery) {
 				sq.WithSections(func(ssq *generated.StaffSectionQuery) {

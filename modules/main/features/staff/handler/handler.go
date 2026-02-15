@@ -35,6 +35,7 @@ func (h *StaffHandler) RegisterRoutes(router fiber.Router) {
 	app.RouterPost(router, "/:dept_id<int>/staff", h.Create)
 	app.RouterPost(router, "/:dept_id<int>/staff/change-password", h.ChangePassword)
 	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/assign-department", h.AssignStaffToDepartment)
+	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/assign-admin-department", h.AssignAdminToDepartment)
 	app.RouterPut(router, "/:dept_id<int>/staff/:id<int>", h.Update)
 	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/exists-phone", h.ExistsPhone)
 	app.RouterPost(router, "/:dept_id<int>/staff/:id<int>/exists-email", h.ExistsEmail)
@@ -46,7 +47,8 @@ func (h *StaffHandler) List(c *fiber.Ctx) error {
 		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
 	}
 	q := table.ParseTableQuery(c, 20)
-	res, err := h.svc.List(c.UserContext(), q)
+	deptID, _ := utils.GetDeptIDInt(c)
+	res, err := h.svc.List(c.UserContext(), deptID, q)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -247,6 +249,35 @@ func (h *StaffHandler) AssignStaffToDepartment(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(dto)
+}
+
+func (h *StaffHandler) AssignAdminToDepartment(c *fiber.Ctx) error {
+	if err := rbac.GuardAnyPermission(c, h.deps.Ent.(*generated.Client), "staff.update"); err != nil {
+		return client_error.ResponseError(c, fiber.StatusForbidden, err, err.Error())
+	}
+
+	id, _ := utils.GetParamAsInt(c, "id")
+	if id <= 0 {
+		return client_error.ResponseError(c, fiber.StatusNotFound, nil, "invalid id")
+	}
+
+	type AssignDepartmentRequest struct {
+		DepartmentID int `json:"department_id"`
+	}
+
+	var payload AssignDepartmentRequest
+	if err := c.BodyParser(&payload); err != nil {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid body")
+	}
+	if payload.DepartmentID <= 0 {
+		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "department_id is required")
+	}
+
+	if err := h.svc.AssignAdminToDepartment(c.UserContext(), id, payload.DepartmentID); err != nil {
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
+	}
+
+	return c.SendStatus(fiber.StatusOK)
 }
 
 func (h *StaffHandler) ChangePassword(c *fiber.Ctx) error {
