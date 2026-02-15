@@ -41,7 +41,8 @@ func (r *departmentRepo) Create(ctx context.Context, input model.DepartmentDTO) 
 		SetNillableLogo(input.Logo).
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
-		SetNillableParentID(input.ParentID)
+		SetNillableParentID(input.ParentID).
+		SetNillableAdministratorID(input.AdministratorID)
 
 	entity, err := q.Save(ctx)
 
@@ -62,6 +63,7 @@ func (r *departmentRepo) Update(ctx context.Context, input model.DepartmentDTO) 
 		SetNillableAddress(input.Address).
 		SetNillablePhoneNumber(input.PhoneNumber).
 		SetNillableParentID(input.ParentID).
+		SetNillableAdministratorID(input.AdministratorID).
 		Save(ctx)
 
 	if err != nil {

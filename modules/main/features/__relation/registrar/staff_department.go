@@ -8,11 +8,17 @@ import (
 func init() {
 	logger.Debug("[RELATION] Register staff - department")
 	policy.RegisterRefSearch("staff_department", policy.ConfigSearch{
-		RefTable:    "departments",
-		Alias:       "d",
-		NormFields:  []string{"d.name"},
-		RefFields:   []string{"id", "name"},
-		Permissions: []string{"department.view"},
-		CachePrefix: "department:list",
+		RefTable:     "users",
+		Alias:        "u",
+		NormFields:   []string{"u.name"},
+		RefFields:    []string{"id", "name"},
+		SelectFields: []string{"u.id", "u.name"},
+		ExtraJoins: func() string {
+			return `
+				JOIN staffs s ON s.user_staff = u.id
+			`
+		},
+		Permissions: []string{"staff.search"},
+		CachePrefix: "staff:search",
 	})
 }

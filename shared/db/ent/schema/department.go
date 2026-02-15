@@ -43,6 +43,10 @@ func (Department) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.Int("administrator_id").
+			Optional().
+			Nillable(),
+
 		field.Bool("active").Default(true),
 
 		field.Bool("deleted").Default(false),
