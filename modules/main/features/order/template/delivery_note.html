@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phieu Giao Hang</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 14mm 10mm 14mm 10mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: #111;
+      font-size: 13px;
+      line-height: 1.35;
+      font-family: "Noto Sans", "DejaVu Sans", "Arial Unicode MS", Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .sheet {
+      width: 100%;
+    }
+
+    .header {
+      display: table;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    .header-left,
+    .header-right {
+      display: table-cell;
+      vertical-align: top;
+      width: 50%;
+    }
+
+    .header-right {
+      text-align: right;
+      font-size: 12px;
+    }
+
+    .logo {
+      max-height: 52px;
+      max-width: 180px;
+      object-fit: contain;
+    }
+
+    .title {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin: 10px 0 14px;
+      letter-spacing: 0.5px;
+    }
+
+    .order-info {
+      display: table;
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+    }
+
+    .order-col {
+      display: table-cell;
+      width: 50%;
+      vertical-align: top;
+      padding-right: 10px;
+    }
+
+    .order-col:last-child {
+      padding-right: 0;
+      padding-left: 10px;
+    }
+
+    .field-row {
+      display: table;
+      width: 100%;
+      margin: 3px 0;
+    }
+
+    .field-label,
+    .field-value {
+      display: table-cell;
+      vertical-align: top;
+    }
+
+    .field-label {
+      width: 120px;
+      font-weight: 700;
+    }
+
+    .clinic-name {
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      border: 1px solid #111;
+      page-break-inside: auto;
+    }
+
+    .items thead {
+      display: table-header-group;
+    }
+
+    .items tfoot {
+      display: table-row-group;
+    }
+
+    .items th,
+    .items td {
+      border: 1px solid #111;
+      padding: 6px;
+      vertical-align: middle;
+    }
+
+    .items th {
+      text-align: center;
+      font-weight: 800;
+      background: #f5f5f5;
+    }
+
+    .items tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+
+    .center { text-align: center; }
+    .right { text-align: right; }
+
+    .total-row td {
+      font-weight: 800;
+    }
+
+    .sections {
+      margin-top: 12px;
+    }
+
+    .check-section {
+      margin-bottom: 8px;
+    }
+
+    .check-title {
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .check-grid {
+      display: table;
+      width: 100%;
+    }
+
+    .check-row {
+      display: table-row;
+    }
+
+    .check-cell {
+      display: table-cell;
+      width: 33.33%;
+      padding: 2px 6px 2px 0;
+      vertical-align: top;
+    }
+
+    .checkbox {
+      display: inline-block;
+      width: 15px;
+      text-align: center;
+      border: 1px solid #111;
+      margin-right: 6px;
+      font-size: 11px;
+      line-height: 13px;
+      height: 15px;
+    }
+
+    .footer-sign {
+      margin-top: 20px;
+      display: table;
+      width: 100%;
+    }
+
+    .sign-block {
+      display: table-cell;
+      width: 50%;
+      text-align: center;
+      vertical-align: top;
+    }
+
+    .sign-title {
+      font-weight: 800;
+      margin-bottom: 56px;
+    }
+
+    .sign-line {
+      margin: 0 auto;
+      width: 70%;
+      border-top: 1px solid #111;
+      height: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="header">
+      <div class="header-left">
+        {{ if .Company.LogoURL }}
+          <img src="{{ .Company.LogoURL }}" alt="logo" class="logo" />
+        {{ end }}
+      </div>
+      <div class="header-right">
+        <div>{{ .Company.Address }}</div>
+        <div>{{ .Company.Phone }}</div>
+      </div>
+    </div>
+
+    <div class="title">PHIẾU GIAO HÀNG</div>
+
+    <div class="order-info">
+      <div class="order-col">
+        <div class="field-row"><div class="field-label">Số đơn hàng:</div><div class="field-value">{{ .Order.Number }}</div></div>
+        <div class="field-row"><div class="field-label">BS:</div><div class="field-value">{{ .Order.BS }}</div></div>
+        <div class="field-row"><div class="field-label">BN:</div><div class="field-value">{{ .Order.BN }}</div></div>
+      </div>
+
+      <div class="order-col">
+        <div class="field-row"><div class="field-label">Ngày:</div><div class="field-value">{{ .Order.DateDisplay }}</div></div>
+        <div class="field-row"><div class="field-label">Clinic:</div><div class="field-value clinic-name">{{ .Order.ClinicName }}</div></div>
+        <div class="field-row"><div class="field-label">Địa chỉ giao:</div><div class="field-value">{{ .Order.ShippingAddress }}</div></div>
+      </div>
+    </div>
+
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width: 7%;">Stt</th>
+          <th style="width: 46%;">Mô tả hàng hoá</th>
+          <th style="width: 12%;">Số lượng</th>
+          <th style="width: 17%;">Đơn giá</th>
+          <th style="width: 18%;">Thành tiền</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range $idx, $it := .Items }}
+        <tr>
+          <td class="center">{{ add1 $idx }}</td>
+          <td>{{ $it.Description }}</td>
+          <td class="right">{{ number $it.Quantity }}</td>
+          <td class="right">{{ currency $it.UnitPrice }}</td>
+          <td class="right">{{ currency $it.LineTotal }}</td>
+        </tr>
+        {{ end }}
+      </tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="2" class="center">TỔNG CỘNG</td>
+          <td class="right">{{ number .TotalQuantity }}</td>
+          <td></td>
+          <td class="right">{{ currency .TotalAmount }}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="sections">
+      <div class="check-section">
+        <div class="check-title">1. Hồ sơ đi kèm</div>
+        <div class="check-grid">
+          <div class="check-row">
+            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.KhayLayDau }}</span>Khay lấy dấu</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.HamDoi }}</span>Hàm đối</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.SapCan }}</span>Sáp cắn</div>
+          </div>
+          <div class="check-row">
+            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.GiaKhop }}</span>Giá khớp</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.MauRang }}</span>Mẫu răng</div>
+            <div class="check-cell"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="check-section">
+        <div class="check-title">2. Phụ kiện implant kèm theo hàng</div>
+        <div class="check-grid">
+          <div class="check-row">
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.CayLayDau }}</span>Cây lấy dấu</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.Analog }}</span>Analog</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.OcLabo }}</span>Ốc labo</div>
+          </div>
+          <div class="check-row">
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.CayVanTinhLuc }}</span>Cây vận tính lực</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.VitNgan }}</span>Vít ngắn</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.OcLamSang }}</span>Ốc lâm sàng</div>
+          </div>
+          <div class="check-row">
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.NuouNhua }}</span>Nướu nhựa</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.KhoaChuyen }}</span>Khoá chuyển</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.Khac }}</span>Khác{{ if .ImplantAccessories.KhacNote }}: {{ .ImplantAccessories.KhacNote }}{{ end }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="check-section">
+        <div class="check-title">3. Thanh toán</div>
+        <div class="check-grid">
+          <div class="check-row">
+            <div class="check-cell"><span class="checkbox">{{ checked .PaymentMethod.TienMat }}</span>Tiền mặt</div>
+            <div class="check-cell"><span class="checkbox">{{ checked .PaymentMethod.CongNo }}</span>Công nợ</div>
+            <div class="check-cell"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-sign">
+      <div class="sign-block">
+        <div class="sign-title">Người Nhận</div>
+        <div class="sign-line"></div>
+      </div>
+      <div class="sign-block">
+        <div class="sign-title">Người lập phiếu</div>
+        <div class="sign-line"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
