@@ -125,7 +125,7 @@ func (r *orderItemRepository) GetLatestByOrderID(ctx context.Context, orderID in
 		return nil, err
 	}
 
-	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](itemEnt)
+	dto := r.mapOrderItemEntityToDTO(itemEnt)
 
 	// Products
 	if err := r.orderItemProductRepo.Load(ctx, dto); err != nil {
@@ -196,7 +196,7 @@ func (r *orderItemRepository) UpdateDeliveryStatus(ctx context.Context, tx *gene
 		return nil, err
 	}
 
-	return mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity), nil
+	return r.mapOrderItemEntityToDTO(entity), nil
 }
 
 func (r *orderItemRepository) PrepareLatestForRemakeByOrderID(
@@ -419,6 +419,16 @@ func (r *orderItemRepository) applyTotalPrice(dto *model.OrderItemDTO, totalPric
 	dto.TotalPrice = &sum
 }
 
+func (r *orderItemRepository) mapOrderItemEntityToDTO(entity *generated.OrderItem) *model.OrderItemDTO {
+	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	if dto == nil || entity == nil {
+		return dto
+	}
+	dto.IsCash = entity.IsCash
+	dto.IsCredit = entity.IsCredit
+	return dto
+}
+
 // -- general functions
 func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, order *model.OrderDTO, input *model.OrderItemUpsertDTO) (*model.OrderItemDTO, error) {
 	in := &input.DTO
@@ -474,6 +484,14 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 		SetNillableDeliveryStatus(in.DeliveryStatus).
 		SetStatus("received")
 
+	if input.IsCash != nil {
+		q.SetIsCash(*input.IsCash)
+		q.SetIsCredit(!*input.IsCash)
+	} else if input.IsCredit != nil {
+		q.SetIsCredit(*input.IsCredit)
+		q.SetIsCash(!*input.IsCredit)
+	}
+
 	if in.DeliveryStatus != nil {
 		now := time.Now()
 
@@ -519,7 +537,7 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 		return nil, err
 	}
 
-	out := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	out := r.mapOrderItemEntityToDTO(entity)
 
 	// Products
 	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
@@ -605,6 +623,14 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, orde
 		SetNillableTotalPrice(dto.TotalPrice).
 		SetNillableDeliveryStatus(dto.DeliveryStatus)
 
+	if input.IsCash != nil {
+		q.SetIsCash(*input.IsCash)
+		q.SetIsCredit(!*input.IsCash)
+	} else if input.IsCredit != nil {
+		q.SetIsCredit(*input.IsCredit)
+		q.SetIsCash(!*input.IsCredit)
+	}
+
 	if dto.DeliveryStatus != nil {
 		now := time.Now()
 
@@ -644,7 +670,7 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, orde
 		return nil, err
 	}
 
-	out := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	out := r.mapOrderItemEntityToDTO(entity)
 
 	// Products
 	createdProducts, err := r.orderItemProductRepo.Sync(ctx, tx, entity.OrderID, entity.ID, products)
@@ -762,7 +788,7 @@ func (r *orderItemRepository) GetByID(ctx context.Context, id int64) (*model.Ord
 		return nil, err
 	}
 
-	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](entity)
+	dto := r.mapOrderItemEntityToDTO(entity)
 
 	// Products
 	if err := r.orderItemProductRepo.Load(ctx, dto); err != nil {

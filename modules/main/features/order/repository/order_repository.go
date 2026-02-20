@@ -853,6 +853,8 @@ func (r *orderRepository) recalculateOrderStatusByProcesses(
 	}
 
 	dto := mapper.MapAs[*generated.OrderItem, *model.OrderItemDTO](updated)
+	dto.IsCash = updated.IsCash
+	dto.IsCredit = updated.IsCredit
 	dto.TotalPrice = updated.TotalPrice
 
 	tx.Order.UpdateOneID(orderID).

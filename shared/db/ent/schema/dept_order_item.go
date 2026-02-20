@@ -51,6 +51,12 @@ func (OrderItem) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		field.Bool("is_cash").
+			Default(true),
+
+		field.Bool("is_credit").
+			Default(false),
+
 		// product info
 		field.Int("product_id").Optional(),
 		field.String("product_name").

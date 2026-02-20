@@ -16,6 +16,8 @@ type OrderItemDTO struct {
 	QrCode       *string  `json:"qr_code,omitempty"`
 	RemakeCount  int      `json:"remake_count,omitempty"`
 	TotalPrice   *float64 `json:"total_price,omitempty"`
+	IsCash       bool     `json:"is_cash"`
+	IsCredit     bool     `json:"is_credit"`
 	// delivery
 	DeliveryStatus       *string    `json:"delivery_status,omitempty"`
 	DeliveryInProgressAt *time.Time `json:"delivery_in_progress_at,omitempty"`
@@ -37,6 +39,8 @@ type OrderItemDTO struct {
 type OrderItemUpsertDTO struct {
 	DTO         OrderItemDTO `json:"dto"`
 	Collections *[]string    `json:"collections,omitempty"`
+	IsCash      *bool        `json:"is_cash,omitempty"`
+	IsCredit    *bool        `json:"is_credit,omitempty"`
 }
 
 type OrderItemHistoricalDTO struct {
