@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Phieu Giao Hang</title>
+  <title>Phiếu Giao Hàng</title>
   <style>
     @page {
       size: A4 portrait;
@@ -211,8 +211,8 @@
   <div class="sheet">
     <div class="header">
       <div class="header-left">
-        {{ if .Company.LogoURL }}
-          <img src="{{ .Company.LogoURL }}" alt="logo" class="logo" />
+        {{ if .Company.LogoData }}
+          <img src="{{ .Company.LogoData }}" alt="logo" class="logo" />
         {{ end }}
       </div>
       <div class="header-right">
@@ -232,41 +232,43 @@
 
       <div class="order-col">
         <div class="field-row"><div class="field-label">Ngày:</div><div class="field-value">{{ .Order.DateDisplay }}</div></div>
-        <div class="field-row"><div class="field-label">Clinic:</div><div class="field-value clinic-name">{{ .Order.ClinicName }}</div></div>
+        <div class="field-row"><div class="field-label">Nha khoa:</div><div class="field-value clinic-name">{{ .Order.ClinicName }}</div></div>
         <div class="field-row"><div class="field-label">Địa chỉ giao:</div><div class="field-value">{{ .Order.ShippingAddress }}</div></div>
       </div>
     </div>
 
-    <table class="items">
-      <thead>
-        <tr>
-          <th style="width: 7%;">Stt</th>
-          <th style="width: 46%;">Mô tả hàng hoá</th>
-          <th style="width: 12%;">Số lượng</th>
-          <th style="width: 17%;">Đơn giá</th>
-          <th style="width: 18%;">Thành tiền</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{ range $idx, $it := .Items }}
-        <tr>
-          <td class="center">{{ add1 $idx }}</td>
-          <td>{{ $it.Description }}</td>
-          <td class="right">{{ number $it.Quantity }}</td>
-          <td class="right">{{ currency $it.UnitPrice }}</td>
-          <td class="right">{{ currency $it.LineTotal }}</td>
-        </tr>
-        {{ end }}
-      </tbody>
-      <tfoot>
-        <tr class="total-row">
-          <td colspan="2" class="center">TỔNG CỘNG</td>
-          <td class="right">{{ number .TotalQuantity }}</td>
-          <td></td>
-          <td class="right">{{ currency .TotalAmount }}</td>
-        </tr>
-      </tfoot>
-    </table>
+    {{ if .Items }}
+      <table class="items">
+        <thead>
+          <tr>
+            <th style="width: 7%;">Stt</th>
+            <th style="width: 46%;">Mô tả hàng hoá</th>
+            <th style="width: 12%;">Số lượng</th>
+            <th style="width: 17%;">Đơn giá</th>
+            <th style="width: 18%;">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range $idx, $it := .Items }}
+          <tr>
+            <td class="center">{{ add1 $idx }}</td>
+            <td>{{ $it.Description }}</td>
+            <td class="right">{{ number $it.Quantity }}</td>
+            <td class="right">{{ currency $it.UnitPrice }}</td>
+            <td class="right">{{ currency $it.LineTotal }}</td>
+          </tr>
+          {{ end }}
+        </tbody>
+        <tfoot>
+          <tr class="total-row">
+            <td colspan="2" class="center">TỔNG CỘNG</td>
+            <td class="right">{{ number .TotalQuantity }}</td>
+            <td></td>
+            <td class="right">{{ currency .TotalAmount }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    {{ end }}
 
     <div class="sections">
       <div class="check-section">

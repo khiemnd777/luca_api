@@ -3,10 +3,15 @@ package service
 import (
 	"context"
 	"fmt"
+	"html/template"
+	"path/filepath"
 	"strings"
 	"time"
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinic"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -38,9 +43,18 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 		return nil, "", err
 	}
 
-	note, err := buildDeliveryNoteFromOrder(orderDTO, products, materials, req)
+	company := s.resolveDeliveryNoteCompany(ctx, orderDTO)
+	shippingAddress := s.resolveDeliveryNoteShippingAddress(ctx, orderDTO)
+	note, err := buildDeliveryNoteFromOrder(orderDTO, products, materials, company, shippingAddress, req)
 	if err != nil {
 		return nil, "", err
+	}
+	if strings.TrimSpace(note.Company.LogoPath) != "" {
+		logoData, err := ConvertImageToBase64(note.Company.LogoPath)
+		if err != nil {
+			return nil, "", fmt.Errorf("convert company logo to base64: %w", err)
+		}
+		note.Company.LogoData = template.URL(logoData)
 	}
 
 	pdf, err := GenerateDeliveryNotePDF(note)
@@ -56,6 +70,8 @@ func buildDeliveryNoteFromOrder(
 	orderDTO *model.OrderDTO,
 	products []*model.OrderItemProductDTO,
 	materials []*model.OrderItemMaterialDTO,
+	company DeliveryNoteCompany,
+	shippingAddress string,
 	req DeliveryNotePrintRequest,
 ) (DeliveryNote, error) {
 	if orderDTO == nil {
@@ -63,18 +79,34 @@ func buildDeliveryNoteFromOrder(
 	}
 
 	note := DeliveryNote{
+		Company: company,
 		Order: DeliveryNoteOrder{
 			Number:          firstNonEmpty(utils.DerefString(orderDTO.CodeLatest), utils.DerefString(orderDTO.Code)),
 			BS:              utils.DerefString(orderDTO.DentistName),
 			BN:              utils.DerefString(orderDTO.PatientName),
 			ClinicName:      utils.DerefString(orderDTO.ClinicName),
-			ShippingAddress: utils.SafeGetString(orderDTO.CustomFields, "shipping_address"),
+			ShippingAddress: shippingAddress,
 			Date:            pickOrderDate(orderDTO),
 		},
 	}
 
 	if req.Company != nil {
-		note.Company = *req.Company
+		// Keep department as source of truth, fallback to request for missing values only.
+		if strings.TrimSpace(note.Company.Name) == "" {
+			note.Company.Name = req.Company.Name
+		}
+		if strings.TrimSpace(note.Company.LogoPath) == "" {
+			note.Company.LogoPath = req.Company.LogoPath
+		}
+		if strings.TrimSpace(string(note.Company.LogoData)) == "" {
+			note.Company.LogoData = req.Company.LogoData
+		}
+		if strings.TrimSpace(note.Company.Address) == "" {
+			note.Company.Address = req.Company.Address
+		}
+		if strings.TrimSpace(note.Company.Phone) == "" {
+			note.Company.Phone = req.Company.Phone
+		}
 	}
 
 	latestCF := map[string]any{}
@@ -141,9 +173,6 @@ func buildDeliveryNoteFromOrder(
 	}
 	note.Items = items
 
-	if len(note.Items) == 0 {
-		return DeliveryNote{}, fmt.Errorf("order has no printable products/materials")
-	}
 	if strings.TrimSpace(note.Order.Number) == "" {
 		return DeliveryNote{}, fmt.Errorf("order code is empty")
 	}
@@ -198,4 +227,86 @@ func derefFloat64(v *float64) float64 {
 		return 0
 	}
 	return *v
+}
+
+func (s *orderService) resolveDeliveryNoteCompany(ctx context.Context, orderDTO *model.OrderDTO) DeliveryNoteCompany {
+	if orderDTO == nil || orderDTO.DepartmentID == nil || *orderDTO.DepartmentID <= 0 {
+		return DeliveryNoteCompany{}
+	}
+
+	entClient, ok := s.deps.Ent.(*generated.Client)
+	if !ok || entClient == nil {
+		return DeliveryNoteCompany{}
+	}
+
+	deptEntity, err := entClient.Department.Query().
+		Where(
+			department.ID(*orderDTO.DepartmentID),
+			department.Deleted(false),
+		).
+		Only(ctx)
+	if err != nil {
+		return DeliveryNoteCompany{}
+	}
+
+	return DeliveryNoteCompany{
+		Name:     deptEntity.Name,
+		LogoPath: s.resolveDepartmentLogoPath(utils.DerefString(deptEntity.Logo)),
+		Address:  utils.DerefString(deptEntity.Address),
+		Phone:    utils.DerefString(deptEntity.PhoneNumber),
+	}
+}
+
+func (s *orderService) resolveDepartmentLogoPath(logo string) string {
+	logo = strings.TrimSpace(logo)
+	if logo == "" {
+		return ""
+	}
+
+	// keep remote/data/file URLs as-is
+	if strings.Contains(logo, "://") || strings.HasPrefix(logo, "data:") {
+		return logo
+	}
+
+	// already absolute path
+	if filepath.IsAbs(logo) {
+		return logo
+	}
+
+	basePath := strings.TrimSpace(s.deps.Config.Storage.PhotoPath)
+	if basePath == "" {
+		basePath = "./storage/photo"
+	}
+	basePath = utils.ExpandHomeDir(basePath)
+
+	// align with photo module path convention: <photo_path>/<size>/<filename>
+	fullPath := filepath.Join(basePath, "original", logo)
+	if absPath, err := filepath.Abs(fullPath); err == nil {
+		fullPath = absPath
+	}
+
+	return fullPath
+}
+
+func (s *orderService) resolveDeliveryNoteShippingAddress(ctx context.Context, orderDTO *model.OrderDTO) string {
+	if orderDTO == nil || orderDTO.ClinicID == nil || *orderDTO.ClinicID <= 0 {
+		return ""
+	}
+
+	entClient, ok := s.deps.Ent.(*generated.Client)
+	if !ok || entClient == nil {
+		return ""
+	}
+
+	clinicEntity, err := entClient.Clinic.Query().
+		Where(
+			clinic.ID(*orderDTO.ClinicID),
+			clinic.DeletedAtIsNil(),
+		).
+		Only(ctx)
+	if err != nil {
+		return ""
+	}
+
+	return utils.DerefString(clinicEntity.Address)
 }
