@@ -52,7 +52,8 @@ func (r *materialRepo) Create(ctx context.Context, deptID int, input model.Mater
 		SetNillableDepartmentID(&deptID).
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name).
-		SetNillableType(input.Type)
+		SetNillableType(input.Type).
+		SetIsImplant(input.IsImplant)
 
 	_, err = customfields.PrepareCustomFields(ctx,
 		r.cfMgr,
@@ -107,7 +108,8 @@ func (r *materialRepo) Update(ctx context.Context, deptID int, input model.Mater
 	q := tx.Material.UpdateOneID(input.ID).
 		SetNillableCode(input.Code).
 		SetNillableName(input.Name).
-		SetNillableType(input.Type)
+		SetNillableType(input.Type).
+		SetIsImplant(input.IsImplant)
 
 	_, err = customfields.PrepareCustomFields(ctx,
 		r.cfMgr,

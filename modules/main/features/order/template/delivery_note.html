@@ -272,39 +272,40 @@
 
     <div class="sections">
       <div class="check-section">
-        <div class="check-title">1. Hồ sơ đi kèm</div>
+        <div class="check-title">1. Vật tư đi kèm</div>
         <div class="check-grid">
-          <div class="check-row">
-            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.KhayLayDau }}</span>Khay lấy dấu</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.HamDoi }}</span>Hàm đối</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.SapCan }}</span>Sáp cắn</div>
-          </div>
-          <div class="check-row">
-            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.GiaKhop }}</span>Giá khớp</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .Attachments.MauRang }}</span>Mẫu răng</div>
-            <div class="check-cell"></div>
-          </div>
+          {{ $last := sub1 (len .Attachments.Items) }}
+          {{ range $idx, $it := .Attachments.Items }}
+            {{ if eq (mod $idx 3) 0 }}<div class="check-row">{{ end }}
+              <div class="check-cell"><span class="checkbox">{{ checked $it.Checked }}</span>{{ $it.Name }}</div>
+            {{ if or (eq (mod $idx 3) 2) (eq $idx $last) }}
+              {{ if eq (mod $idx 3) 0 }}
+                <div class="check-cell"></div>
+                <div class="check-cell"></div>
+              {{ else if eq (mod $idx 3) 1 }}
+                <div class="check-cell"></div>
+              {{ end }}
+            </div>{{ end }}
+          {{ end }}
         </div>
       </div>
 
       <div class="check-section">
         <div class="check-title">2. Phụ kiện implant kèm theo hàng</div>
         <div class="check-grid">
-          <div class="check-row">
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.CayLayDau }}</span>Cây lấy dấu</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.Analog }}</span>Analog</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.OcLabo }}</span>Ốc labo</div>
-          </div>
-          <div class="check-row">
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.CayVanTinhLuc }}</span>Cây vận tính lực</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.VitNgan }}</span>Vít ngắn</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.OcLamSang }}</span>Ốc lâm sàng</div>
-          </div>
-          <div class="check-row">
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.NuouNhua }}</span>Nướu nhựa</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.KhoaChuyen }}</span>Khoá chuyển</div>
-            <div class="check-cell"><span class="checkbox">{{ checked .ImplantAccessories.Khac }}</span>Khác{{ if .ImplantAccessories.KhacNote }}: {{ .ImplantAccessories.KhacNote }}{{ end }}</div>
-          </div>
+          {{ $lastImpl := sub1 (len .ImplantAccessories.Items) }}
+          {{ range $idx, $it := .ImplantAccessories.Items }}
+            {{ if eq (mod $idx 3) 0 }}<div class="check-row">{{ end }}
+              <div class="check-cell"><span class="checkbox">{{ checked $it.Checked }}</span>{{ $it.Name }}</div>
+            {{ if or (eq (mod $idx 3) 2) (eq $idx $lastImpl) }}
+              {{ if eq (mod $idx 3) 0 }}
+                <div class="check-cell"></div>
+                <div class="check-cell"></div>
+              {{ else if eq (mod $idx 3) 1 }}
+                <div class="check-cell"></div>
+              {{ end }}
+            </div>{{ end }}
+          {{ end }}
         </div>
       </div>
 

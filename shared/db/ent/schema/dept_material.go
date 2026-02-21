@@ -40,6 +40,9 @@ func (Material) Fields() []ent.Field {
 		field.Bool("active").
 			Default(true),
 
+		field.Bool("is_implant").
+			Default(false),
+
 		field.JSON("custom_fields", map[string]any{}).
 			Optional().
 			Default(map[string]any{}),

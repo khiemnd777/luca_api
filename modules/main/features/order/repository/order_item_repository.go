@@ -482,15 +482,9 @@ func (r *orderItemRepository) Create(ctx context.Context, tx *generated.Tx, orde
 		SetNillableCodeOriginal(in.CodeOriginal).
 		SetNillableTotalPrice(in.TotalPrice).
 		SetNillableDeliveryStatus(in.DeliveryStatus).
-		SetStatus("received")
-
-	if input.IsCash != nil {
-		q.SetIsCash(*input.IsCash)
-		q.SetIsCredit(!*input.IsCash)
-	} else if input.IsCredit != nil {
-		q.SetIsCredit(*input.IsCredit)
-		q.SetIsCash(!*input.IsCredit)
-	}
+		SetStatus("received").
+		SetIsCash(!in.IsCredit).
+		SetIsCredit(in.IsCredit)
 
 	if in.DeliveryStatus != nil {
 		now := time.Now()
@@ -621,15 +615,9 @@ func (r *orderItemRepository) Update(ctx context.Context, tx *generated.Tx, orde
 	q := tx.OrderItem.UpdateOneID(dto.ID).
 		SetNillableCode(dto.Code).
 		SetNillableTotalPrice(dto.TotalPrice).
-		SetNillableDeliveryStatus(dto.DeliveryStatus)
-
-	if input.IsCash != nil {
-		q.SetIsCash(*input.IsCash)
-		q.SetIsCredit(!*input.IsCash)
-	} else if input.IsCredit != nil {
-		q.SetIsCredit(*input.IsCredit)
-		q.SetIsCash(!*input.IsCredit)
-	}
+		SetNillableDeliveryStatus(dto.DeliveryStatus).
+		SetIsCash(!dto.IsCredit).
+		SetIsCredit(dto.IsCredit)
 
 	if dto.DeliveryStatus != nil {
 		now := time.Now()

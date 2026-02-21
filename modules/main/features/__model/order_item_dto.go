@@ -39,8 +39,6 @@ type OrderItemDTO struct {
 type OrderItemUpsertDTO struct {
 	DTO         OrderItemDTO `json:"dto"`
 	Collections *[]string    `json:"collections,omitempty"`
-	IsCash      *bool        `json:"is_cash,omitempty"`
-	IsCredit    *bool        `json:"is_credit,omitempty"`
 }
 
 type OrderItemHistoricalDTO struct {

@@ -58,24 +58,23 @@ type DeliveryNoteItem struct {
 }
 
 type DeliveryNoteAttachments struct {
-	KhayLayDau bool `json:"khay_lay_dau"`
-	HamDoi     bool `json:"ham_doi"`
-	SapCan     bool `json:"sap_can"`
-	GiaKhop    bool `json:"gia_khop"`
-	MauRang    bool `json:"mau_rang"`
+	Items []DeliveryNoteAttachmentItem `json:"items"`
+}
+
+type DeliveryNoteAttachmentItem struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Checked bool   `json:"checked"`
 }
 
 type DeliveryNoteImplantAccessories struct {
-	CayLayDau     bool   `json:"cay_lay_dau"`
-	Analog        bool   `json:"analog"`
-	OcLabo        bool   `json:"oc_labo"`
-	CayVanTinhLuc bool   `json:"cay_van_tinh_luc"`
-	VitNgan       bool   `json:"vit_ngan"`
-	OcLamSang     bool   `json:"oc_lam_sang"`
-	NuouNhua      bool   `json:"nuou_nhua"`
-	KhoaChuyen    bool   `json:"khoa_chuyen"`
-	Khac          bool   `json:"khac"`
-	KhacNote      string `json:"khac_note"`
+	Items []DeliveryNoteImplantAccessoryItem `json:"items"`
+}
+
+type DeliveryNoteImplantAccessoryItem struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Checked bool   `json:"checked"`
 }
 
 type DeliveryNotePaymentMethod struct {
@@ -119,6 +118,15 @@ func GenerateDeliveryNotePDF(data DeliveryNote) ([]byte, error) {
 	tpl, err := template.New("delivery_note").Funcs(template.FuncMap{
 		"add1": func(i int) int {
 			return i + 1
+		},
+		"sub1": func(i int) int {
+			return i - 1
+		},
+		"mod": func(i, j int) int {
+			if j == 0 {
+				return 0
+			}
+			return i % j
 		},
 		"number":   formatNumber,
 		"currency": formatNumber,

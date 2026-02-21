@@ -12,6 +12,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinic"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/material"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -45,7 +46,9 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 
 	company := s.resolveDeliveryNoteCompany(ctx, orderDTO)
 	shippingAddress := s.resolveDeliveryNoteShippingAddress(ctx, orderDTO)
-	note, err := buildDeliveryNoteFromOrder(orderDTO, products, materials, company, shippingAddress, req)
+	attachments := s.resolveDeliveryNoteAttachments(ctx, orderDTO, materials)
+	implantAccessories := s.resolveDeliveryNoteImplantAccessories(ctx, orderDTO, materials)
+	note, err := buildDeliveryNoteFromOrder(orderDTO, products, materials, company, shippingAddress, attachments, implantAccessories, req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -72,6 +75,8 @@ func buildDeliveryNoteFromOrder(
 	materials []*model.OrderItemMaterialDTO,
 	company DeliveryNoteCompany,
 	shippingAddress string,
+	attachments DeliveryNoteAttachments,
+	implantAccessories DeliveryNoteImplantAccessories,
 	req DeliveryNotePrintRequest,
 ) (DeliveryNote, error) {
 	if orderDTO == nil {
@@ -88,6 +93,8 @@ func buildDeliveryNoteFromOrder(
 			ShippingAddress: shippingAddress,
 			Date:            pickOrderDate(orderDTO),
 		},
+		Attachments:        attachments,
+		ImplantAccessories: implantAccessories,
 	}
 
 	if req.Company != nil {
@@ -109,45 +116,16 @@ func buildDeliveryNoteFromOrder(
 		}
 	}
 
-	latestCF := map[string]any{}
-	if orderDTO.LatestOrderItem != nil {
-		latestCF = orderDTO.LatestOrderItem.CustomFields
-	}
-	mergedCF := mergeMap(orderDTO.CustomFields, latestCF)
-
-	note.Attachments = DeliveryNoteAttachments{
-		KhayLayDau: cfBool(mergedCF, "attachment_khay_lay_dau", "khay_lay_dau"),
-		HamDoi:     cfBool(mergedCF, "attachment_ham_doi", "ham_doi"),
-		SapCan:     cfBool(mergedCF, "attachment_sap_can", "sap_can"),
-		GiaKhop:    cfBool(mergedCF, "attachment_gia_khop", "gia_khop"),
-		MauRang:    cfBool(mergedCF, "attachment_mau_rang", "mau_rang"),
-	}
-	if req.Attachments != nil {
-		note.Attachments = *req.Attachments
-	}
-
-	note.ImplantAccessories = DeliveryNoteImplantAccessories{
-		CayLayDau:     cfBool(mergedCF, "implant_cay_lay_dau", "cay_lay_dau"),
-		Analog:        cfBool(mergedCF, "implant_analog", "analog"),
-		OcLabo:        cfBool(mergedCF, "implant_oc_labo", "oc_labo"),
-		CayVanTinhLuc: cfBool(mergedCF, "implant_cay_van_tinh_luc", "cay_van_tinh_luc"),
-		VitNgan:       cfBool(mergedCF, "implant_vit_ngan", "vit_ngan"),
-		OcLamSang:     cfBool(mergedCF, "implant_oc_lam_sang", "oc_lam_sang"),
-		NuouNhua:      cfBool(mergedCF, "implant_nuou_nhua", "nuou_nhua"),
-		KhoaChuyen:    cfBool(mergedCF, "implant_khoa_chuyen", "khoa_chuyen"),
-		Khac:          cfBool(mergedCF, "implant_khac", "khac"),
-		KhacNote:      firstNonEmpty(utils.SafeGetString(mergedCF, "implant_khac_note"), utils.SafeGetString(mergedCF, "khac_note")),
-	}
-	if req.ImplantAccessories != nil {
-		note.ImplantAccessories = *req.ImplantAccessories
-	}
-
 	note.PaymentMethod = DeliveryNotePaymentMethod{
-		TienMat: cfBool(mergedCF, "payment_tien_mat", "tien_mat"),
-		CongNo:  cfBool(mergedCF, "payment_cong_no", "cong_no"),
+		TienMat: false,
+		CongNo:  false,
 	}
-	if req.PaymentMethod != nil {
-		note.PaymentMethod = *req.PaymentMethod
+	if orderDTO.LatestOrderItem != nil {
+		// Source of truth:
+		// - Tiền mặt  <- order_items.is_cash
+		// - Công nợ   <- order_items.is_credit
+		note.PaymentMethod.TienMat = orderDTO.LatestOrderItem.IsCash
+		note.PaymentMethod.CongNo = orderDTO.LatestOrderItem.IsCredit
 	}
 
 	items := make([]DeliveryNoteItem, 0, len(products)+len(materials))
@@ -191,15 +169,6 @@ func pickOrderDate(dto *model.OrderDTO) time.Time {
 		return dto.UpdatedAt
 	}
 	return dto.CreatedAt
-}
-
-func cfBool(m map[string]any, keys ...string) bool {
-	for _, key := range keys {
-		if _, ok := m[key]; ok {
-			return utils.SafeGetBool(m, key)
-		}
-	}
-	return false
 }
 
 func firstNonEmpty(values ...string) string {
@@ -309,4 +278,97 @@ func (s *orderService) resolveDeliveryNoteShippingAddress(ctx context.Context, o
 	}
 
 	return utils.DerefString(clinicEntity.Address)
+}
+
+func (s *orderService) resolveDeliveryNoteAttachments(
+	ctx context.Context,
+	orderDTO *model.OrderDTO,
+	orderMaterials []*model.OrderItemMaterialDTO,
+) DeliveryNoteAttachments {
+	if orderDTO == nil || orderDTO.DepartmentID == nil || *orderDTO.DepartmentID <= 0 {
+		return DeliveryNoteAttachments{}
+	}
+
+	entClient, ok := s.deps.Ent.(*generated.Client)
+	if !ok || entClient == nil {
+		return DeliveryNoteAttachments{}
+	}
+
+	orderLoanerIDs := map[int]struct{}{}
+	for _, om := range orderMaterials {
+		if om == nil || strings.ToLower(utils.DerefString(om.Type)) != "loaner" {
+			continue
+		}
+		orderLoanerIDs[om.MaterialID] = struct{}{}
+	}
+
+	loanerMaterials, err := entClient.Material.Query().
+		Where(
+			material.DepartmentIDEQ(*orderDTO.DepartmentID),
+			material.TypeEQ("loaner"),
+			material.DeletedAtIsNil(),
+		).
+		All(ctx)
+	if err != nil {
+		return DeliveryNoteAttachments{}
+	}
+
+	items := make([]DeliveryNoteAttachmentItem, 0, len(loanerMaterials))
+	for _, m := range loanerMaterials {
+		_, checked := orderLoanerIDs[m.ID]
+		items = append(items, DeliveryNoteAttachmentItem{
+			ID:      m.ID,
+			Name:    utils.DerefString(m.Name),
+			Checked: checked,
+		})
+	}
+
+	return DeliveryNoteAttachments{Items: items}
+}
+
+func (s *orderService) resolveDeliveryNoteImplantAccessories(
+	ctx context.Context,
+	orderDTO *model.OrderDTO,
+	orderMaterials []*model.OrderItemMaterialDTO,
+) DeliveryNoteImplantAccessories {
+	if orderDTO == nil || orderDTO.DepartmentID == nil || *orderDTO.DepartmentID <= 0 {
+		return DeliveryNoteImplantAccessories{}
+	}
+
+	entClient, ok := s.deps.Ent.(*generated.Client)
+	if !ok || entClient == nil {
+		return DeliveryNoteImplantAccessories{}
+	}
+
+	orderLoanerIDs := map[int]struct{}{}
+	for _, om := range orderMaterials {
+		if om == nil || strings.ToLower(utils.DerefString(om.Type)) != "loaner" {
+			continue
+		}
+		orderLoanerIDs[om.MaterialID] = struct{}{}
+	}
+
+	implantMaterials, err := entClient.Material.Query().
+		Where(
+			material.DepartmentIDEQ(*orderDTO.DepartmentID),
+			material.TypeEQ("loaner"),
+			material.IsImplantEQ(true),
+			material.DeletedAtIsNil(),
+		).
+		All(ctx)
+	if err != nil {
+		return DeliveryNoteImplantAccessories{}
+	}
+
+	items := make([]DeliveryNoteImplantAccessoryItem, 0, len(implantMaterials))
+	for _, m := range implantMaterials {
+		_, checked := orderLoanerIDs[m.ID]
+		items = append(items, DeliveryNoteImplantAccessoryItem{
+			ID:      m.ID,
+			Name:    utils.DerefString(m.Name),
+			Checked: checked,
+		})
+	}
+
+	return DeliveryNoteImplantAccessories{Items: items}
 }
