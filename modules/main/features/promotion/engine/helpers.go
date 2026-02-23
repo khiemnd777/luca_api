@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+
+	"github.com/khiemnd777/andy_api/shared/logger"
 )
 
 func parseIntValue(raw json.RawMessage) (int, error) {
@@ -95,8 +97,21 @@ func anyInSet(orderIDs []int, allowed []int) bool {
 }
 
 func anyInMap(ids []int, allowed map[int]struct{}) bool {
+	if len(ids) == 0 {
+		logger.Debug("anyInMap: ids empty")
+		return false
+	}
+	if len(allowed) == 0 {
+		logger.Debug("anyInMap: map empty")
+		return false
+	}
 	for _, id := range ids {
-		if _, ok := allowed[id]; ok {
+		_, ok := allowed[id]
+		logger.Debug("anyInMap: checking",
+			"id", id,
+			"exists", ok,
+		)
+		if ok {
 			return true
 		}
 	}

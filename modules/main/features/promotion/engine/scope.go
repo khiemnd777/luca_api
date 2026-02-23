@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"sort"
 
 	promotionmodel "github.com/khiemnd777/andy_api/modules/main/features/promotion/model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -38,6 +39,11 @@ func (e *Engine) matchScopes(
 		}
 		categoryIDs = ids
 	}
+
+	logger.Debug("matchScopes: loaded categoryIDs",
+		"productIDs", orderCtx.ProductIDs,
+		"categoryIDs", mapKeys(categoryIDs),
+	)
 
 	for _, scope := range scopes {
 		switch scope.ScopeType {
@@ -98,6 +104,11 @@ func (e *Engine) matchScopes(
 			if err != nil {
 				return false, err
 			}
+			logger.Debug("matchScopes: checking category scope",
+				"scopeValue", scope.ScopeValue,
+				"parsedIDs", ids,
+				"categoryIDs", mapKeys(categoryIDs),
+			)
 			if anyInMap(ids, categoryIDs) {
 				return true, nil
 			}
@@ -108,27 +119,40 @@ func (e *Engine) matchScopes(
 }
 
 func (e *Engine) loadCategoryIDs(ctx context.Context, productIDs []int) (map[int]struct{}, error) {
+	if len(productIDs) == 0 {
+		return map[int]struct{}{}, nil
+	}
 	logger.Debug("loadCategoryIDs: start", "productIDs", productIDs)
-
 	client, ok := e.deps.Ent.(*generated.Client)
 	if !ok || client == nil {
 		return nil, errors.New("invalid ent client")
 	}
 
-	products, err := client.Product.Query().
-		Where(product.IDIn(productIDs...)).
+	categoryIDs, err := client.Product.Query().
+		Where(
+			product.IDIn(productIDs...),
+			product.CategoryIDNotNil(),
+		).
 		Select(product.FieldCategoryID).
-		All(ctx)
+		Ints(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	out := map[int]struct{}{}
-	for _, p := range products {
-		if p != nil && p.CategoryID != nil {
-			out[*p.CategoryID] = struct{}{}
-		}
+	out := make(map[int]struct{}, len(categoryIDs))
+	for _, id := range categoryIDs {
+		out[id] = struct{}{}
 	}
 
+	logger.Debug("loadCategoryIDs: done", "categoryIDs", out)
 	return out, nil
+}
+
+func mapKeys(m map[int]struct{}) []int {
+	keys := make([]int, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	return keys
 }

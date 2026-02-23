@@ -56,6 +56,7 @@ func (r *promotionAdminRepository) CreatePromotion(
 		q := tx.PromotionCode.
 			Create().
 			SetCode(input.Code).
+			SetNillableName(input.Name).
 			SetDiscountType(input.DiscountType).
 			SetDiscountValue(input.DiscountValue).
 			SetIsActive(input.IsActive).
@@ -125,6 +126,7 @@ func (r *promotionAdminRepository) UpdatePromotion(
 
 		q := tx.PromotionCode.
 			UpdateOneID(id).
+			SetNillableName(input.Name).
 			SetDiscountType(input.DiscountType).
 			SetDiscountValue(input.DiscountValue).
 			SetNillableMaxDiscountAmount(input.MaxDiscountAmount).

@@ -76,6 +76,7 @@ e.g. payload:
 */
 type CreatePromotionInput struct {
 	Code              string                     `json:"code"`
+	Name              *string                    `json:"name,omitempty"`
 	DiscountType      promotioncode.DiscountType `json:"discount_type,omitempty"`
 	DiscountValue     int                        `json:"discount_value,omitempty"`
 	MaxDiscountAmount *int                       `json:"max_discount_amount,omitempty"`
@@ -90,6 +91,7 @@ type CreatePromotionInput struct {
 }
 
 type UpdatePromotionInput struct {
+	Name              *string                    `json:"name,omitempty"`
 	DiscountType      promotioncode.DiscountType `json:"discount_type,omitempty"`
 	DiscountValue     int                        `json:"discount_value,omitempty"`
 	MaxDiscountAmount *int                       `json:"max_discount_amount,omitempty"`
