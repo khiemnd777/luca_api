@@ -260,14 +260,26 @@
           {{ end }}
         </tbody>
         <tfoot>
-          <tr class="total-row">
-            <td colspan="2" class="center">TỔNG CỘNG</td>
-            <td class="right">{{ number .TotalQuantity }}</td>
-            <td></td>
-            <td class="right">{{ currency .TotalAmount }}</td>
-          </tr>
-        </tfoot>
-      </table>
+        <tr class="total-row">
+          <td colspan="2" class="center">TỔNG CỘNG</td>
+          <td class="right">{{ number .TotalQuantity }}</td>
+          <td></td>
+          <td class="right">{{ currency .TotalAmount }}</td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="4">Mã khuyến mãi</td>
+          <td class="right">{{ if .PromotionCode }}{{ .PromotionCode }}{{ else }}-{{ end }}</td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="4">Giảm giá</td>
+          <td class="right">{{ currency .DiscountAmount }}</td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="4">Thành tiền</td>
+          <td class="right">{{ currency .FinalAmount }}</td>
+        </tr>
+      </tfoot>
+    </table>
     {{ end }}
 
     <div class="sections">

@@ -29,6 +29,9 @@ type DeliveryNote struct {
 	Company            DeliveryNoteCompany            `json:"company"`
 	Order              DeliveryNoteOrder              `json:"order"`
 	Items              []DeliveryNoteItem             `json:"items"`
+	PromotionCode      string                         `json:"promotion_code"`
+	DiscountAmount     float64                        `json:"discount_amount"`
+	FinalAmount        float64                        `json:"final_amount"`
 	Attachments        DeliveryNoteAttachments        `json:"attachments"`
 	ImplantAccessories DeliveryNoteImplantAccessories `json:"implant_accessories"`
 	PaymentMethod      DeliveryNotePaymentMethod      `json:"payment_method"`
@@ -86,6 +89,9 @@ type deliveryNoteTemplateData struct {
 	Company            DeliveryNoteCompany
 	Order              deliveryNoteOrderView
 	Items              []deliveryNoteItemView
+	PromotionCode      string
+	DiscountAmount     float64
+	FinalAmount        float64
 	Attachments        DeliveryNoteAttachments
 	ImplantAccessories DeliveryNoteImplantAccessories
 	PaymentMethod      DeliveryNotePaymentMethod
@@ -189,6 +195,9 @@ func buildDeliveryNoteViewData(data DeliveryNote) deliveryNoteTemplateData {
 			ShippingAddress: data.Order.ShippingAddress,
 		},
 		Items:              items,
+		PromotionCode:      strings.TrimSpace(data.PromotionCode),
+		DiscountAmount:     data.DiscountAmount,
+		FinalAmount:        data.FinalAmount,
 		Attachments:        data.Attachments,
 		ImplantAccessories: data.ImplantAccessories,
 		PaymentMethod:      data.PaymentMethod,

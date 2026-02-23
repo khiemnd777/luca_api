@@ -9,6 +9,9 @@ import (
 	"time"
 
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	promotionengine "github.com/khiemnd777/andy_api/modules/main/features/promotion/engine"
+	promotionrepo "github.com/khiemnd777/andy_api/modules/main/features/promotion/repository"
+	promotionservice "github.com/khiemnd777/andy_api/modules/main/features/promotion/service"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinic"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
@@ -52,6 +55,14 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	if err != nil {
 		return nil, "", err
 	}
+
+	discountAmount, finalAmount, err := s.calculateDeliveryNotePricingByPromotion(ctx, orderDTO)
+	if err != nil {
+		return nil, "", err
+	}
+	note.DiscountAmount = discountAmount
+	note.FinalAmount = finalAmount
+
 	if strings.TrimSpace(note.Company.LogoPath) != "" {
 		logoData, err := ConvertImageToBase64(note.Company.LogoPath)
 		if err != nil {
@@ -150,6 +161,7 @@ func buildDeliveryNoteFromOrder(
 		})
 	}
 	note.Items = items
+	note.PromotionCode = utils.DerefString(orderDTO.PromotionCode)
 
 	if strings.TrimSpace(note.Order.Number) == "" {
 		return DeliveryNote{}, fmt.Errorf("order code is empty")
@@ -196,6 +208,56 @@ func derefFloat64(v *float64) float64 {
 		return 0
 	}
 	return *v
+}
+
+func calculateOrderProductsTotalPrice(order *model.OrderDTO) float64 {
+	if order == nil || order.LatestOrderItem == nil {
+		return 0
+	}
+
+	var total float64
+	for _, p := range order.LatestOrderItem.Products {
+		if p == nil || p.RetailPrice == nil {
+			continue
+		}
+		qty := p.Quantity
+		if qty <= 0 {
+			qty = 1
+		}
+		total += *p.RetailPrice * float64(qty)
+	}
+	return total
+}
+
+func (s *orderService) calculateDeliveryNotePricingByPromotion(ctx context.Context, orderDTO *model.OrderDTO) (float64, float64, error) {
+	baseTotal := calculateOrderProductsTotalPrice(orderDTO)
+	if orderDTO == nil {
+		return 0, baseTotal, nil
+	}
+
+	promoCode := strings.TrimSpace(utils.DerefString(orderDTO.PromotionCode))
+	if promoCode == "" {
+		return 0, baseTotal, nil
+	}
+
+	entClient, ok := s.deps.Ent.(*generated.Client)
+	if !ok || entClient == nil {
+		return 0, baseTotal, nil
+	}
+
+	// Reuse the same apply flow as promotion_handler.CalculateTotalPrice.
+	repo := promotionrepo.NewPromotionRepository(entClient, s.deps.DB)
+	promoSvc := promotionservice.NewPromotionService(repo, s.deps)
+	result, err := promoSvc.ApplyPromotion(ctx, nil, orderDTO, promoCode)
+	if err != nil {
+		// Keep behavior consistent with promotion handler for invalid promo scenarios.
+		if _, isPromoErr := promotionengine.IsPromotionApplyError(err); isPromoErr {
+			return 0, baseTotal, nil
+		}
+		return 0, 0, err
+	}
+
+	return result.DiscountAmount, result.FinalPrice, nil
 }
 
 func (s *orderService) resolveDeliveryNoteCompany(ctx context.Context, orderDTO *model.OrderDTO) DeliveryNoteCompany {
