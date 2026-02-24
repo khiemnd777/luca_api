@@ -267,15 +267,15 @@
           <td class="right">{{ currency .TotalAmount }}</td>
         </tr>
         <tr class="total-row">
-          <td colspan="4">Mã khuyến mãi</td>
+          <td colspan="4" class="center">MÃ KHUYẾN MÃI</td>
           <td class="right">{{ if .PromotionCode }}{{ .PromotionCode }}{{ else }}-{{ end }}</td>
         </tr>
         <tr class="total-row">
-          <td colspan="4">Giảm giá</td>
+          <td colspan="4" class="center">GIẢM GIÁ</td>
           <td class="right">{{ currency .DiscountAmount }}</td>
         </tr>
         <tr class="total-row">
-          <td colspan="4">Thành tiền</td>
+          <td colspan="4" class="center">THÀNH TIỀN</td>
           <td class="right">{{ currency .FinalAmount }}</td>
         </tr>
       </tfoot>
