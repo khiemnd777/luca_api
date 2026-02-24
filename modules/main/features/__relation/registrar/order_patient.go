@@ -26,10 +26,17 @@ func init() {
 		CachePrefix: "patient",
 	})
 	policy.RegisterRefSearch("orders_patients", policy.ConfigSearch{
-		RefTable:    "patients",
-		NormFields:  []string{"name"},
-		RefFields:   []string{"id", "name"},
-		Permissions: []string{"clinic.search"},
-		CachePrefix: "patient:search",
+		RefTable:     "clinic_patients",
+		Alias:        "cp",
+		NormFields:   []string{"r.name"},
+		RefFields:    []string{"id", "name"},
+		SelectFields: []string{"r.id", "r.name"},
+		Permissions:  []string{"clinic.search"},
+		CachePrefix:  "patient:search",
+		ExtraJoins: func() string {
+			return `
+				JOIN patients r ON r.id = cp.patient_id
+			`
+		},
 	})
 }
