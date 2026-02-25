@@ -27,21 +27,44 @@
     }
 
     .header {
-      display: table;
+      display: flex;
+      align-items: flex-start;
       width: 100%;
+      gap: 10px;
       margin-bottom: 10px;
     }
 
     .header-left,
     .header-right {
-      display: table-cell;
-      vertical-align: top;
-      width: 50%;
+      min-width: 0;
+      flex: 1 1 50%;
     }
 
     .header-right {
-      text-align: right;
       font-size: 12px;
+    }
+
+    .header-right-content {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      width: 100%;
+      gap: 8px;
+    }
+
+    .header-contact,
+    .header-qr {
+      flex-shrink: 0;
+    }
+
+    .header-contact {
+      flex: 1 1 auto;
+      text-align: right;
+    }
+
+    .header-qr {
+      flex: 0 0 52px;
+      text-align: right;
     }
 
     .logo {
@@ -140,6 +163,12 @@
     .total-row td {
       font-weight: 800;
     }
+    .qr-code-img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      display: inline-block;
+    }
 
     .sections {
       margin-top: 12px;
@@ -216,11 +245,21 @@
         {{ end }}
       </div>
       <div class="header-right">
-        <div>{{ .Company.Address }}</div>
-        <div>{{ .Company.Phone }}</div>
+        <div class="header-right-content">
+          <div class="header-contact">
+            <div>{{ .Company.Address }}</div>
+            <div>{{ .Company.Phone }}</div>
+          </div>
+          <div class="header-qr">
+            {{ if .QRCodeImageURL }}
+              <img src="{{ .QRCodeImageURL }}" alt="qr-code" class="qr-code-img" />
+            {{ else if .QRCode }}
+              {{ .QRCode }}
+            {{ end }}
+          </div>
+        </div>
       </div>
     </div>
-
     <div class="title">PHIẾU GIAO HÀNG</div>
 
     <div class="order-info">
@@ -278,6 +317,18 @@
           <td colspan="4" class="center">THÀNH TIỀN</td>
           <td class="right">{{ currency .FinalAmount }}</td>
         </tr>
+        <!-- <tr class="total-row">
+          <td colspan="4" class="center">MÃ QR</td>
+          <td class="right">
+            {{ if .QRCodeImageURL }}
+              <img src="{{ .QRCodeImageURL }}" alt="qr-code" class="qr-code-img" />
+            {{ else if .QRCode }}
+              {{ .QRCode }}
+            {{ else }}
+              -
+            {{ end }}
+          </td>
+        </tr> -->
       </tfoot>
     </table>
     {{ end }}

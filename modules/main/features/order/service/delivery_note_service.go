@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,8 @@ type DeliveryNote struct {
 	PromotionCode      string                         `json:"promotion_code"`
 	DiscountAmount     float64                        `json:"discount_amount"`
 	FinalAmount        float64                        `json:"final_amount"`
+	QRCode             string                         `json:"qr_code"`
+	QRCodeImageURL     string                         `json:"qr_code_image_url"`
 	Attachments        DeliveryNoteAttachments        `json:"attachments"`
 	ImplantAccessories DeliveryNoteImplantAccessories `json:"implant_accessories"`
 	PaymentMethod      DeliveryNotePaymentMethod      `json:"payment_method"`
@@ -92,6 +95,8 @@ type deliveryNoteTemplateData struct {
 	PromotionCode      string
 	DiscountAmount     float64
 	FinalAmount        float64
+	QRCode             string
+	QRCodeImageURL     string
 	Attachments        DeliveryNoteAttachments
 	ImplantAccessories DeliveryNoteImplantAccessories
 	PaymentMethod      DeliveryNotePaymentMethod
@@ -198,6 +203,8 @@ func buildDeliveryNoteViewData(data DeliveryNote) deliveryNoteTemplateData {
 		PromotionCode:      strings.TrimSpace(data.PromotionCode),
 		DiscountAmount:     data.DiscountAmount,
 		FinalAmount:        data.FinalAmount,
+		QRCode:             strings.TrimSpace(data.QRCode),
+		QRCodeImageURL:     strings.TrimSpace(data.QRCodeImageURL),
 		Attachments:        data.Attachments,
 		ImplantAccessories: data.ImplantAccessories,
 		PaymentMethod:      data.PaymentMethod,
@@ -430,6 +437,17 @@ func ConvertImageToBase64(path string) (string, error) {
 
 	encoded := base64.StdEncoding.EncodeToString(b)
 	return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded), nil
+}
+
+func BuildQRCodeImageURL(payload string, size int) string {
+	p := strings.TrimSpace(payload)
+	if p == "" {
+		return ""
+	}
+	if size <= 0 {
+		size = 160
+	}
+	return fmt.Sprintf("https://api.qrserver.com/v1/create-qr-code/?size=%dx%d&data=%s", size, size, url.QueryEscape(p))
 }
 
 func readGeneratedPDF(pdfPath string) ([]byte, error) {

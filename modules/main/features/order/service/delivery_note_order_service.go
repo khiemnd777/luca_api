@@ -162,6 +162,10 @@ func buildDeliveryNoteFromOrder(
 	}
 	note.Items = items
 	note.PromotionCode = utils.DerefString(orderDTO.PromotionCode)
+	if orderDTO.LatestOrderItem != nil {
+		note.QRCode = utils.DerefString(orderDTO.LatestOrderItem.QrCode)
+		note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
+	}
 
 	if strings.TrimSpace(note.Order.Number) == "" {
 		return DeliveryNote{}, fmt.Errorf("order code is empty")
