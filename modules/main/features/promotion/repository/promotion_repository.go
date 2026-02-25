@@ -162,7 +162,7 @@ func (r *promotionRepository) CreateUsage(ctx context.Context, tx *generated.Tx,
 		Create().
 		SetPromoCodeID(usage.PromoCodeID).
 		SetOrderID(usage.OrderID).
-		SetUserID(usage.UserID).
+		SetNillableUserID(usage.UserID).
 		SetDiscountAmount(usage.DiscountAmount)
 	if !usage.UsedAt.IsZero() {
 		q.SetUsedAt(usage.UsedAt)

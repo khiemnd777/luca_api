@@ -16,7 +16,9 @@ func (PromotionUsage) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("promo_code_id"),
 		field.Int64("order_id"),
-		field.Int("user_id"),
+		field.Int("user_id").
+			Optional().
+			Nillable(),
 		field.String("promo_code").
 			Optional(),
 		field.String("discount_type").
