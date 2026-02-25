@@ -13,6 +13,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	auditlogmodel "github.com/khiemnd777/andy_api/shared/modules/auditlog/model"
 	"github.com/khiemnd777/andy_api/shared/modules/notification"
 	"github.com/khiemnd777/andy_api/shared/modules/realtime"
 	searchmodel "github.com/khiemnd777/andy_api/shared/modules/search/model"
@@ -26,8 +27,8 @@ type OrderService interface {
 	Create(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	Update(ctx context.Context, deptID, userID int, input *model.OrderUpsertDTO) (*model.OrderDTO, error)
 	GenerateDeliveryNoteByOrderID(ctx context.Context, req DeliveryNotePrintRequest) ([]byte, string, error)
-	UpdateStatus(ctx context.Context, deptID int, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
-	UpdateDeliveryStatus(ctx context.Context, deptID int, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error)
+	UpdateStatus(ctx context.Context, deptID, userID int, orderItemProcessID int64, status string) (*model.OrderItemDTO, error)
+	UpdateDeliveryStatus(ctx context.Context, deptID, userID int, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error)
 	GetDeliveryStatus(ctx context.Context, deptID int, orderID, orderItemID int64) (*string, error)
 	GetByID(ctx context.Context, id int64) (*model.OrderDTO, error)
 	GetByOrderIDAndOrderItemID(ctx context.Context, orderID, orderItemID int64) (*model.OrderDTO, error)
@@ -185,6 +186,21 @@ func (s *orderService) Create(ctx context.Context, deptID int, userID int, input
 
 	logger.Debug("[order_created]", "order_id", dto.ID, "created_by", userID)
 
+	// Audit log
+	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+		UserID:   userID,
+		Module:   "order",
+		Action:   "created",
+		TargetID: dto.ID,
+		Data: map[string]any{
+			"order_id":        dto.ID,
+			"order_item_id":   dto.LatestOrderItem.ID,
+			"user_id":         userID,
+			"order_code":      dto.Code,
+			"order_item_code": dto.CodeLatest,
+		},
+	})
+
 	return dto, nil
 }
 
@@ -199,6 +215,8 @@ func (s *orderService) Update(ctx context.Context, deptID, userID int, input *mo
 	}
 	cache.InvalidateKeys(kOrderAll(deptID)...)
 
+	s.upsertSearch(ctx, deptID, dto)
+
 	pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
 		DepartmentID: deptID,
 		StatAt:       time.Now(),
@@ -209,12 +227,23 @@ func (s *orderService) Update(ctx context.Context, deptID, userID int, input *mo
 	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
 	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
 
-	s.upsertSearch(ctx, deptID, dto)
-
+	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+		UserID:   userID,
+		Module:   "order",
+		Action:   "updated",
+		TargetID: dto.ID,
+		Data: map[string]any{
+			"order_id":        dto.ID,
+			"order_item_id":   dto.LatestOrderItem.ID,
+			"user_id":         userID,
+			"order_code":      dto.Code,
+			"order_item_code": dto.CodeLatest,
+		},
+	})
 	return dto, nil
 }
 
-func (s *orderService) UpdateStatus(ctx context.Context, deptID int, orderItemProcessID int64, status string) (*model.OrderItemDTO, error) {
+func (s *orderService) UpdateStatus(ctx context.Context, deptID, userID int, orderItemProcessID int64, status string) (*model.OrderItemDTO, error) {
 	out, err := s.repo.UpdateStatus(ctx, orderItemProcessID, status)
 	if err != nil {
 		return nil, err
@@ -238,10 +267,25 @@ func (s *orderService) UpdateStatus(ctx context.Context, deptID int, orderItemPr
 	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
 	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
 
+	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+		UserID:   userID,
+		Module:   "order",
+		Action:   "updated:status:change",
+		TargetID: out.ID,
+		Data: map[string]any{
+			"order_id":        out.OrderID,
+			"order_item_id":   out.ID,
+			"user_id":         userID,
+			"order_code":      out.CodeOriginal,
+			"order_item_code": out.Code,
+			"status":          out.Status,
+		},
+	})
+
 	return out, nil
 }
 
-func (s *orderService) UpdateDeliveryStatus(ctx context.Context, deptID int, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error) {
+func (s *orderService) UpdateDeliveryStatus(ctx context.Context, deptID, userID int, orderID, orderItemID int64, status string) (*model.OrderItemDTO, error) {
 	out, err := s.repo.UpdateDeliveryStatus(ctx, orderID, orderItemID, status)
 	if err != nil {
 		return nil, err
@@ -257,6 +301,21 @@ func (s *orderService) UpdateDeliveryStatus(ctx context.Context, deptID int, ord
 
 	// Later: broadcast to delivery dashboard only
 	// realtime.BroadcastToDept(deptID, "dashboard:statuses", nil)
+
+	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+		UserID:   userID,
+		Module:   "order",
+		Action:   "updated:delivery-status:change",
+		TargetID: out.ID,
+		Data: map[string]any{
+			"order_id":        out.OrderID,
+			"order_item_id":   out.ID,
+			"user_id":         userID,
+			"order_code":      out.CodeOriginal,
+			"order_item_code": out.Code,
+			"delivery_status": out.Status,
+		},
+	})
 
 	return out, nil
 }

@@ -5,6 +5,7 @@ import "time"
 type OrderItemProcessInProgressDTO struct {
 	ID              int64      `json:"id,omitempty"`
 	ProcessID       *int64     `json:"process_id,omitempty"`
+	ProcessName     *string    `json:"process_name,omitempty"`
 	PrevProcessID   *int64     `json:"prev_process_id,omitempty"`
 	NextProcessID   *int64     `json:"next_process_id,omitempty"`
 	NextProcessName *string    `json:"next_process_name,omitempty"`

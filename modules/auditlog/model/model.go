@@ -7,11 +7,11 @@ import (
 )
 
 type AuditLogModel struct {
-	ID        int             `json:"id"`
+	ID        int64           `json:"id"`
 	UserID    int             `json:"user_id"`
 	Action    string          `json:"action"`
 	Module    string          `json:"module"`
-	TargetID  *int            `json:"target_id"`
+	TargetID  *int64          `json:"target_id"`
 	Data      map[string]any  `json:"data"`
 	User      *generated.User `json:"user,omitempty"`
 	CreatedAt time.Time       `json:"created_at"`

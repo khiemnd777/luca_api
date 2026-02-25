@@ -316,8 +316,9 @@ func (h *OrderHandler) UpdateStatus(c *fiber.Ctx) error {
 	}
 
 	deptID, _ := utils.GetDeptIDInt(c)
+	userID, _ := utils.GetUserIDInt(c)
 
-	dto, err := h.svc.UpdateStatus(c.UserContext(), deptID, int64(oipID), status)
+	dto, err := h.svc.UpdateStatus(c.UserContext(), deptID, userID, int64(oipID), status)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
@@ -345,8 +346,9 @@ func (h *OrderHandler) UpdateDeliveryStatus(c *fiber.Ctx) error {
 	}
 
 	deptID, _ := utils.GetDeptIDInt(c)
+	userID, _ := utils.GetUserIDInt(c)
 
-	dto, err := h.svc.UpdateDeliveryStatus(c.UserContext(), deptID, int64(orderID), int64(orderItemID), status)
+	dto, err := h.svc.UpdateDeliveryStatus(c.UserContext(), deptID, userID, int64(orderID), int64(orderItemID), status)
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}

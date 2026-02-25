@@ -34,7 +34,7 @@ func (r *AuditLogRepository) Create(ctx context.Context, log *generated.AuditLog
 		Exec(ctx)
 }
 
-func (r *AuditLogRepository) ListByTargetPaginated(ctx context.Context, module string, targetID, limit, offset int) ([]*model.AuditLogModel, bool, error) {
+func (r *AuditLogRepository) ListByTargetPaginated(ctx context.Context, module string, targetID int64, limit, offset int) ([]*model.AuditLogModel, bool, error) {
 	query, err := r.db.AuditLog.
 		Query().
 		Where(auditlog.ModuleEQ(module), auditlog.TargetIDEQ(targetID)).

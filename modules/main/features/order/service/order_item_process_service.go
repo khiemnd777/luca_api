@@ -12,6 +12,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
+	auditlogmodel "github.com/khiemnd777/andy_api/shared/modules/auditlog/model"
 	"github.com/khiemnd777/andy_api/shared/modules/notification"
 	"github.com/khiemnd777/andy_api/shared/modules/realtime"
 	"github.com/khiemnd777/andy_api/shared/pubsub"
@@ -89,7 +90,8 @@ type OrderItemProcessService interface {
 	) (*model.OrderItemProcessInProgressDTO, error)
 	Assign(
 		ctx context.Context,
-		deptID int,
+		deptID,
+		userID int,
 		inprogressID int64,
 		assignedID *int64,
 		assignedName *string,
@@ -340,10 +342,54 @@ func (s *orderItemProcessService) CheckInOrOut(
 	realtime.BroadcastToDept(deptID, "dashboard:due_today", nil)
 	realtime.BroadcastToDept(deptID, "dashboard:active_today", nil)
 
+	if dto.CompletedAt != nil && dto.NextProcessID != nil {
+		pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+			UserID:   userID,
+			Module:   "order",
+			Action:   "inprogress:checkout",
+			TargetID: *dto.OrderID,
+			Data: map[string]any{
+				"order_id":          dto.OrderID,
+				"order_item_id":     dto.OrderItemID,
+				"user_id":           userID,
+				"order_item_code":   dto.OrderItemCode,
+				"section_id":        dto.SectionID,
+				"section_name":      dto.SectionName,
+				"process_id":        dto.ProcessID,
+				"process_name":      dto.ProcessName,
+				"next_section_id":   dto.NextSectionID,
+				"next_section_name": dto.NextSectionName,
+				"next_process_id":   dto.NextProcessID,
+				"next_process_name": dto.NextProcessName,
+				"status":            orderstatus,
+			},
+		})
+	} else {
+		pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+			UserID:   userID,
+			Module:   "order",
+			Action:   "inprogress:checkin",
+			TargetID: *dto.OrderID,
+			Data: map[string]any{
+				"order_id":        dto.OrderID,
+				"order_item_id":   dto.OrderItemID,
+				"user_id":         userID,
+				"order_item_code": dto.OrderItemCode,
+				"section_id":      dto.SectionID,
+				"section_name":    dto.SectionName,
+				"process_id":      dto.ProcessID,
+				"process_name":    dto.ProcessName,
+				"assigned_id":     dto.AssignedID,
+				"assigned_name":   dto.AssignedName,
+				"status":          orderstatus,
+			},
+		})
+	}
+
 	return dto, nil
 }
 
-func (s *orderItemProcessService) Assign(ctx context.Context, deptID int, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
+func (s *orderItemProcessService) Assign(ctx context.Context, deptID, userID int, inprogressID int64, assignedID *int64, assignedName *string, note *string) (*model.OrderItemProcessInProgressDTO, error) {
 	dto, _, _, _, err := s.inprogressRepo.Assign(ctx, inprogressID, assignedID, assignedName, note)
 	if err != nil {
 		return nil, err
@@ -378,6 +424,25 @@ func (s *orderItemProcessService) Assign(ctx context.Context, deptID int, inprog
 
 	cache.InvalidateKeys(keys...)
 	cache.InvalidateKeys(kOrderAll(deptID)...)
+
+	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+		UserID:   userID,
+		Module:   "order",
+		Action:   "inprogress:checkin:assigned",
+		TargetID: *dto.OrderID,
+		Data: map[string]any{
+			"order_id":        dto.OrderID,
+			"order_item_id":   dto.OrderItemID,
+			"user_id":         userID,
+			"order_item_code": dto.OrderItemCode,
+			"section_id":      dto.SectionID,
+			"section_name":    dto.SectionName,
+			"process_id":      dto.ProcessID,
+			"process_name":    dto.ProcessName,
+			"assigned_id":     dto.AssignedID,
+			"assigned_name":   dto.AssignedName,
+		},
+	})
 
 	return dto, nil
 }

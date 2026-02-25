@@ -16,11 +16,21 @@ type AuditLog struct {
 // Fields of the AuditLog.
 func (AuditLog) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int64("id").
+			Immutable().
+			Unique().
+			SchemaType(map[string]string{
+				"postgres": "bigserial",
+			}),
 		field.Int("user_id").Positive(),
-		field.String("user_fullname").Optional().Nillable(),
+		field.String("user_fullname").
+			Optional().
+			Nillable(),
 		field.String("action").NotEmpty(),
 		field.String("module").NotEmpty(),
-		field.Int("target_id").Optional().Nillable(),
+		field.Int64("target_id").
+			Optional().
+			Nillable(),
 		field.JSON("data", map[string]any{}).Optional(),
 		field.Time("created_at").Default(time.Now),
 	}

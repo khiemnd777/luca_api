@@ -545,6 +545,13 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(
 		}
 
 		dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
+
+		// Get current section and process's name
+		_, _, sectionName, processName, err = r.ProcessInfoByProcessID(ctx, tx, checkInOrOutData.ProcessID)
+		if err == nil {
+			dto.SectionName = sectionName
+			dto.ProcessName = processName
+		}
 		return dto, nil, orderstatus, ordercreatedat, nil
 	}
 
@@ -616,6 +623,13 @@ func (r *orderItemProcessInProgressRepository) CheckInOrOut(
 	}
 
 	dto := mapper.MapAs[*generated.OrderItemProcessInProgress, *model.OrderItemProcessInProgressDTO](entity)
+
+	// Get current section and process's name
+	_, _, sectionName, processName, err := r.ProcessInfoByProcessID(ctx, tx, checkInOrOutData.ProcessID)
+	if err == nil {
+		dto.SectionName = sectionName
+		dto.ProcessName = processName
+	}
 	return dto, &status, orderstatus, orderitem, nil
 }
 

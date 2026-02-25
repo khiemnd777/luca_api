@@ -25,7 +25,7 @@ func (h *AuditLogHandler) Create(c *fiber.Ctx) error {
 	type body struct {
 		Action   string         `json:"action"`
 		Module   string         `json:"module"`
-		TargetID int            `json:"target_id"`
+		TargetID int64          `json:"target_id"`
 		Data     map[string]any `json:"extra_data"`
 	}
 	var b body
@@ -41,7 +41,7 @@ func (h *AuditLogHandler) Create(c *fiber.Ctx) error {
 
 func (h *AuditLogHandler) ListPaginated(c *fiber.Ctx) error {
 	module := utils.GetQueryAsString(c, "module")
-	targetID := utils.GetQueryAsInt(c, "target_id")
+	targetID := utils.GetQueryAsInt64(c, "target_id")
 	page := utils.GetQueryAsInt(c, "page")
 	limit := utils.GetQueryAsInt(c, "limit", 10)
 

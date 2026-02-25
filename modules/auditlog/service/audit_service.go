@@ -21,7 +21,7 @@ func NewAuditLogService(repo *repository.AuditLogRepository, deps *module.Module
 	return &AuditLogService{repo: repo, deps: deps}
 }
 
-func (s *AuditLogService) Log(ctx context.Context, userID int, action, module string, targetID int, data map[string]any) error {
+func (s *AuditLogService) Log(ctx context.Context, userID int, action, module string, targetID int64, data map[string]any) error {
 	return cache.UpdateAndInvalidate(fmt.Sprintf("module:%s:target:%d:list:first-page", module, targetID), func() error {
 		log := &generated.AuditLog{
 			UserID:   userID,
@@ -34,7 +34,7 @@ func (s *AuditLogService) Log(ctx context.Context, userID int, action, module st
 	})
 }
 
-func (s *AuditLogService) ListByTargetPaginated(ctx context.Context, module string, targetID, limit, page int) ([]*model.AuditLogModel, bool, error) {
+func (s *AuditLogService) ListByTargetPaginated(ctx context.Context, module string, targetID int64, limit, page int) ([]*model.AuditLogModel, bool, error) {
 	if page <= 0 {
 		page = 1
 	}
