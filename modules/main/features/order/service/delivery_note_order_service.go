@@ -36,13 +36,16 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	if err != nil {
 		return nil, "", err
 	}
+	if orderDTO.LatestOrderItem == nil || orderDTO.LatestOrderItem.ID <= 0 {
+		return nil, "", fmt.Errorf("latest order item not found")
+	}
 
-	products, err := s.repo.GetAllOrderProducts(ctx, req.OrderID)
+	products, err := s.repo.GetAllOrderProductsByOrderItemID(ctx, orderDTO.LatestOrderItem.ID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	materials, err := s.repo.GetAllOrderMaterials(ctx, req.OrderID)
+	materials, err := s.repo.GetAllOrderMaterialsByOrderItemID(ctx, orderDTO.LatestOrderItem.ID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -56,7 +59,7 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 		return nil, "", err
 	}
 
-	discountAmount, finalAmount, err := s.calculateDeliveryNotePricingByPromotion(ctx, orderDTO)
+	discountAmount, finalAmount, err := s.calculateDeliveryNotePricingByPromotion(ctx, orderDTO, products)
 	if err != nil {
 		return nil, "", err
 	}
@@ -76,7 +79,7 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 		return nil, "", err
 	}
 
-	fileName := fmt.Sprintf("delivery-note-%s.pdf", strings.ReplaceAll(note.Order.Number, "/", "-"))
+	fileName := fmt.Sprintf("hoa-don-%s.pdf", strings.ReplaceAll(note.Order.Number, "/", "-"))
 	return pdf, fileName, nil
 }
 
@@ -152,7 +155,7 @@ func buildDeliveryNoteFromOrder(
 			),
 			Note:      noteText,
 			Quantity:  float64(p.Quantity),
-			UnitPrice: derefFloat64(p.RetailPrice),
+			UnitPrice: resolveDeliveryNoteUnitPrice(p.IsCloneable, p.RetailPrice),
 		})
 	}
 	for _, m := range materials {
@@ -167,7 +170,7 @@ func buildDeliveryNoteFromOrder(
 			),
 			Note:      noteText,
 			Quantity:  float64(m.Quantity),
-			UnitPrice: derefFloat64(m.RetailPrice),
+			UnitPrice: resolveDeliveryNoteUnitPrice(m.IsCloneable, m.RetailPrice),
 		})
 	}
 	note.Items = items
@@ -236,27 +239,61 @@ func derefFloat64(v *float64) float64 {
 	return *v
 }
 
-func calculateOrderProductsTotalPrice(order *model.OrderDTO) float64 {
-	if order == nil || order.LatestOrderItem == nil {
+func resolveDeliveryNoteUnitPrice(isCloneable *bool, retailPrice *float64) float64 {
+	if isCloneable != nil && *isCloneable {
+		return 0
+	}
+	return derefFloat64(retailPrice)
+}
+
+func calculateOrderProductsTotalPrice(products []*model.OrderItemProductDTO) float64 {
+	if len(products) == 0 {
 		return 0
 	}
 
 	var total float64
-	for _, p := range order.LatestOrderItem.Products {
-		if p == nil || p.RetailPrice == nil {
+	for _, p := range products {
+		if p == nil {
 			continue
 		}
-		qty := p.Quantity
-		if qty <= 0 {
-			qty = 1
-		}
-		total += *p.RetailPrice * float64(qty)
+		unitPrice := resolveDeliveryNoteUnitPrice(p.IsCloneable, p.RetailPrice)
+		total += unitPrice * float64(p.Quantity)
 	}
 	return total
 }
 
-func (s *orderService) calculateDeliveryNotePricingByPromotion(ctx context.Context, orderDTO *model.OrderDTO) (float64, float64, error) {
-	baseTotal := calculateOrderProductsTotalPrice(orderDTO)
+func buildDeliveryNotePromotionOrder(orderDTO *model.OrderDTO, products []*model.OrderItemProductDTO) *model.OrderDTO {
+	if orderDTO == nil {
+		return nil
+	}
+
+	orderCopy := *orderDTO
+	if orderDTO.LatestOrderItem == nil {
+		return &orderCopy
+	}
+
+	latestCopy := *orderDTO.LatestOrderItem
+	latestCopy.Products = make([]*model.OrderItemProductDTO, 0, len(products))
+	for _, p := range products {
+		if p == nil {
+			continue
+		}
+		productCopy := *p
+		unitPrice := resolveDeliveryNoteUnitPrice(p.IsCloneable, p.RetailPrice)
+		productCopy.RetailPrice = &unitPrice
+		latestCopy.Products = append(latestCopy.Products, &productCopy)
+	}
+
+	orderCopy.LatestOrderItem = &latestCopy
+	return &orderCopy
+}
+
+func (s *orderService) calculateDeliveryNotePricingByPromotion(
+	ctx context.Context,
+	orderDTO *model.OrderDTO,
+	products []*model.OrderItemProductDTO,
+) (float64, float64, error) {
+	baseTotal := calculateOrderProductsTotalPrice(products)
 	if orderDTO == nil {
 		return 0, baseTotal, nil
 	}
@@ -274,7 +311,8 @@ func (s *orderService) calculateDeliveryNotePricingByPromotion(ctx context.Conte
 	// Reuse the same apply flow as promotion_handler.CalculateTotalPrice.
 	repo := promotionrepo.NewPromotionRepository(entClient, s.deps.DB)
 	promoSvc := promotionservice.NewPromotionService(repo, s.deps)
-	result, err := promoSvc.ApplyPromotion(ctx, nil, orderDTO, promoCode)
+	promotionOrder := buildDeliveryNotePromotionOrder(orderDTO, products)
+	result, err := promoSvc.ApplyPromotion(ctx, nil, promotionOrder, promoCode)
 	if err != nil {
 		// Keep behavior consistent with promotion handler for invalid promo scenarios.
 		if _, isPromoErr := promotionengine.IsPromotionApplyError(err); isPromoErr {
@@ -283,7 +321,12 @@ func (s *orderService) calculateDeliveryNotePricingByPromotion(ctx context.Conte
 		return 0, 0, err
 	}
 
-	return result.DiscountAmount, result.FinalPrice, nil
+	finalAmount := baseTotal - result.DiscountAmount
+	if finalAmount < 0 {
+		finalAmount = 0
+	}
+
+	return result.DiscountAmount, finalAmount, nil
 }
 
 func (s *orderService) resolveDeliveryNoteCompany(ctx context.Context, orderDTO *model.OrderDTO) DeliveryNoteCompany {
