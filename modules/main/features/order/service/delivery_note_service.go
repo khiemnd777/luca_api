@@ -59,6 +59,7 @@ type DeliveryNoteOrder struct {
 
 type DeliveryNoteItem struct {
 	Description string  `json:"description"`
+	Note        string  `json:"note"`
 	Quantity    float64 `json:"quantity"`
 	UnitPrice   float64 `json:"unit_price"`
 }

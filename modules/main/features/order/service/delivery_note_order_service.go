@@ -97,7 +97,7 @@ func buildDeliveryNoteFromOrder(
 	note := DeliveryNote{
 		Company: company,
 		Order: DeliveryNoteOrder{
-			Number:          firstNonEmpty(utils.DerefString(orderDTO.CodeLatest), utils.DerefString(orderDTO.Code)),
+			Number:          firstNonEmpty(utils.DerefString(orderDTO.Code), utils.DerefString(orderDTO.Code)),
 			BS:              utils.DerefString(orderDTO.DentistName),
 			BN:              utils.DerefString(orderDTO.PatientName),
 			ClinicName:      utils.DerefString(orderDTO.ClinicName),
@@ -144,20 +144,30 @@ func buildDeliveryNoteFromOrder(
 		if p == nil {
 			continue
 		}
+		noteText := utils.DerefString(p.Note)
 		items = append(items, DeliveryNoteItem{
-			Description: firstNonEmpty(utils.DerefString(p.ProductName), utils.DerefString(p.ProductCode)),
-			Quantity:    float64(p.Quantity),
-			UnitPrice:   derefFloat64(p.RetailPrice),
+			Description: composeDescriptionWithNote(
+				firstNonEmpty(utils.DerefString(p.ProductName), utils.DerefString(p.ProductCode)),
+				noteText,
+			),
+			Note:      noteText,
+			Quantity:  float64(p.Quantity),
+			UnitPrice: derefFloat64(p.RetailPrice),
 		})
 	}
 	for _, m := range materials {
 		if m == nil {
 			continue
 		}
+		noteText := utils.DerefString(m.Note)
 		items = append(items, DeliveryNoteItem{
-			Description: firstNonEmpty(utils.DerefString(m.MaterialName), utils.DerefString(m.MaterialCode)),
-			Quantity:    float64(m.Quantity),
-			UnitPrice:   derefFloat64(m.RetailPrice),
+			Description: composeDescriptionWithNote(
+				firstNonEmpty(utils.DerefString(m.MaterialName), utils.DerefString(m.MaterialCode)),
+				noteText,
+			),
+			Note:      noteText,
+			Quantity:  float64(m.Quantity),
+			UnitPrice: derefFloat64(m.RetailPrice),
 		})
 	}
 	note.Items = items
@@ -194,6 +204,18 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func composeDescriptionWithNote(base, note string) string {
+	base = strings.TrimSpace(base)
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return base
+	}
+	if base == "" {
+		return note
+	}
+	return fmt.Sprintf("%s (%s)", base, note)
 }
 
 func mergeMap(a, b map[string]any) map[string]any {

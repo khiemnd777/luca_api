@@ -1241,6 +1241,7 @@ func (r *orderRepository) GetAllOrderMaterials(ctx context.Context, orderID int6
 			orderitemmaterial.FieldQuantity,
 			orderitemmaterial.FieldRetailPrice,
 			orderitemmaterial.FieldType,
+			orderitemmaterial.FieldNote,
 		).
 		WithOrderItem(func(q *generated.OrderItemQuery) {
 			q.Select(orderitem.FieldID, orderitem.FieldCode)
