@@ -208,6 +208,8 @@ func (r *orderRepository) createNewOrder(
 	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 	rmkCount := latest.RemakeCount
+	lstIsCash := latest.IsCash
+	lstIsCredit := latest.IsCredit
 
 	// total price
 	totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(ctx, tx, out.ID)
@@ -232,6 +234,8 @@ func (r *orderRepository) createNewOrder(
 		SetNillableDeliveryDate(dlrDate).
 		SetNillableRemakeType(rmkType).
 		SetNillableRemakeCount(&rmkCount).
+		SetNillableIsCash(&lstIsCash).
+		SetNillableIsCredit(&lstIsCredit).
 		Save(ctx)
 
 	if err != nil {
@@ -363,6 +367,8 @@ func (r *orderRepository) upsertExistingOrder(
 	dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 	rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 	rmkCount := latest.RemakeCount
+	lstIsCash := latest.IsCash
+	lstIsCredit := latest.IsCredit
 
 	totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(ctx, tx, out.ID)
 	if err != nil {
@@ -386,6 +392,8 @@ func (r *orderRepository) upsertExistingOrder(
 		SetNillableRemakeType(rmkType).
 		SetNillableRemakeCount(&rmkCount).
 		SetNillableDepartmentID(&deptID).
+		SetNillableIsCash(&lstIsCash).
+		SetNillableIsCredit(&lstIsCredit).
 		Save(ctx)
 
 	if err != nil {
@@ -560,6 +568,8 @@ func (r *orderRepository) Update(
 		dlrDate := utils.SafeGetDateTimePtr(latest.CustomFields, "delivery_date")
 		rmkType := utils.SafeGetStringPtr(latest.CustomFields, "remake_type")
 		rmkCount := latest.RemakeCount
+		lstIsCash := latest.IsCash
+		lstIsCredit := latest.IsCredit
 
 		totalPrice, err := r.orderItemRepo.GetTotalPriceByOrderID(
 			ctx,
@@ -603,6 +613,8 @@ func (r *orderRepository) Update(
 			SetNillableDeliveryDate(dlrDate).
 			SetNillableRemakeType(rmkType).
 			SetNillableRemakeCount(&rmkCount).
+			SetNillableIsCash(&lstIsCash).
+			SetNillableIsCredit(&lstIsCredit).
 			Save(ctx)
 		if err != nil {
 			logger.Error(
@@ -631,6 +643,8 @@ func (r *orderRepository) Update(
 		output.DeliveryDate = dlrDate
 		output.RemakeType = rmkType
 		output.RemakeCount = &rmkCount
+		output.IsCash = lstIsCash
+		output.IsCredit = lstIsCredit
 
 		// ===== Persist promotion usage snapshot
 		if promoSnapshot != nil {

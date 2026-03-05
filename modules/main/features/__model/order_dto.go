@@ -49,6 +49,9 @@ type OrderDTO struct {
 	// Remake
 	RemakeType  *string `json:"remake_type,omitempty"`
 	RemakeCount *int    `json:"remake_count,omitempty"`
+	// Credit
+	IsCash   bool `json:"is_cash"`
+	IsCredit bool `json:"is_credit"`
 }
 
 type OrderUpsertDTO struct {

@@ -83,17 +83,17 @@ func (Order) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
-	field.String("status_latest").
-		Optional().
-		Nillable(),
+		field.String("status_latest").
+			Optional().
+			Nillable(),
 
-	field.String("delivery_status_latest").
-		Optional().
-		Nillable(),
+		field.String("delivery_status_latest").
+			Optional().
+			Nillable(),
 
-	field.Int("process_id_latest").
-		Optional().
-		Nillable(),
+		field.Int("process_id_latest").
+			Optional().
+			Nillable(),
 
 		field.String("process_name_latest").
 			Optional().
@@ -128,6 +128,12 @@ func (Order) Fields() []ent.Field {
 		field.Int("remake_count").
 			Nillable().
 			Optional(),
+
+		field.Bool("is_cash").
+			Default(true),
+
+		field.Bool("is_credit").
+			Default(false),
 
 		// times
 		field.Time("created_at").
