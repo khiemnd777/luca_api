@@ -101,7 +101,7 @@ func (h *ProfileHandler) UpdateProfile(c *fiber.Ctx) error {
 		switch {
 		case errors.Is(err, profileError.ErrEmailExists):
 		case errors.Is(err, profileError.ErrPhoneExists):
-			return client_error.ResponseServiceMessage(c, client_error.ServiceMessageCode, err.Error())
+			return client_error.ResponseServiceMessage(c, client_error.ServiceMessageCode, "ErrEmailOrPhoneExists", err.Error())
 		default:
 			return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 		}

@@ -43,7 +43,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, authErrors.ErrInvalidCredentials):
-			return client_error.ResponseServiceMessage(c, client_error.ServiceMessageCode, err.Error())
+			return client_error.ResponseServiceMessage(c, client_error.ServiceMessageCode, "ErrInvalidCredentials", err.Error())
 		default:
 			return client_error.ResponseError(c, fiber.StatusUnauthorized, err, err.Error())
 		}
@@ -67,7 +67,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, authErrors.ErrPhoneOrEmailExists):
-			return client_error.ResponseServiceMessage(c, client_error.ServiceMessageCode, err.Error())
+			return client_error.ResponseServiceMessage(c, client_error.ServiceMessageCode, "ErrPhoneOrEmailExists", err.Error())
 		default:
 			return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 		}

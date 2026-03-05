@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
 )
 
@@ -153,8 +154,6 @@ WHERE status = 'expired'
 	return deleted, nil
 }
 
-var ErrInvalidOrExpiredOrderCode = errors.New("invalid or expired order_code")
-
 func (r *orderCodeRepository) ConfirmReservation(
 	ctx context.Context,
 	tx *generated.Tx,
@@ -176,7 +175,7 @@ WHERE order_code = $1
 
 	affected, _ := res.RowsAffected()
 	if affected == 0 {
-		return ErrInvalidOrExpiredOrderCode
+		return model.ErrInvalidOrExpiredOrderCode
 	}
 
 	return nil

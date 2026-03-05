@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -266,6 +267,10 @@ func (h *OrderHandler) Create(c *fiber.Ctx) error {
 
 	dto, err := h.svc.Create(c.UserContext(), deptID, userID, payload)
 	if err != nil {
+
+		if errors.Is(err, model.ErrInvalidOrExpiredOrderCode) {
+			return client_error.ResponseServiceMessage(c, client_error.ServiceMessageCode, "ErrInvalidOrExpiredOrderCode", err.Error())
+		}
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.Status(fiber.StatusCreated).JSON(dto)

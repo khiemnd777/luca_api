@@ -62,18 +62,20 @@ func ResponseError(c *fiber.Ctx, statusCode int, err error, extraMessage ...stri
 }
 
 type UnexpectedResponse struct {
-	Code    int    `json:"statusCode"`
-	Message string `json:"statusMessage"`
+	Code      int    `json:"statusCode"`
+	ErrorCode string `json:"errorCode"`
+	Message   string `json:"statusMessage"`
 }
 
-func ResponseServiceMessage(c *fiber.Ctx, statusCode int, extraMessage ...string) error {
+func ResponseServiceMessage(c *fiber.Ctx, statusCode int, errorCode string, extraMessage ...string) error {
 	message := "Service message"
 	if len(extraMessage) > 0 && extraMessage[0] != "" {
 		message = extraMessage[0]
 	}
 	errResp := UnexpectedResponse{
-		Code:    statusCode,
-		Message: message,
+		Code:      statusCode,
+		ErrorCode: errorCode,
+		Message:   message,
 	}
 	return c.Status(fiber.StatusOK).JSON(errResp)
 }
