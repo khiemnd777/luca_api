@@ -71,6 +71,32 @@ func GetPermSetFromClaims(c *fiber.Ctx) (map[string]struct{}, bool) {
 			}
 		}
 	}
+	if v := c.Locals("permissions"); v != nil {
+		set := make(map[string]struct{})
+		normalize := func(s string) string {
+			return strings.ToLower(strings.TrimSpace(s))
+		}
+		switch vv := v.(type) {
+		case []string:
+			for _, perm := range vv {
+				if perm = normalize(perm); perm != "" {
+					set[perm] = struct{}{}
+				}
+			}
+		case []any:
+			for _, perm := range vv {
+				if s, ok := perm.(string); ok {
+					if s = normalize(s); s != "" {
+						set[s] = struct{}{}
+					}
+				}
+			}
+		}
+		if len(set) > 0 {
+			c.Locals("permSet", set)
+			return set, true
+		}
+	}
 
 	claims, ok, _ := GetJWTClaims(c)
 	if !ok || claims == nil {

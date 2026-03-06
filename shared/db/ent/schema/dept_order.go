@@ -151,6 +151,9 @@ func (Order) Fields() []ent.Field {
 func (Order) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("items", OrderItem.Type),
+		edge.To("delivery_qr_tokens", OrderDeliveryQRToken.Type),
+		edge.To("delivery_audit_logs", OrderDeliveryAuditLog.Type),
+		edge.To("delivery_proofs", OrderDeliveryProof.Type),
 	}
 }
 

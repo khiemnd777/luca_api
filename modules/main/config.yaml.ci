@@ -5,6 +5,13 @@ server:
 
 external: true
 
+delivery_qr:
+  session_ttl_minutes: 5
+  proof_image_max_size_mb: 5
+
+storage:
+  photo_path: "./storage/photo"
+
 features:
   enabled: []
 

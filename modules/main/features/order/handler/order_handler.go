@@ -398,6 +398,7 @@ func (h *OrderHandler) PrintDeliveryNote(c *fiber.Ctx) error {
 	if payload.OrderID <= 0 {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid order_id")
 	}
+	payload.DeliveryQRBaseURL = strings.TrimRight(c.BaseURL(), "/") + utils.GetModuleRoute(h.deps.Config.Server.Route)
 
 	pdf, fileName, err := h.svc.GenerateDeliveryNoteByOrderID(c.UserContext(), *payload)
 	if err != nil {

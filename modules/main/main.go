@@ -10,6 +10,9 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/department/repository"
 	"github.com/khiemnd777/andy_api/modules/main/department/service"
 	_ "github.com/khiemnd777/andy_api/modules/main/features"
+	orderhandler "github.com/khiemnd777/andy_api/modules/main/features/order/handler"
+	ordermiddleware "github.com/khiemnd777/andy_api/modules/main/features/order/middleware"
+	orderservice "github.com/khiemnd777/andy_api/modules/main/features/order/service"
 	"github.com/khiemnd777/andy_api/modules/main/registry"
 	"github.com/khiemnd777/andy_api/shared/db/ent"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
@@ -29,6 +32,15 @@ func main() {
 			}, cfg.Database.AutoMigrate)
 		},
 		OnRegistry: func(app *fiber.App, deps *module.ModuleDeps[config.ModuleConfig]) {
+			publicRouter := app.Group(utils.GetModuleRoute(deps.Config.Server.Route))
+			deliveryQRSvc := orderservice.NewOrderDeliveryQRService(deps.Ent.(*generated.Client), deps)
+			deliveryQRHandler := orderhandler.NewOrderDeliveryQRHandler(deliveryQRSvc, deps)
+			deliveryQRHandler.RegisterPublicRoutes(
+				publicRouter,
+				ordermiddleware.DeliveryQRStartRateLimitMiddleware(),
+				ordermiddleware.DeliverySessionAuthMiddleware(deps),
+			)
+
 			repo := repository.NewDepartmentRepository(deps.Ent.(*generated.Client), deps)
 			router := app.Group(utils.GetModuleRoute(deps.Config.Server.Route), middleware.RequireAuth())
 

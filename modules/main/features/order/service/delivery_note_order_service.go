@@ -25,6 +25,7 @@ type DeliveryNotePrintRequest struct {
 	Attachments        *DeliveryNoteAttachments        `json:"attachments,omitempty"`
 	ImplantAccessories *DeliveryNoteImplantAccessories `json:"implant_accessories,omitempty"`
 	PaymentMethod      *DeliveryNotePaymentMethod      `json:"payment_method,omitempty"`
+	DeliveryQRBaseURL  string                          `json:"-"`
 }
 
 func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req DeliveryNotePrintRequest) ([]byte, string, error) {
@@ -65,6 +66,14 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	}
 	note.DiscountAmount = discountAmount
 	note.FinalAmount = finalAmount
+
+	deliveryQRSvc := NewOrderDeliveryQRService(s.deps.Ent.(*generated.Client), s.deps)
+	rawToken, err := deliveryQRSvc.GenerateDeliveryQRToken(ctx, int(req.OrderID))
+	if err != nil {
+		return nil, "", err
+	}
+	note.QRCode = BuildDeliveryQRStartURL(req.DeliveryQRBaseURL, rawToken)
+	note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
 
 	if strings.TrimSpace(note.Company.LogoPath) != "" {
 		logoData, err := ConvertImageToBase64(note.Company.LogoPath)
@@ -175,10 +184,6 @@ func buildDeliveryNoteFromOrder(
 	}
 	note.Items = items
 	note.PromotionCode = utils.DerefString(orderDTO.PromotionCode)
-	if orderDTO.LatestOrderItem != nil {
-		note.QRCode = utils.DerefString(orderDTO.LatestOrderItem.QrCode)
-		note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
-	}
 
 	if strings.TrimSpace(note.Order.Number) == "" {
 		return DeliveryNote{}, fmt.Errorf("order code is empty")
