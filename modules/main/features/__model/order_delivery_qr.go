@@ -18,3 +18,9 @@ const (
 	OrderDeliveryAuditActionExpired OrderDeliveryAuditAction = "expired"
 	OrderDeliveryAuditActionInvalid OrderDeliveryAuditAction = "invalid"
 )
+
+type OrderDeliveryQRMessageType string
+
+const (
+	OrderDeliveryQRMessageTypeSessionStarted OrderDeliveryQRMessageType = "DeliverySessionStarted"
+)

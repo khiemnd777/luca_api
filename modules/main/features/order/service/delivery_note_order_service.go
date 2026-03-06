@@ -25,7 +25,6 @@ type DeliveryNotePrintRequest struct {
 	Attachments        *DeliveryNoteAttachments        `json:"attachments,omitempty"`
 	ImplantAccessories *DeliveryNoteImplantAccessories `json:"implant_accessories,omitempty"`
 	PaymentMethod      *DeliveryNotePaymentMethod      `json:"payment_method,omitempty"`
-	DeliveryQRBaseURL  string                          `json:"-"`
 }
 
 func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req DeliveryNotePrintRequest) ([]byte, string, error) {
@@ -72,7 +71,7 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	if err != nil {
 		return nil, "", err
 	}
-	note.QRCode = BuildDeliveryQRStartURL(req.DeliveryQRBaseURL, rawToken)
+	note.QRCode = BuildDeliveryQRStartURL(s.deps.Config.DeliveryQR.ClientBaseURL, rawToken)
 	note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
 
 	if strings.TrimSpace(note.Company.LogoPath) != "" {

@@ -93,7 +93,7 @@ func (h *OrderDeliveryQRHandler) StartSession(c *fiber.Ctx) error {
 	})
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":            "Delivery session started successfully",
+		"message_type":       model.OrderDeliveryQRMessageTypeSessionStarted,
 		"session_id":         session.SessionID,
 		"order_id":           session.OrderID,
 		"expires_in_seconds": int(time.Until(session.ExpiresAt).Seconds()),

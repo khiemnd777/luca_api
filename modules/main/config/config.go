@@ -7,8 +7,9 @@ type StorageConfig struct {
 }
 
 type DeliveryQRConfig struct {
-	SessionTTLMinutes   int `yaml:"session_ttl_minutes" mapstructure:"session_ttl_minutes"`
-	ProofImageMaxSizeMB int `yaml:"proof_image_max_size_mb" mapstructure:"proof_image_max_size_mb"`
+	SessionTTLMinutes   int    `yaml:"session_ttl_minutes" mapstructure:"session_ttl_minutes"`
+	ClientBaseURL       string `yaml:"client_base_url" mapstructure:"client_base_url"`
+	ProofImageMaxSizeMB int    `yaml:"proof_image_max_size_mb" mapstructure:"proof_image_max_size_mb"`
 }
 
 type ModuleConfig struct {

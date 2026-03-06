@@ -59,7 +59,7 @@ func BuildDeliveryQRStartURL(baseURL string, rawToken string) string {
 	if base == "" || token == "" {
 		return ""
 	}
-	return fmt.Sprintf("%s/orders/delivery/qr/%s/start", base, token)
+	return fmt.Sprintf("%s/delivery/qr/%s", base, token)
 }
 
 func (s *orderDeliveryQRService) GenerateDeliveryQRToken(ctx context.Context, orderID int) (string, error) {
