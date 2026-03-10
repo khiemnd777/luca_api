@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"path/filepath"
@@ -69,10 +70,13 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	deliveryQRSvc := NewOrderDeliveryQRService(s.deps.Ent.(*generated.Client), s.deps)
 	rawToken, err := deliveryQRSvc.GenerateDeliveryQRToken(ctx, int(req.OrderID))
 	if err != nil {
-		return nil, "", err
+		if !errors.Is(err, model.ErrOrderAlreadyDelivered) {
+			return nil, "", err
+		}
+	} else {
+		note.QRCode = BuildDeliveryQRStartURL(s.deps.Config.DeliveryQR.ClientBaseURL, rawToken)
+		note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
 	}
-	note.QRCode = BuildDeliveryQRStartURL(s.deps.Config.DeliveryQR.ClientBaseURL, rawToken)
-	note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
 
 	if strings.TrimSpace(note.Company.LogoPath) != "" {
 		logoData, err := ConvertImageToBase64(note.Company.LogoPath)

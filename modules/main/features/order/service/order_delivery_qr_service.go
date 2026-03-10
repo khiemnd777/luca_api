@@ -145,6 +145,9 @@ func (s *orderDeliveryQRService) StartDeliveryQRSession(
 	session := &model.DeliveryQRSession{
 		SessionID: utils.GenerateRandomString(48),
 		OrderID:   int(token.OrderID),
+		OrderCode: utils.DerefString(orderEnt.Code),
+		// `code_latest` stores the latest order item code for this order.
+		OrderItemCode: utils.DerefString(orderEnt.CodeLatest),
 		QRTokenID: token.ID,
 		CreatedAt: now,
 		ExpiresAt: now.Add(s.sessionTTL()),

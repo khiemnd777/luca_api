@@ -96,6 +96,8 @@ func (h *OrderDeliveryQRHandler) StartSession(c *fiber.Ctx) error {
 		"message_type":       model.OrderDeliveryQRMessageTypeSessionStarted,
 		"session_id":         session.SessionID,
 		"order_id":           session.OrderID,
+		"order_code":         session.OrderCode,
+		"order_item_code":    session.OrderItemCode,
 		"expires_in_seconds": int(time.Until(session.ExpiresAt).Seconds()),
 		"expires_at":         session.ExpiresAt,
 	})
