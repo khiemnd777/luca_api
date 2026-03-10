@@ -15,9 +15,15 @@ import (
 	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
 	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/module"
+	auditlogmodel "github.com/khiemnd777/andy_api/shared/modules/auditlog/model"
+	"github.com/khiemnd777/andy_api/shared/modules/notification"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
 	"github.com/khiemnd777/andy_api/shared/redis"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
@@ -33,7 +39,7 @@ const (
 type OrderDeliveryQRService interface {
 	GenerateDeliveryQRToken(ctx context.Context, orderID int) (rawToken string, err error)
 	StartDeliveryQRSession(ctx context.Context, rawToken string, ip string, userAgent string) (*model.DeliveryQRSession, error)
-	ConfirmDeliveredByQRSession(ctx context.Context, sessionID string, imageURL string, imageSize int64, mimeType string, ip string, userAgent string) error
+	ConfirmDeliveredByQRSession(ctx context.Context, userID int, sessionID string, imageURL string, imageSize int64, mimeType string, ip string, userAgent string) error
 }
 
 type orderDeliveryQRService struct {
@@ -173,6 +179,7 @@ func (s *orderDeliveryQRService) StartDeliveryQRSession(
 
 func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 	ctx context.Context,
+	userID int,
 	sessionID string,
 	imageURL string,
 	imageSize int64,
@@ -216,7 +223,7 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		return err
 	}
 
-	updated, _, err := s.repo.UpdateOrderDelivered(ctx, tx, int64(session.OrderID), now)
+	updated, latestOrderItemID, err := s.repo.UpdateOrderDelivered(ctx, tx, int64(session.OrderID), now)
 	if err != nil {
 		_ = tx.Rollback()
 		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
@@ -260,6 +267,74 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 	if !updated {
 		return model.ErrOrderAlreadyDelivered
 	}
+
+	latestOrderItem, err := s.db.OrderItem.
+		Query().
+		Where(orderitem.IDEQ(latestOrderItemID)).
+		Only(ctx)
+	if err != nil {
+		logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItemID, "error", err.Error())
+		return nil
+	}
+
+	orderEnt, err := s.db.Order.
+		Query().
+		Where(order.IDEQ(int64(session.OrderID))).
+		Only(ctx)
+	if err != nil {
+		logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItem.ID, "error", err.Error())
+		return nil
+	}
+
+	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+		UserID:   userID,
+		Module:   "order",
+		Action:   "updated:delivery-status:change",
+		TargetID: latestOrderItem.ID,
+		Data: map[string]any{
+			"order_id":        latestOrderItem.OrderID,
+			"order_item_id":   latestOrderItem.ID,
+			"user_id":         userID,
+			"order_code":      latestOrderItem.CodeOriginal,
+			"order_item_code": latestOrderItem.Code,
+			"delivery_status": latestOrderItem.DeliveryStatus,
+		},
+	})
+
+	latestProcess, err := s.db.OrderItemProcess.
+		Query().
+		Where(orderitemprocess.OrderItemID(latestOrderItem.ID)).
+		Order(generated.Desc(orderitemprocess.FieldStepNumber), generated.Desc(orderitemprocess.FieldID)).
+		First(ctx)
+	if err != nil {
+		if !generated.IsNotFound(err) {
+			logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItem.ID, "error", err.Error())
+		}
+		return nil
+	}
+
+	if orderEnt.DepartmentID != nil {
+		dept, err := s.db.Department.
+			Query().
+			Where(department.IDEQ(*orderEnt.DepartmentID)).
+			Only(ctx)
+		if err != nil {
+			logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "department_id", *orderEnt.DepartmentID, "error", err.Error())
+			return nil
+		}
+
+		if dept.AdministratorID != nil {
+			notification.Notify(*dept.AdministratorID, userID, "order:delivery:completed", map[string]any{
+				"department_id":   dept.ID,
+				"admin_id":        dept.AdministratorID,
+				"order_item_id":   latestOrderItem.ID,
+				"order_item_code": latestOrderItem.Code,
+				"section_name":    latestProcess.SectionName,
+				"process_name":    latestProcess.ProcessName,
+			})
+		}
+	}
+
 	return nil
 }
 
