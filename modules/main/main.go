@@ -47,6 +47,7 @@ func main() {
 			router.Use("/:dept_id<int>/*",
 				middleware.RequireDepartmentMember("dept_id"),
 			)
+			deliveryQRHandler.RegisterRoutes(router)
 
 			// Department
 			svc := service.NewDepartmentService(repo, deps)

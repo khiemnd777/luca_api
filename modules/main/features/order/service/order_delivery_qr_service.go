@@ -39,6 +39,8 @@ type OrderDeliveryQRService interface {
 	GenerateDeliveryQRToken(ctx context.Context, orderID int) (rawToken string, err error)
 	StartDeliveryQRSession(ctx context.Context, rawToken string, ip string, userAgent string) (*model.DeliveryQRSession, error)
 	ConfirmDeliveredByQRSession(ctx context.Context, sessionID string, imageURL string, imageSize int64, mimeType string, ip string, userAgent string) error
+	GetDeliveryProofFilePath(ctx context.Context, deptID int, orderItemID int) (string, error)
+	BuildDeliveryProofFileURL(ctx context.Context, orderID int) (string, error)
 }
 
 type orderDeliveryQRService struct {
@@ -209,8 +211,16 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		return err
 	}
 
+	latestOrderItem, err := s.repo.GetLatestOrderItemByOrderID(ctx, tx, int64(session.OrderID))
+	if err != nil {
+		_ = tx.Rollback()
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+
 	if _, err := s.repo.UpsertOrderDeliveryProof(ctx, tx, repository.UpsertOrderDeliveryProofParams{
 		OrderID:       int64(session.OrderID),
+		OrderItemID:   latestOrderItem.ID,
 		QRTokenID:     session.QRTokenID,
 		ImageURL:      imageURL,
 		ImageSize:     imageSize,
@@ -266,7 +276,7 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		return model.ErrOrderAlreadyDelivered
 	}
 
-	latestOrderItem, err := s.db.OrderItem.
+	latestOrderItemEnt, err := s.db.OrderItem.
 		Query().
 		Where(orderitem.IDEQ(latestOrderItemID)).
 		Only(ctx)
@@ -280,7 +290,7 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		Where(order.IDEQ(int64(session.OrderID))).
 		Only(ctx)
 	if err != nil {
-		logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItem.ID, "error", err.Error())
+		logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItemEnt.ID, "error", err.Error())
 		return nil
 	}
 
@@ -303,24 +313,24 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 	logger.Debug("delivery_confirm_audit_log_user_check",
 		"session_id", sessionID,
 		"order_id", session.OrderID,
-		"order_item_id", latestOrderItem.ID,
+		"order_item_id", latestOrderItemEnt.ID,
 		"user_id", auditUserID,
 		"user_id_is_zero", auditUserID == 0,
-		"delivery_status", latestOrderItem.DeliveryStatus,
+		"delivery_status", latestOrderItemEnt.DeliveryStatus,
 	)
 
 	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
 		UserID:   auditUserID,
 		Module:   "order",
 		Action:   "updated:delivery-status:change",
-		TargetID: latestOrderItem.OrderID,
+		TargetID: latestOrderItemEnt.OrderID,
 		Data: map[string]any{
-			"order_id":        latestOrderItem.OrderID,
-			"order_item_id":   latestOrderItem.ID,
+			"order_id":        latestOrderItemEnt.OrderID,
+			"order_item_id":   latestOrderItemEnt.ID,
 			"user_id":         auditUserID,
-			"order_code":      latestOrderItem.CodeOriginal,
-			"order_item_code": latestOrderItem.Code,
-			"delivery_status": latestOrderItem.DeliveryStatus,
+			"order_code":      latestOrderItemEnt.CodeOriginal,
+			"order_item_code": latestOrderItemEnt.Code,
+			"delivery_status": latestOrderItemEnt.DeliveryStatus,
 		},
 	})
 
@@ -351,10 +361,10 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		notification.Notify(*dept.AdministratorID, auditUserID, "order:delivery:completed", map[string]any{
 			"department_id":   dept.ID,
 			"admin_id":        dept.AdministratorID,
-			"order_id":        latestOrderItem.OrderID,
-			"order_item_id":   latestOrderItem.ID,
-			"order_code":      latestOrderItem.CodeOriginal,
-			"order_item_code": latestOrderItem.Code,
+			"order_id":        latestOrderItemEnt.OrderID,
+			"order_item_id":   latestOrderItemEnt.ID,
+			"order_code":      latestOrderItemEnt.CodeOriginal,
+			"order_item_code": latestOrderItemEnt.Code,
 		})
 	}
 
@@ -465,17 +475,80 @@ func DeliveryProofMaxSizeBytes(cfg config.DeliveryQRConfig) int64 {
 	return int64(maxMB) * 1024 * 1024
 }
 
-func BuildDeliveryProofStoragePath(orderID int, qrTokenID int, mimeType string) string {
+func BuildDeliveryProofFilename(orderID int, qrTokenID int, mimeType string) string {
 	ext := deliveryProofExtension(mimeType)
 	stableUUID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("%d:%d", orderID, qrTokenID))).String()
-	return path.Join(deliveryProofRootDir, fmt.Sprintf("%d", orderID), stableUUID+ext)
+	return stableUUID + ext
 }
 
-func BuildDeliveryProofPublicURL(baseRoute string, relPath string) string {
-	cleanRelPath := path.Clean(strings.TrimLeft(relPath, "/"))
-	publicPath := strings.TrimPrefix(cleanRelPath, deliveryProofRootDir+"/")
+func BuildDeliveryProofStoragePath(orderID int, qrTokenID int, mimeType string) string {
+	return path.Join(deliveryProofRootDir, fmt.Sprintf("%d", orderID), BuildDeliveryProofFilename(orderID, qrTokenID, mimeType))
+}
+
+func BuildDeliveryProofFileURL(baseRoute string, deptID int, orderItemID int) string {
 	baseRoute = strings.TrimRight(strings.TrimSpace(baseRoute), "/")
-	return baseRoute + "/orders/delivery/proofs/" + publicPath
+	return fmt.Sprintf("%s/%d/orders/delivery/proofs/%d", baseRoute, deptID, orderItemID)
+}
+
+func (s *orderDeliveryQRService) BuildDeliveryProofFileURL(ctx context.Context, orderID int) (string, error) {
+	orderEnt, err := s.db.Order.
+		Query().
+		Where(order.IDEQ(int64(orderID))).
+		Only(ctx)
+	if err != nil {
+		return "", err
+	}
+	if orderEnt.DepartmentID == nil || *orderEnt.DepartmentID <= 0 {
+		return "", fmt.Errorf("department not found for order %d", orderID)
+	}
+
+	orderItemEnt, err := s.repo.GetLatestOrderItemByOrderID(ctx, nil, int64(orderID))
+	if err != nil {
+		return "", err
+	}
+
+	return BuildDeliveryProofFileURL(
+		utils.GetModuleRoute(s.deps.Config.Server.Route),
+		*orderEnt.DepartmentID,
+		int(orderItemEnt.ID),
+	), nil
+}
+
+func (s *orderDeliveryQRService) GetDeliveryProofFilePath(ctx context.Context, deptID int, orderItemID int) (string, error) {
+	if deptID <= 0 || orderItemID <= 0 {
+		return "", fmt.Errorf("invalid proof image path")
+	}
+
+	orderItemEnt, err := s.db.OrderItem.
+		Query().
+		Where(orderitem.IDEQ(int64(orderItemID)), orderitem.DeletedAtIsNil()).
+		WithOrder().
+		Only(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	orderEnt, err := orderItemEnt.Edges.OrderOrErr()
+	if err != nil {
+		return "", err
+	}
+	if orderEnt.DepartmentID == nil || *orderEnt.DepartmentID != deptID {
+		return "", fmt.Errorf("proof image not found")
+	}
+
+	proof, err := s.repo.GetOrderDeliveryProofByOrderItemID(ctx, orderItemEnt.ID)
+	if err != nil {
+		return "", err
+	}
+
+	filename := path.Base(strings.TrimSpace(proof.ImageURL))
+	if filename == "" {
+		return "", fmt.Errorf("proof image not found")
+	}
+
+	basePath := utils.ExpandHomeDir(s.deps.Config.Storage.PhotoPath)
+	filePath := path.Join(basePath, deliveryProofRootDir, fmt.Sprintf("%d", orderItemEnt.OrderID), filename)
+	return filePath, nil
 }
 
 func deliveryProofExtension(mimeType string) string {

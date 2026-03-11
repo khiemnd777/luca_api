@@ -41,8 +41,8 @@ func NewOrderDeliveryQRHandler(
 		deps: deps,
 		storage: sharedstorage.NewLocalStorage(
 			deps.Config.Storage.PhotoPath,
-			utils.GetModuleRoute(deps.Config.Server.Route)+"/orders/delivery/proofs",
-			"delivery_proofs",
+			"",
+			"",
 		),
 	}
 }
@@ -54,7 +54,10 @@ func (h *OrderDeliveryQRHandler) RegisterPublicRoutes(
 ) {
 	app.RouterGet(router, "/orders/delivery/qr/:token/start", startMiddleware, h.StartSession)
 	app.RouterPost(router, "/orders/delivery/confirm", confirmMiddleware, h.ConfirmDelivered)
-	app.RouterGet(router, "/orders/delivery/proofs/:order_id<int>/:filename", h.GetDeliveryProofFile)
+}
+
+func (h *OrderDeliveryQRHandler) RegisterRoutes(router fiber.Router) {
+	app.RouterGet(router, "/:dept_id<int>/orders/delivery/proofs/:order_item_id<int>", h.GetDeliveryProofFile)
 }
 
 func (h *OrderDeliveryQRHandler) StartSession(c *fiber.Ctx) error {
@@ -135,17 +138,22 @@ func (h *OrderDeliveryQRHandler) ConfirmDelivered(c *fiber.Ctx) error {
 	}
 	defer file.Close()
 
-	imageURL, err := h.storage.Upload(c.UserContext(), relPath, file)
-	if err != nil {
+	if _, err := h.storage.Upload(c.UserContext(), relPath, file); err != nil {
 		logger.Error("delivery_confirm_failed", "order_id", session.OrderID, "qr_token_id", session.QRTokenID, "error", err.Error())
 		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, "failed to upload proof image")
 	}
-	logger.Info("delivery_proof_uploaded", "order_id", session.OrderID, "qr_token_id", session.QRTokenID, "image_url", imageURL, "mime_type", mimeType)
+
+	imageFilename := filepath.Base(relPath)
+	imageURL, err := h.svc.BuildDeliveryProofFileURL(c.UserContext(), session.OrderID)
+	if err != nil {
+		logger.Warn("delivery_proof_url_build_failed", "order_id", session.OrderID, "qr_token_id", session.QRTokenID, "error", err.Error())
+	}
+	logger.Info("delivery_proof_uploaded", "order_id", session.OrderID, "qr_token_id", session.QRTokenID, "image_filename", imageFilename, "mime_type", mimeType)
 
 	err = h.svc.ConfirmDeliveredByQRSession(
 		c.UserContext(),
 		session.SessionID,
-		imageURL,
+		imageFilename,
 		fileHeader.Size,
 		mimeType,
 		c.IP(),
@@ -182,15 +190,16 @@ func (h *OrderDeliveryQRHandler) ConfirmDelivered(c *fiber.Ctx) error {
 }
 
 func (h *OrderDeliveryQRHandler) GetDeliveryProofFile(c *fiber.Ctx) error {
-	orderID, _ := utils.GetParamAsInt(c, "order_id")
-	filename := filepath.Base(strings.TrimSpace(utils.GetParamAsString(c, "filename")))
-	if orderID <= 0 || filename == "" {
-		return client_error.ResponseError(c, fiber.StatusBadRequest, nil, "invalid proof image path")
+	deptID, _ := utils.GetParamAsInt(c, "dept_id")
+	orderItemID, _ := utils.GetParamAsInt(c, "order_item_id")
+	filePath, err := h.svc.GetDeliveryProofFilePath(c.UserContext(), deptID, orderItemID)
+	if err != nil {
+		if deptID <= 0 || orderItemID <= 0 {
+			return client_error.ResponseError(c, fiber.StatusBadRequest, err, "invalid proof image path")
+		}
+		return client_error.ResponseError(c, fiber.StatusNotFound, err, "proof image not found")
 	}
-
-	basePath := utils.ExpandHomeDir(h.deps.Config.Storage.PhotoPath)
-	filePath := filepath.Join(basePath, "delivery_proofs", fmt.Sprintf("%d", orderID), filename)
-	if _, err := os.Stat(filePath); err != nil {
+	if _, err = os.Stat(filePath); err != nil {
 		return client_error.ResponseError(c, fiber.StatusNotFound, err, "proof image not found")
 	}
 

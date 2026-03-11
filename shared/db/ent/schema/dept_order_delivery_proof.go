@@ -22,6 +22,9 @@ func (OrderDeliveryProof) Fields() []ent.Field {
 				"postgres": "serial",
 			}),
 		field.Int64("order_id"),
+		field.Int64("order_item_id").
+			Optional().
+			Nillable(),
 		field.Int("qr_token_id"),
 		field.String("image_url"),
 		field.Int64("image_size"),
@@ -49,6 +52,7 @@ func (OrderDeliveryProof) Edges() []ent.Edge {
 func (OrderDeliveryProof) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("order_id"),
+		index.Fields("order_item_id"),
 		index.Fields("qr_token_id").Unique(),
 	}
 }

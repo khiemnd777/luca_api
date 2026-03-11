@@ -22,6 +22,7 @@ type CreateOrderDeliveryAuditLogParams struct {
 
 type UpsertOrderDeliveryProofParams struct {
 	OrderID       int64
+	OrderItemID   int64
 	QRTokenID     int
 	ImageURL      string
 	ImageSize     int64
@@ -32,8 +33,10 @@ type OrderDeliveryQRRepository interface {
 	CreateDeliveryQRToken(ctx context.Context, tx *generated.Tx, orderID int64, tokenHash string) (*generated.OrderDeliveryQRToken, error)
 	GetDeliveryQRTokenByHash(ctx context.Context, tokenHash string) (*generated.OrderDeliveryQRToken, error)
 	GetOrderDeliveryProofByQRTokenID(ctx context.Context, qrTokenID int) (*generated.OrderDeliveryProof, error)
+	GetOrderDeliveryProofByOrderItemID(ctx context.Context, orderItemID int64) (*generated.OrderDeliveryProof, error)
 	UpsertOrderDeliveryProof(ctx context.Context, tx *generated.Tx, params UpsertOrderDeliveryProofParams) (*generated.OrderDeliveryProof, error)
 	MarkDeliveryQRTokenUsed(ctx context.Context, tx *generated.Tx, qrTokenID int, usedAt time.Time) (bool, error)
+	GetLatestOrderItemByOrderID(ctx context.Context, tx *generated.Tx, orderID int64) (*generated.OrderItem, error)
 	UpdateOrderDelivered(ctx context.Context, tx *generated.Tx, orderID int64, deliveredAt time.Time) (bool, int64, error)
 	CreateDeliveryAuditLog(ctx context.Context, tx *generated.Tx, params CreateOrderDeliveryAuditLogParams) error
 }
@@ -85,6 +88,17 @@ func (r *orderDeliveryQRRepository) GetOrderDeliveryProofByQRTokenID(
 		Only(ctx)
 }
 
+func (r *orderDeliveryQRRepository) GetOrderDeliveryProofByOrderItemID(
+	ctx context.Context,
+	orderItemID int64,
+) (*generated.OrderDeliveryProof, error) {
+	return r.db.OrderDeliveryProof.
+		Query().
+		Where(orderdeliveryproof.OrderItemIDEQ(orderItemID)).
+		Order(generated.Desc(orderdeliveryproof.FieldCreatedAt), generated.Desc(orderdeliveryproof.FieldID)).
+		First(ctx)
+}
+
 func (r *orderDeliveryQRRepository) UpsertOrderDeliveryProof(
 	ctx context.Context,
 	tx *generated.Tx,
@@ -106,6 +120,7 @@ func (r *orderDeliveryQRRepository) UpsertOrderDeliveryProof(
 	if existing != nil {
 		return client.
 			UpdateOneID(existing.ID).
+			SetOrderItemID(params.OrderItemID).
 			SetImageURL(params.ImageURL).
 			SetImageSize(params.ImageSize).
 			SetImageMimeType(params.ImageMimeType).
@@ -115,11 +130,32 @@ func (r *orderDeliveryQRRepository) UpsertOrderDeliveryProof(
 	return client.
 		Create().
 		SetOrderID(params.OrderID).
+		SetOrderItemID(params.OrderItemID).
 		SetQrTokenID(params.QRTokenID).
 		SetImageURL(params.ImageURL).
 		SetImageSize(params.ImageSize).
 		SetImageMimeType(params.ImageMimeType).
 		Save(ctx)
+}
+
+func (r *orderDeliveryQRRepository) GetLatestOrderItemByOrderID(
+	ctx context.Context,
+	tx *generated.Tx,
+	orderID int64,
+) (*generated.OrderItem, error) {
+	client := r.db.OrderItem
+	if tx != nil {
+		client = tx.OrderItem
+	}
+
+	return client.
+		Query().
+		Where(
+			orderitem.OrderID(orderID),
+			orderitem.DeletedAtIsNil(),
+		).
+		Order(generated.Desc(orderitem.FieldCreatedAt), generated.Desc(orderitem.FieldID)).
+		First(ctx)
 }
 
 func (r *orderDeliveryQRRepository) MarkDeliveryQRTokenUsed(
@@ -162,14 +198,7 @@ func (r *orderDeliveryQRRepository) UpdateOrderDelivered(
 		orderClient = tx.Order
 	}
 
-	latestItem, err := orderItemClient.
-		Query().
-		Where(
-			orderitem.OrderID(orderID),
-			orderitem.DeletedAtIsNil(),
-		).
-		Order(generated.Desc(orderitem.FieldCreatedAt)).
-		First(ctx)
+	latestItem, err := r.GetLatestOrderItemByOrderID(ctx, tx, orderID)
 	if err != nil {
 		return false, 0, err
 	}
