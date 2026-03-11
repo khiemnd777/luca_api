@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"path/filepath"
@@ -65,6 +66,17 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	}
 	note.DiscountAmount = discountAmount
 	note.FinalAmount = finalAmount
+
+	deliveryQRSvc := NewOrderDeliveryQRService(s.deps.Ent.(*generated.Client), s.deps)
+	rawToken, err := deliveryQRSvc.GenerateDeliveryQRToken(ctx, int(req.OrderID))
+	if err != nil {
+		if !errors.Is(err, model.ErrOrderAlreadyDelivered) {
+			return nil, "", err
+		}
+	} else {
+		note.QRCode = BuildDeliveryQRStartURL(s.deps.Config.DeliveryQR.ClientBaseURL, rawToken)
+		note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
+	}
 
 	if strings.TrimSpace(note.Company.LogoPath) != "" {
 		logoData, err := ConvertImageToBase64(note.Company.LogoPath)
@@ -175,10 +187,6 @@ func buildDeliveryNoteFromOrder(
 	}
 	note.Items = items
 	note.PromotionCode = utils.DerefString(orderDTO.PromotionCode)
-	if orderDTO.LatestOrderItem != nil {
-		note.QRCode = utils.DerefString(orderDTO.LatestOrderItem.QrCode)
-		note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
-	}
 
 	if strings.TrimSpace(note.Order.Number) == "" {
 		return DeliveryNote{}, fmt.Errorf("order code is empty")

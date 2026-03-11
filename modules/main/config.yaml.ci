@@ -5,6 +5,14 @@ server:
 
 external: true
 
+delivery_qr:
+  session_ttl_minutes: 5
+  client_base_url: ${M_MAIN_CLIENT_BASE_URL}
+  proof_image_max_size_mb: 5
+
+storage:
+  photo_path: "./storage/photo"
+
 features:
   enabled: []
 

@@ -1,0 +1,572 @@
+package service
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"path"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/khiemnd777/andy_api/modules/main/config"
+	model "github.com/khiemnd777/andy_api/modules/main/features/__model"
+	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
+	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/khiemnd777/andy_api/shared/module"
+	auditlogmodel "github.com/khiemnd777/andy_api/shared/modules/auditlog/model"
+	"github.com/khiemnd777/andy_api/shared/modules/notification"
+	"github.com/khiemnd777/andy_api/shared/pubsub"
+	"github.com/khiemnd777/andy_api/shared/redis"
+	"github.com/khiemnd777/andy_api/shared/utils"
+)
+
+const (
+	defaultDeliveryQRSessionTTL = 5 * time.Minute
+	deliveryQRRedisName         = "cache"
+	deliveryQRMetaTTLBuffer     = time.Hour
+	DeliveryQRSessionCookieName = "delivery_session"
+	deliveryProofRootDir        = "delivery_proofs"
+)
+
+type OrderDeliveryQRService interface {
+	GenerateDeliveryQRToken(ctx context.Context, orderID int) (rawToken string, err error)
+	StartDeliveryQRSession(ctx context.Context, rawToken string, ip string, userAgent string) (*model.DeliveryQRSession, error)
+	ConfirmDeliveredByQRSession(ctx context.Context, sessionID string, imageURL string, imageSize int64, mimeType string, ip string, userAgent string) error
+	GetDeliveryProofFilePath(ctx context.Context, deptID int, orderItemID int) (string, error)
+	BuildDeliveryProofFileURL(ctx context.Context, orderID int) (string, error)
+}
+
+type orderDeliveryQRService struct {
+	db   *generated.Client
+	repo repository.OrderDeliveryQRRepository
+	deps *module.ModuleDeps[config.ModuleConfig]
+}
+
+func NewOrderDeliveryQRService(
+	db *generated.Client,
+	deps *module.ModuleDeps[config.ModuleConfig],
+) OrderDeliveryQRService {
+	return &orderDeliveryQRService{
+		db:   db,
+		repo: repository.NewOrderDeliveryQRRepository(db),
+		deps: deps,
+	}
+}
+
+func BuildDeliveryQRStartURL(baseURL string, rawToken string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	token := strings.TrimSpace(rawToken)
+	if base == "" || token == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/delivery/qr/%s", base, token)
+}
+
+func (s *orderDeliveryQRService) GenerateDeliveryQRToken(ctx context.Context, orderID int) (string, error) {
+	if orderID <= 0 {
+		return "", fmt.Errorf("invalid order id")
+	}
+
+	orderEnt, err := s.db.Order.
+		Query().
+		Where(order.IDEQ(int64(orderID))).
+		Only(ctx)
+	if err != nil {
+		return "", err
+	}
+	if strings.EqualFold(utils.DerefString(orderEnt.DeliveryStatusLatest), "delivered") {
+		return "", model.ErrOrderAlreadyDelivered
+	}
+
+	rawToken := utils.GenerateRandomString(64)
+	if rawToken == "" {
+		return "", fmt.Errorf("failed to generate delivery qr token")
+	}
+
+	if _, err = s.repo.CreateDeliveryQRToken(ctx, nil, int64(orderID), hashDeliveryQRToken(rawToken)); err != nil {
+		return "", err
+	}
+
+	logger.Info("Generated delivery QR token", "order_id", orderID)
+	return rawToken, nil
+}
+
+func (s *orderDeliveryQRService) StartDeliveryQRSession(
+	ctx context.Context,
+	rawToken string,
+	ip string,
+	userAgent string,
+) (*model.DeliveryQRSession, error) {
+	tokenHash := hashDeliveryQRToken(rawToken)
+	if tokenHash == "" {
+		return nil, model.ErrInvalidDeliveryQRToken
+	}
+
+	token, err := s.repo.GetDeliveryQRTokenByHash(ctx, tokenHash)
+	if err != nil {
+		if generated.IsNotFound(err) {
+			logger.Warn("delivery_qr_session_invalid", "ip", ip, "reason", "invalid_token")
+			return nil, model.ErrInvalidDeliveryQRToken
+		}
+		return nil, err
+	}
+
+	orderEnt := token.Edges.Order
+	if orderEnt == nil {
+		logger.Warn("delivery_qr_session_invalid", "qr_token_id", token.ID, "reason", "token_without_order")
+		return nil, model.ErrInvalidDeliveryQRToken
+	}
+
+	if token.Used {
+		_ = s.repo.CreateDeliveryAuditLog(ctx, nil, repository.CreateOrderDeliveryAuditLogParams{
+			OrderID:   token.OrderID,
+			QRTokenID: intPtr(token.ID),
+			Action:    model.OrderDeliveryAuditActionInvalid,
+			IP:        ip,
+			UserAgent: userAgent,
+		})
+		logger.Warn("delivery_qr_token_replay_attempt", "order_id", token.OrderID, "qr_token_id", token.ID, "ip", ip)
+		return nil, model.ErrDeliveryQRTokenAlreadyUsed
+	}
+
+	if strings.EqualFold(utils.DerefString(orderEnt.DeliveryStatusLatest), "delivered") {
+		_ = s.repo.CreateDeliveryAuditLog(ctx, nil, repository.CreateOrderDeliveryAuditLogParams{
+			OrderID:   token.OrderID,
+			QRTokenID: intPtr(token.ID),
+			Action:    model.OrderDeliveryAuditActionInvalid,
+			IP:        ip,
+			UserAgent: userAgent,
+		})
+		logger.Warn("delivery_qr_session_invalid", "order_id", token.OrderID, "qr_token_id", token.ID, "reason", "order_already_delivered")
+		return nil, model.ErrOrderAlreadyDelivered
+	}
+
+	now := time.Now()
+	session := &model.DeliveryQRSession{
+		SessionID: utils.GenerateRandomString(48),
+		OrderID:   int(token.OrderID),
+		OrderCode: utils.DerefString(orderEnt.Code),
+		// `code_latest` stores the latest order item code for this order.
+		OrderItemCode: utils.DerefString(orderEnt.CodeLatest),
+		QRTokenID:     token.ID,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(s.sessionTTL()),
+	}
+
+	if err := s.saveSession(session); err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.CreateDeliveryAuditLog(ctx, nil, repository.CreateOrderDeliveryAuditLogParams{
+		OrderID:   token.OrderID,
+		QRTokenID: intPtr(token.ID),
+		Action:    model.OrderDeliveryAuditActionScan,
+		IP:        ip,
+		UserAgent: userAgent,
+	}); err != nil {
+		return nil, err
+	}
+
+	logger.Info("delivery_qr_session_started", "order_id", token.OrderID, "qr_token_id", token.ID, "session_id", session.SessionID, "ip", ip)
+	return session, nil
+}
+
+func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
+	ctx context.Context,
+	sessionID string,
+	imageURL string,
+	imageSize int64,
+	mimeType string,
+	ip string,
+	userAgent string,
+) error {
+	session, sessionErr := s.getSession(sessionID)
+	if sessionErr != nil {
+		if session != nil && sessionErr == model.ErrDeliveryQRSessionExpired {
+			_ = s.repo.CreateDeliveryAuditLog(ctx, nil, repository.CreateOrderDeliveryAuditLogParams{
+				OrderID:   int64(session.OrderID),
+				QRTokenID: intPtr(session.QRTokenID),
+				Action:    model.OrderDeliveryAuditActionExpired,
+				IP:        ip,
+				UserAgent: userAgent,
+			})
+			logger.Warn("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "reason", "session_expired")
+			return sessionErr
+		}
+		logger.Warn("delivery_confirm_failed", "session_id", sessionID, "reason", "session_invalid", "error", sessionErr.Error())
+		return sessionErr
+	}
+
+	now := time.Now()
+	tx, err := s.db.Tx(ctx)
+	if err != nil {
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "error", err.Error())
+		return err
+	}
+
+	latestOrderItem, err := s.repo.GetLatestOrderItemByOrderID(ctx, tx, int64(session.OrderID))
+	if err != nil {
+		_ = tx.Rollback()
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+
+	if _, err := s.repo.UpsertOrderDeliveryProof(ctx, tx, repository.UpsertOrderDeliveryProofParams{
+		OrderID:       int64(session.OrderID),
+		OrderItemID:   latestOrderItem.ID,
+		QRTokenID:     session.QRTokenID,
+		ImageURL:      imageURL,
+		ImageSize:     imageSize,
+		ImageMimeType: mimeType,
+	}); err != nil {
+		_ = tx.Rollback()
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+
+	updated, latestOrderItemID, err := s.repo.UpdateOrderDelivered(ctx, tx, int64(session.OrderID), now)
+	if err != nil {
+		_ = tx.Rollback()
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+
+	tokenUsed, err := s.repo.MarkDeliveryQRTokenUsed(ctx, tx, session.QRTokenID, now)
+	if err != nil {
+		_ = tx.Rollback()
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+	if updated && !tokenUsed {
+		_ = tx.Rollback()
+		logger.Warn("delivery_qr_token_replay_attempt", "session_id", sessionID, "order_id", session.OrderID, "qr_token_id", session.QRTokenID)
+		return model.ErrDeliveryQRConfirmConcurrent
+	}
+
+	if err := s.repo.CreateDeliveryAuditLog(ctx, tx, repository.CreateOrderDeliveryAuditLogParams{
+		OrderID:   int64(session.OrderID),
+		QRTokenID: intPtr(session.QRTokenID),
+		Action:    model.OrderDeliveryAuditActionConfirm,
+		IP:        ip,
+		UserAgent: userAgent,
+	}); err != nil {
+		_ = tx.Rollback()
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+	if err := s.invalidateSession(sessionID); err != nil {
+		logger.Error("delivery_confirm_failed", "session_id", sessionID, "order_id", session.OrderID, "error", err.Error())
+		return err
+	}
+
+	logger.Info("delivery_confirm_success", "order_id", session.OrderID, "qr_token_id", session.QRTokenID, "session_id", sessionID, "ip", ip)
+	if !updated {
+		return model.ErrOrderAlreadyDelivered
+	}
+
+	latestOrderItemEnt, err := s.db.OrderItem.
+		Query().
+		Where(orderitem.IDEQ(latestOrderItemID)).
+		Only(ctx)
+	if err != nil {
+		logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItemID, "error", err.Error())
+		return nil
+	}
+
+	orderEnt, err := s.db.Order.
+		Query().
+		Where(order.IDEQ(int64(session.OrderID))).
+		Only(ctx)
+	if err != nil {
+		logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItemEnt.ID, "error", err.Error())
+		return nil
+	}
+
+	auditUserID := 0
+	var dept *generated.Department
+	if orderEnt.DepartmentID != nil {
+		dept, err = s.db.Department.
+			Query().
+			Where(department.IDEQ(*orderEnt.DepartmentID)).
+			Only(ctx)
+		if err != nil {
+			logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "department_id", *orderEnt.DepartmentID, "error", err.Error())
+			return nil
+		}
+		if dept.AdministratorID != nil && *dept.AdministratorID > 0 {
+			auditUserID = *dept.AdministratorID
+		}
+	}
+
+	logger.Debug("delivery_confirm_audit_log_user_check",
+		"session_id", sessionID,
+		"order_id", session.OrderID,
+		"order_item_id", latestOrderItemEnt.ID,
+		"user_id", auditUserID,
+		"user_id_is_zero", auditUserID == 0,
+		"delivery_status", latestOrderItemEnt.DeliveryStatus,
+	)
+
+	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
+		UserID:   auditUserID,
+		Module:   "order",
+		Action:   "updated:delivery-status:change",
+		TargetID: latestOrderItemEnt.OrderID,
+		Data: map[string]any{
+			"order_id":        latestOrderItemEnt.OrderID,
+			"order_item_id":   latestOrderItemEnt.ID,
+			"user_id":         auditUserID,
+			"order_code":      latestOrderItemEnt.CodeOriginal,
+			"order_item_code": latestOrderItemEnt.Code,
+			"delivery_status": latestOrderItemEnt.DeliveryStatus,
+		},
+	})
+
+	adminID := 0
+	var deptID any
+	if dept != nil && dept.AdministratorID != nil {
+		adminID = *dept.AdministratorID
+	}
+	if dept != nil {
+		deptID = dept.ID
+	}
+	logger.Debug("delivery_confirm_notification_check",
+		"session_id", sessionID,
+		"order_id", session.OrderID,
+		"department_exists", dept != nil,
+		"department_id", deptID,
+		"department_admin_exists", dept != nil && dept.AdministratorID != nil,
+		"department_admin_id", adminID,
+		"audit_user_id", auditUserID,
+	)
+	if dept != nil && dept.AdministratorID != nil {
+		logger.Debug("delivery_confirm_notification_sent",
+			"session_id", sessionID,
+			"order_id", session.OrderID,
+			"department_id", dept.ID,
+			"department_admin_id", *dept.AdministratorID,
+		)
+		notification.Notify(*dept.AdministratorID, auditUserID, "order:delivery:completed", map[string]any{
+			"department_id":   dept.ID,
+			"admin_id":        dept.AdministratorID,
+			"order_id":        latestOrderItemEnt.OrderID,
+			"order_item_id":   latestOrderItemEnt.ID,
+			"order_code":      latestOrderItemEnt.CodeOriginal,
+			"order_item_code": latestOrderItemEnt.Code,
+		})
+	}
+
+	return nil
+}
+
+func (s *orderDeliveryQRService) sessionTTL() time.Duration {
+	minutes := s.deps.Config.DeliveryQR.SessionTTLMinutes
+	if minutes <= 0 {
+		return defaultDeliveryQRSessionTTL
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+func hashDeliveryQRToken(rawToken string) string {
+	token := strings.TrimSpace(rawToken)
+	if token == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func deliveryQRSessionKey(sessionID string) string {
+	return fmt.Sprintf("order:delivery_session:%s", sessionID)
+}
+
+func deliveryQRSessionMetaKey(sessionID string) string {
+	return fmt.Sprintf("order:delivery_session_meta:%s", sessionID)
+}
+
+func (s *orderDeliveryQRService) saveSession(session *model.DeliveryQRSession) error {
+	data, err := json.Marshal(session)
+	if err != nil {
+		return err
+	}
+
+	if err = redis.Set(deliveryQRRedisName, deliveryQRSessionKey(session.SessionID), data, s.sessionTTL()); err != nil {
+		return err
+	}
+	if err = redis.Set(deliveryQRRedisName, deliveryQRSessionMetaKey(session.SessionID), data, s.sessionTTL()+deliveryQRMetaTTLBuffer); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *orderDeliveryQRService) getSession(sessionID string) (*model.DeliveryQRSession, error) {
+	return LoadDeliveryQRSession(sessionID)
+}
+
+func LoadDeliveryQRSession(sessionID string) (*model.DeliveryQRSession, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, model.ErrDeliveryQRSessionNotFound
+	}
+
+	sessionData, err := redis.Get(deliveryQRRedisName, deliveryQRSessionKey(sessionID))
+	if err != nil {
+		return nil, err
+	}
+	if sessionData == "" {
+		metaData, metaErr := redis.Get(deliveryQRRedisName, deliveryQRSessionMetaKey(sessionID))
+		if metaErr != nil {
+			return nil, metaErr
+		}
+		if metaData == "" {
+			return nil, model.ErrDeliveryQRSessionNotFound
+		}
+
+		session := &model.DeliveryQRSession{}
+		if err = json.Unmarshal([]byte(metaData), session); err != nil {
+			return nil, err
+		}
+		return session, model.ErrDeliveryQRSessionExpired
+	}
+
+	session := &model.DeliveryQRSession{}
+	if err = json.Unmarshal([]byte(sessionData), session); err != nil {
+		return nil, err
+	}
+	if time.Now().After(session.ExpiresAt) {
+		return session, model.ErrDeliveryQRSessionExpired
+	}
+
+	return session, nil
+}
+
+func (s *orderDeliveryQRService) invalidateSession(sessionID string) error {
+	if err := redis.Del(deliveryQRRedisName, deliveryQRSessionKey(sessionID)); err != nil {
+		return err
+	}
+	if err := redis.Del(deliveryQRRedisName, deliveryQRSessionMetaKey(sessionID)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
+func DeliveryProofMaxSizeBytes(cfg config.DeliveryQRConfig) int64 {
+	maxMB := cfg.ProofImageMaxSizeMB
+	if maxMB <= 0 {
+		maxMB = 5
+	}
+	return int64(maxMB) * 1024 * 1024
+}
+
+func BuildDeliveryProofFilename(orderID int, qrTokenID int, mimeType string) string {
+	ext := deliveryProofExtension(mimeType)
+	stableUUID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(fmt.Sprintf("%d:%d", orderID, qrTokenID))).String()
+	return stableUUID + ext
+}
+
+func BuildDeliveryProofStoragePath(orderID int, qrTokenID int, mimeType string) string {
+	return path.Join(deliveryProofRootDir, fmt.Sprintf("%d", orderID), BuildDeliveryProofFilename(orderID, qrTokenID, mimeType))
+}
+
+func BuildDeliveryProofFileURL(baseRoute string, deptID int, orderItemID int) string {
+	baseRoute = strings.TrimRight(strings.TrimSpace(baseRoute), "/")
+	return fmt.Sprintf("%s/%d/orders/delivery/proofs/%d", baseRoute, deptID, orderItemID)
+}
+
+func (s *orderDeliveryQRService) BuildDeliveryProofFileURL(ctx context.Context, orderID int) (string, error) {
+	orderEnt, err := s.db.Order.
+		Query().
+		Where(order.IDEQ(int64(orderID))).
+		Only(ctx)
+	if err != nil {
+		return "", err
+	}
+	if orderEnt.DepartmentID == nil || *orderEnt.DepartmentID <= 0 {
+		return "", fmt.Errorf("department not found for order %d", orderID)
+	}
+
+	orderItemEnt, err := s.repo.GetLatestOrderItemByOrderID(ctx, nil, int64(orderID))
+	if err != nil {
+		return "", err
+	}
+
+	return BuildDeliveryProofFileURL(
+		utils.GetModuleRoute(s.deps.Config.Server.Route),
+		*orderEnt.DepartmentID,
+		int(orderItemEnt.ID),
+	), nil
+}
+
+func (s *orderDeliveryQRService) GetDeliveryProofFilePath(ctx context.Context, deptID int, orderItemID int) (string, error) {
+	if deptID <= 0 || orderItemID <= 0 {
+		return "", fmt.Errorf("invalid proof image path")
+	}
+
+	orderItemEnt, err := s.db.OrderItem.
+		Query().
+		Where(orderitem.IDEQ(int64(orderItemID)), orderitem.DeletedAtIsNil()).
+		WithOrder().
+		Only(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	orderEnt, err := orderItemEnt.Edges.OrderOrErr()
+	if err != nil {
+		return "", err
+	}
+	if orderEnt.DepartmentID == nil || *orderEnt.DepartmentID != deptID {
+		return "", fmt.Errorf("proof image not found")
+	}
+
+	proof, err := s.repo.GetOrderDeliveryProofByOrderItemID(ctx, orderItemEnt.ID)
+	if err != nil {
+		return "", err
+	}
+
+	filename := path.Base(strings.TrimSpace(proof.ImageURL))
+	if filename == "" {
+		return "", fmt.Errorf("proof image not found")
+	}
+
+	basePath := utils.ExpandHomeDir(s.deps.Config.Storage.PhotoPath)
+	filePath := path.Join(basePath, deliveryProofRootDir, fmt.Sprintf("%d", orderItemEnt.OrderID), filename)
+	return filePath, nil
+}
+
+func deliveryProofExtension(mimeType string) string {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/png":
+		return ".png"
+	case "image/webp":
+		return ".webp"
+	default:
+		return ".jpg"
+	}
+}
+
+func IsAllowedDeliveryProofMimeType(mimeType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/jpeg", "image/png", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
