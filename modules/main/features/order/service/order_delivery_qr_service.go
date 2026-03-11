@@ -18,7 +18,6 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/order"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitem"
-	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/module"
 	auditlogmodel "github.com/khiemnd777/andy_api/shared/modules/auditlog/model"
@@ -325,18 +324,6 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		},
 	})
 
-	latestProcess, err := s.db.OrderItemProcess.
-		Query().
-		Where(orderitemprocess.OrderItemID(latestOrderItem.ID)).
-		Order(generated.Desc(orderitemprocess.FieldStepNumber), generated.Desc(orderitemprocess.FieldID)).
-		First(ctx)
-	if err != nil {
-		if !generated.IsNotFound(err) {
-			logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "order_item_id", latestOrderItem.ID, "error", err.Error())
-		}
-		return nil
-	}
-
 	adminID := 0
 	var deptID any
 	if dept != nil && dept.AdministratorID != nil {
@@ -355,20 +342,20 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		"audit_user_id", auditUserID,
 	)
 	if dept != nil && dept.AdministratorID != nil {
-		notification.Notify(*dept.AdministratorID, auditUserID, "order:delivery:completed", map[string]any{
-			"department_id":   dept.ID,
-			"admin_id":        dept.AdministratorID,
-			"order_item_id":   latestOrderItem.ID,
-			"order_item_code": latestOrderItem.Code,
-			"section_name":    latestProcess.SectionName,
-			"process_name":    latestProcess.ProcessName,
-		})
 		logger.Debug("delivery_confirm_notification_sent",
 			"session_id", sessionID,
 			"order_id", session.OrderID,
 			"department_id", dept.ID,
 			"department_admin_id", *dept.AdministratorID,
 		)
+		notification.Notify(*dept.AdministratorID, auditUserID, "order:delivery:completed", map[string]any{
+			"department_id":   dept.ID,
+			"admin_id":        dept.AdministratorID,
+			"order_id":        latestOrderItem.OrderID,
+			"order_item_id":   latestOrderItem.ID,
+			"order_code":      latestOrderItem.CodeOriginal,
+			"order_item_code": latestOrderItem.Code,
+		})
 	}
 
 	return nil
