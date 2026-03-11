@@ -142,10 +142,8 @@ func (h *OrderDeliveryQRHandler) ConfirmDelivered(c *fiber.Ctx) error {
 	}
 	logger.Info("delivery_proof_uploaded", "order_id", session.OrderID, "qr_token_id", session.QRTokenID, "image_url", imageURL, "mime_type", mimeType)
 
-	userID, _ := utils.GetUserIDInt(c)
 	err = h.svc.ConfirmDeliveredByQRSession(
 		c.UserContext(),
-		userID,
 		session.SessionID,
 		imageURL,
 		fileHeader.Size,

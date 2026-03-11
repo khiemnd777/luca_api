@@ -39,7 +39,7 @@ const (
 type OrderDeliveryQRService interface {
 	GenerateDeliveryQRToken(ctx context.Context, orderID int) (rawToken string, err error)
 	StartDeliveryQRSession(ctx context.Context, rawToken string, ip string, userAgent string) (*model.DeliveryQRSession, error)
-	ConfirmDeliveredByQRSession(ctx context.Context, userID int, sessionID string, imageURL string, imageSize int64, mimeType string, ip string, userAgent string) error
+	ConfirmDeliveredByQRSession(ctx context.Context, sessionID string, imageURL string, imageSize int64, mimeType string, ip string, userAgent string) error
 }
 
 type orderDeliveryQRService struct {
@@ -154,9 +154,9 @@ func (s *orderDeliveryQRService) StartDeliveryQRSession(
 		OrderCode: utils.DerefString(orderEnt.Code),
 		// `code_latest` stores the latest order item code for this order.
 		OrderItemCode: utils.DerefString(orderEnt.CodeLatest),
-		QRTokenID: token.ID,
-		CreatedAt: now,
-		ExpiresAt: now.Add(s.sessionTTL()),
+		QRTokenID:     token.ID,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(s.sessionTTL()),
 	}
 
 	if err := s.saveSession(session); err != nil {
@@ -179,7 +179,6 @@ func (s *orderDeliveryQRService) StartDeliveryQRSession(
 
 func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 	ctx context.Context,
-	userID int,
 	sessionID string,
 	imageURL string,
 	imageSize int64,
@@ -286,15 +285,40 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		return nil
 	}
 
+	auditUserID := 0
+	var dept *generated.Department
+	if orderEnt.DepartmentID != nil {
+		dept, err = s.db.Department.
+			Query().
+			Where(department.IDEQ(*orderEnt.DepartmentID)).
+			Only(ctx)
+		if err != nil {
+			logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "department_id", *orderEnt.DepartmentID, "error", err.Error())
+			return nil
+		}
+		if dept.AdministratorID != nil && *dept.AdministratorID > 0 {
+			auditUserID = *dept.AdministratorID
+		}
+	}
+
+	logger.Debug("delivery_confirm_audit_log_user_check",
+		"session_id", sessionID,
+		"order_id", session.OrderID,
+		"order_item_id", latestOrderItem.ID,
+		"user_id", auditUserID,
+		"user_id_is_zero", auditUserID == 0,
+		"delivery_status", latestOrderItem.DeliveryStatus,
+	)
+
 	pubsub.PublishAsync("log:create", auditlogmodel.AuditLogRequest{
-		UserID:   userID,
+		UserID:   auditUserID,
 		Module:   "order",
 		Action:   "updated:delivery-status:change",
-		TargetID: latestOrderItem.ID,
+		TargetID: latestOrderItem.OrderID,
 		Data: map[string]any{
 			"order_id":        latestOrderItem.OrderID,
 			"order_item_id":   latestOrderItem.ID,
-			"user_id":         userID,
+			"user_id":         auditUserID,
 			"order_code":      latestOrderItem.CodeOriginal,
 			"order_item_code": latestOrderItem.Code,
 			"delivery_status": latestOrderItem.DeliveryStatus,
@@ -313,26 +337,38 @@ func (s *orderDeliveryQRService) ConfirmDeliveredByQRSession(
 		return nil
 	}
 
-	if orderEnt.DepartmentID != nil {
-		dept, err := s.db.Department.
-			Query().
-			Where(department.IDEQ(*orderEnt.DepartmentID)).
-			Only(ctx)
-		if err != nil {
-			logger.Warn("delivery_confirm_post_action_failed", "order_id", session.OrderID, "department_id", *orderEnt.DepartmentID, "error", err.Error())
-			return nil
-		}
-
-		if dept.AdministratorID != nil {
-			notification.Notify(*dept.AdministratorID, userID, "order:delivery:completed", map[string]any{
-				"department_id":   dept.ID,
-				"admin_id":        dept.AdministratorID,
-				"order_item_id":   latestOrderItem.ID,
-				"order_item_code": latestOrderItem.Code,
-				"section_name":    latestProcess.SectionName,
-				"process_name":    latestProcess.ProcessName,
-			})
-		}
+	adminID := 0
+	var deptID any
+	if dept != nil && dept.AdministratorID != nil {
+		adminID = *dept.AdministratorID
+	}
+	if dept != nil {
+		deptID = dept.ID
+	}
+	logger.Debug("delivery_confirm_notification_check",
+		"session_id", sessionID,
+		"order_id", session.OrderID,
+		"department_exists", dept != nil,
+		"department_id", deptID,
+		"department_admin_exists", dept != nil && dept.AdministratorID != nil,
+		"department_admin_id", adminID,
+		"audit_user_id", auditUserID,
+	)
+	if dept != nil && dept.AdministratorID != nil {
+		notification.Notify(*dept.AdministratorID, auditUserID, "order:delivery:completed", map[string]any{
+			"department_id":   dept.ID,
+			"admin_id":        dept.AdministratorID,
+			"order_item_id":   latestOrderItem.ID,
+			"order_item_code": latestOrderItem.Code,
+			"section_name":    latestProcess.SectionName,
+			"process_name":    latestProcess.ProcessName,
+		})
+		logger.Debug("delivery_confirm_notification_sent",
+			"session_id", sessionID,
+			"order_id", session.OrderID,
+			"department_id", dept.ID,
+			"department_admin_id", *dept.AdministratorID,
+		)
 	}
 
 	return nil
