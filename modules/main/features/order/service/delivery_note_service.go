@@ -15,15 +15,28 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
 	templateasset "github.com/khiemnd777/andy_api/modules/main/features/order/template"
+	"github.com/khiemnd777/andy_api/shared/logger"
 )
 
 const deliveryNoteDateFormat = "02/01/2006 15:04"
+
+var (
+	deliveryNoteTemplateOnce sync.Once
+	deliveryNoteTemplate     *template.Template
+	deliveryNoteTemplateErr  error
+
+	deliveryNoteBrowserMu          sync.Mutex
+	deliveryNoteBrowserBin         string
+	deliveryNoteBrowserAllocator   context.Context
+	deliveryNoteBrowserAllocatorFn context.CancelFunc
+)
 
 // DeliveryNote is the root payload for delivery note rendering.
 type DeliveryNote struct {
@@ -127,30 +140,9 @@ func GenerateDeliveryNotePDF(data DeliveryNote) ([]byte, error) {
 		return nil, errors.New("order number is required")
 	}
 
-	tpl, err := template.New("delivery_note").Funcs(template.FuncMap{
-		"add1": func(i int) int {
-			return i + 1
-		},
-		"sub1": func(i int) int {
-			return i - 1
-		},
-		"mod": func(i, j int) int {
-			if j == 0 {
-				return 0
-			}
-			return i % j
-		},
-		"number":   formatNumber,
-		"currency": formatNumber,
-		"checked": func(v bool) string {
-			if v {
-				return "X"
-			}
-			return ""
-		},
-	}).Parse(templateasset.DeliveryNoteHTML)
+	tpl, err := getDeliveryNoteTemplate()
 	if err != nil {
-		return nil, fmt.Errorf("parse delivery note template: %w", err)
+		return nil, err
 	}
 
 	viewData := buildDeliveryNoteViewData(data)
@@ -166,6 +158,37 @@ func GenerateDeliveryNotePDF(data DeliveryNote) ([]byte, error) {
 	}
 
 	return pdfBytes, nil
+}
+
+func getDeliveryNoteTemplate() (*template.Template, error) {
+	deliveryNoteTemplateOnce.Do(func() {
+		deliveryNoteTemplate, deliveryNoteTemplateErr = template.New("delivery_note").Funcs(template.FuncMap{
+			"add1": func(i int) int {
+				return i + 1
+			},
+			"sub1": func(i int) int {
+				return i - 1
+			},
+			"mod": func(i, j int) int {
+				if j == 0 {
+					return 0
+				}
+				return i % j
+			},
+			"number":   formatNumber,
+			"currency": formatNumber,
+			"checked": func(v bool) string {
+				if v {
+					return "X"
+				}
+				return ""
+			},
+		}).Parse(templateasset.DeliveryNoteHTML)
+	})
+	if deliveryNoteTemplateErr != nil {
+		return nil, fmt.Errorf("parse delivery note template: %w", deliveryNoteTemplateErr)
+	}
+	return deliveryNoteTemplate, nil
 }
 
 func buildDeliveryNoteViewData(data DeliveryNote) deliveryNoteTemplateData {
@@ -295,28 +318,16 @@ func printOptionsA4() pdfPrintOptions {
 }
 
 func renderPDFWithChromedp(browserBin, htmlPath string, opt pdfPrintOptions) ([]byte, error) {
-	// Use a dedicated context with timeout to avoid hangs.
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
-
-	// Build Chrome allocator options.
-	allocOpts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.ExecPath(browserBin),
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("hide-scrollbars", true),
-		chromedp.Flag("mute-audio", true),
-		chromedp.Flag("no-sandbox", true), // needed in many docker envs
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("allow-file-access-from-files", true),
-		chromedp.Flag("disable-web-security", true), // helps local file assets; can be removed if not needed
-	)
-
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, allocOpts...)
-	defer cancelAlloc()
+	allocCtx, err := getDeliveryNoteBrowserAllocator(browserBin)
+	if err != nil {
+		return nil, err
+	}
 
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
 	defer cancelTask()
+
+	runCtx, cancelRun := context.WithTimeout(taskCtx, 25*time.Second)
+	defer cancelRun()
 
 	// Navigate to local HTML file.
 	targetURL := "file://" + filepath.ToSlash(htmlPath)
@@ -354,7 +365,7 @@ func renderPDFWithChromedp(browserBin, htmlPath string, opt pdfPrintOptions) ([]
 		}),
 	}
 
-	if err := chromedp.Run(taskCtx, actions...); err != nil {
+	if err := chromedp.Run(runCtx, actions...); err != nil {
 		return nil, fmt.Errorf("chromedp render pdf failed: %w", err)
 	}
 	if len(pdfBuf) == 0 {
@@ -363,6 +374,53 @@ func renderPDFWithChromedp(browserBin, htmlPath string, opt pdfPrintOptions) ([]
 
 	// Copy to prevent unexpected reuse.
 	return bytes.Clone(pdfBuf), nil
+}
+
+func getDeliveryNoteBrowserAllocator(browserBin string) (context.Context, error) {
+	deliveryNoteBrowserMu.Lock()
+	defer deliveryNoteBrowserMu.Unlock()
+
+	if deliveryNoteBrowserAllocator != nil && deliveryNoteBrowserBin == browserBin {
+		return deliveryNoteBrowserAllocator, nil
+	}
+
+	if deliveryNoteBrowserAllocatorFn != nil {
+		deliveryNoteBrowserAllocatorFn()
+		deliveryNoteBrowserAllocatorFn = nil
+		deliveryNoteBrowserAllocator = nil
+		deliveryNoteBrowserBin = ""
+	}
+
+	allocOpts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(browserBin),
+		chromedp.Flag("headless", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("hide-scrollbars", true),
+		chromedp.Flag("mute-audio", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("allow-file-access-from-files", true),
+		chromedp.Flag("disable-web-security", true),
+	)
+
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), allocOpts...)
+	warmCtx, cancelWarmCtx := chromedp.NewContext(allocCtx)
+	defer cancelWarmCtx()
+
+	warmRunCtx, cancelWarmRun := context.WithTimeout(warmCtx, 15*time.Second)
+	defer cancelWarmRun()
+
+	if err := chromedp.Run(warmRunCtx, chromedp.Navigate("about:blank")); err != nil {
+		cancelAlloc()
+		return nil, fmt.Errorf("initialize chromedp allocator: %w", err)
+	}
+
+	deliveryNoteBrowserBin = browserBin
+	deliveryNoteBrowserAllocator = allocCtx
+	deliveryNoteBrowserAllocatorFn = cancelAlloc
+	logger.Info("delivery_note_pdf_browser_warmed", "browser_bin", browserBin)
+
+	return deliveryNoteBrowserAllocator, nil
 }
 
 func renderPDFWithWkhtmltopdf(wkhtmlBin, htmlPath, tmpDir string) ([]byte, error) {

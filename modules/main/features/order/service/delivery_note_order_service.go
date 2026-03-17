@@ -17,6 +17,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/clinic"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/material"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -33,6 +34,17 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 		return nil, "", fmt.Errorf("invalid order_id")
 	}
 
+	startedAt := time.Now()
+	var (
+		fetchDataDuration time.Duration
+		buildDataDuration time.Duration
+		promotionDuration time.Duration
+		qrDuration        time.Duration
+		logoDuration      time.Duration
+		renderPDFDuration time.Duration
+	)
+
+	fetchStartedAt := time.Now()
 	orderDTO, err := s.repo.GetByID(ctx, req.OrderID)
 	if err != nil {
 		return nil, "", err
@@ -50,7 +62,9 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	if err != nil {
 		return nil, "", err
 	}
+	fetchDataDuration = time.Since(fetchStartedAt)
 
+	buildStartedAt := time.Now()
 	company := s.resolveDeliveryNoteCompany(ctx, orderDTO)
 	shippingAddress := s.resolveDeliveryNoteShippingAddress(ctx, orderDTO)
 	attachments := s.resolveDeliveryNoteAttachments(ctx, orderDTO, materials)
@@ -59,14 +73,18 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 	if err != nil {
 		return nil, "", err
 	}
+	buildDataDuration = time.Since(buildStartedAt)
 
+	promotionStartedAt := time.Now()
 	discountAmount, finalAmount, err := s.calculateDeliveryNotePricingByPromotion(ctx, orderDTO, products)
 	if err != nil {
 		return nil, "", err
 	}
 	note.DiscountAmount = discountAmount
 	note.FinalAmount = finalAmount
+	promotionDuration = time.Since(promotionStartedAt)
 
+	qrStartedAt := time.Now()
 	deliveryQRSvc := NewOrderDeliveryQRService(s.deps.Ent.(*generated.Client), s.deps)
 	rawToken, err := deliveryQRSvc.GenerateDeliveryQRToken(ctx, int(req.OrderID))
 	if err != nil {
@@ -77,7 +95,9 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 		note.QRCode = BuildDeliveryQRStartURL(s.deps.Config.DeliveryQR.ClientBaseURL, rawToken)
 		note.QRCodeImageURL = BuildQRCodeImageURL(note.QRCode, 160)
 	}
+	qrDuration = time.Since(qrStartedAt)
 
+	logoStartedAt := time.Now()
 	if strings.TrimSpace(note.Company.LogoPath) != "" {
 		logoData, err := ConvertImageToBase64(note.Company.LogoPath)
 		if err != nil {
@@ -85,13 +105,27 @@ func (s *orderService) GenerateDeliveryNoteByOrderID(ctx context.Context, req De
 		}
 		note.Company.LogoData = template.URL(logoData)
 	}
+	logoDuration = time.Since(logoStartedAt)
 
+	renderStartedAt := time.Now()
 	pdf, err := GenerateDeliveryNotePDF(note)
 	if err != nil {
 		return nil, "", err
 	}
+	renderPDFDuration = time.Since(renderStartedAt)
 
 	fileName := fmt.Sprintf("hoa-don-%s.pdf", strings.ReplaceAll(note.Order.Number, "/", "-"))
+	logger.Info(
+		"delivery_note_pdf_generated",
+		"order_id", req.OrderID,
+		"fetch_ms", fetchDataDuration.Milliseconds(),
+		"build_ms", buildDataDuration.Milliseconds(),
+		"promotion_ms", promotionDuration.Milliseconds(),
+		"qr_ms", qrDuration.Milliseconds(),
+		"logo_ms", logoDuration.Milliseconds(),
+		"render_pdf_ms", renderPDFDuration.Milliseconds(),
+		"total_ms", time.Since(startedAt).Milliseconds(),
+	)
 	return pdf, fileName, nil
 }
 

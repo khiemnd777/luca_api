@@ -8,6 +8,23 @@ import (
 	"testing"
 )
 
+func TestGetDeliveryNoteTemplate_Cached(t *testing.T) {
+	tpl1, err := getDeliveryNoteTemplate()
+	if err != nil {
+		t.Fatalf("getDeliveryNoteTemplate first call: %v", err)
+	}
+	tpl2, err := getDeliveryNoteTemplate()
+	if err != nil {
+		t.Fatalf("getDeliveryNoteTemplate second call: %v", err)
+	}
+	if tpl1 == nil || tpl2 == nil {
+		t.Fatal("expected non-nil templates")
+	}
+	if tpl1 != tpl2 {
+		t.Fatal("expected cached template instance to be reused")
+	}
+}
+
 func TestConvertImageToBase64_WithFileSchemePNG(t *testing.T) {
 	tmpDir := t.TempDir()
 	imgPath := filepath.Join(tmpDir, "logo.png")
@@ -35,6 +52,13 @@ func TestConvertImageToBase64_NotFound(t *testing.T) {
 	_, err := ConvertImageToBase64("/no/such/file.png")
 	if err == nil {
 		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestBuildQRCodeImageURL_EscapesPayload(t *testing.T) {
+	out := BuildQRCodeImageURL("https://example.com/delivery/qr/a b", 160)
+	if !strings.Contains(out, "data=https%3A%2F%2Fexample.com%2Fdelivery%2Fqr%2Fa+b") {
+		t.Fatalf("unexpected QR image URL: %s", out)
 	}
 }
 
