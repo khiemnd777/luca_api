@@ -10,8 +10,16 @@ import (
 
 func main() {
 	logger.Init()
+	logger.SetComponent("gateway")
 
 	config.Init(utils.GetFullPath("config.yaml"))
+	logger.Configure(logger.Options{
+		ServiceName:  config.Get().Observability.ServiceName,
+		Environment:  config.Get().Observability.Environment,
+		Level:        config.Get().Observability.Logs.Level,
+		RedactFields: config.Get().Observability.Logs.RedactFields,
+		Component:    "gateway",
+	})
 
 	logger.Info("Starting API Gateway...")
 	app := fiber.New()

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/shared/app/client_error"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/utils"
 )
 
@@ -28,6 +29,10 @@ func RequireAuth() fiber.Handler {
 
 		// Inject token into context for downstream access
 		ctxWithToken := utils.SetAccessTokenIntoContext(c.UserContext(), tokenStr)
+		ctxWithToken = logger.ContextWithFields(ctxWithToken, map[string]any{
+			"user_id":       int(claims["user_id"].(float64)),
+			"department_id": int(claims["dept_id"].(float64)),
+		})
 		c.SetUserContext(ctxWithToken)
 
 		return c.Next()

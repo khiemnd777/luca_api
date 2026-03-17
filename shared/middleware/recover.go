@@ -13,7 +13,7 @@ func RecoverAndWrapError() fiber.Handler {
 		defer func() {
 			if r := recover(); r != nil {
 				err := fmt.Errorf("panic: %v", r)
-				logger.Error("Recovered from panic", "error", err)
+				logger.ErrorContext(c.UserContext(), "Recovered from panic", "error", err)
 				_ = client_error.ResponseError(c, fiber.StatusInternalServerError, err)
 			}
 		}()

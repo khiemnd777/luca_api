@@ -12,6 +12,7 @@
 
 # === Go modules cache ===
 /go.sum
+/.gocache/
 
 # === Ent generated (shared + modules) ===
 /shared/db/ent/generated/

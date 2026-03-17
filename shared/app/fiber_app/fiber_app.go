@@ -34,6 +34,7 @@ func Init() (*Server, *fiber.App) {
 		return c.SendString("pong")
 	})
 
+	app.Use(middleware.AttachRequestContext())
 	app.Use(logger.New())                     // Simple request logger
 	app.Use(middleware.RecoverAndWrapError()) // Recover from panics and return error response
 
@@ -53,6 +54,7 @@ func NewFiberApp() *fiber.App {
 			return client_error.ResponseError(c, fiber.StatusInternalServerError, err)
 		},
 	})
+	app.Use(middleware.AttachRequestContext())
 	app.Use(logger.New())                     // Simple request logger
 	app.Use(middleware.RecoverAndWrapError()) // Recover from panics and return error response
 	return app

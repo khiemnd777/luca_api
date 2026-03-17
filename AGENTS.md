@@ -18,6 +18,22 @@ Primary stack:
 - **Cron jobs / workers**
 - **Excel import/export**
 
+## Orchestration Rules
+- `ORCHESTRATION_AGENTS.md` is the canonical orchestration playbook for this repository.
+- For every non-trivial technical task, read `ORCHESTRATION_AGENTS.md` before planning, answering, or editing code.
+- Treat orchestration as the default operating mode for this repo, not an opt-in workflow.
+- Do not require the user to say `Act as Conductor`, name subagents, provide decomposition, or remind you to read `ORCHESTRATION_AGENTS.md`.
+- If the user does say `Act as Conductor`, `Conductor`, `Orchestrator`, asks for delegation, parallel inspection, or multi-agent execution, you must explicitly follow `ORCHESTRATION_AGENTS.md` first.
+- For multi-module, ambiguous, or cross-cutting tasks, automatically assume the conductor role and select the smallest safe set of subagents defined by `ORCHESTRATION_AGENTS.md`.
+- Complete the orchestration triage first:
+- identify the owning module
+- inspect the relevant `main.go` / `registry.go` wiring path
+- determine schema, auth/RBAC, metadata/import, cache/search/realtime/notification, and job/dashboard side effects
+- decide which subagents are required
+- Do not answer directly from ad-hoc local inspection before this orchestration triage is complete.
+- If `ORCHESTRATION_AGENTS.md` conflicts with ad-hoc reasoning, follow `ORCHESTRATION_AGENTS.md`.
+- Only ask the user for clarification when `ORCHESTRATION_AGENTS.md` indicates inference would be unsafe.
+
 ## Architecture Rules
 - Keep the existing module-based architecture intact.
 - Follow the established layering: `handler -> service -> repository`.

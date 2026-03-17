@@ -86,3 +86,24 @@ circuitbreaker:
   interval: 30s
   timeout: 10s
   consecutivefailures: 5
+
+observability:
+  service_name: "luca_api"
+  environment: "production"
+  logs:
+    enabled: true
+    level: "info"
+    redact_fields:
+      - authorization
+      - cookie
+      - password
+      - token
+      - secret
+      - otp
+  loki:
+    base_url: "http://127.0.0.1:3100"
+    tenant_id: ""
+    bearer_token: ""
+    timeout: 5s
+    stream_selector: "{app=\"luca_api\"}"
+    max_query_limit: 200

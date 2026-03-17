@@ -51,9 +51,9 @@ func ResponseError(c *fiber.Ctx, statusCode int, err error, extraMessage ...stri
 	location := callerLocation(1)
 	logMessage := fmt.Sprintf("%s | at %s", message, location)
 	if statusCode >= fiber.StatusInternalServerError {
-		logger.Error(logMessage)
+		logger.ErrorContext(c.UserContext(), logMessage, "status_code", statusCode, "error", err)
 	} else {
-		logger.Warn(logMessage)
+		logger.WarnContext(c.UserContext(), logMessage, "status_code", statusCode, "error", err)
 	}
 
 	errResp := ErrorResponse{

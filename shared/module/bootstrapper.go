@@ -40,8 +40,16 @@ type ModuleOptions[T any] struct {
 
 func StartModule[T any](opts ModuleOptions[T]) {
 	logger.Init()
+	logger.SetComponent(opts.ModuleName)
 
 	config.Init(utils.GetFullPath("config.yaml"))
+	logger.Configure(logger.Options{
+		ServiceName:  config.Get().Observability.ServiceName,
+		Environment:  config.Get().Observability.Environment,
+		Level:        config.Get().Observability.Logs.Level,
+		RedactFields: config.Get().Observability.Logs.RedactFields,
+		Component:    opts.ModuleName,
+	})
 
 	cache.InitTTLConstants()
 

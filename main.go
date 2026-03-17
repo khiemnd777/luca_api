@@ -23,6 +23,7 @@ import (
 
 func main() {
 	logger.Init()
+	logger.SetComponent("api")
 
 	log.Println("🔧 Loading config file...")
 	if err := config.Init("config.yaml"); err != nil {
@@ -31,6 +32,13 @@ func main() {
 	}
 
 	log.Println("✅ Config file loaded!")
+	logger.Configure(logger.Options{
+		ServiceName:  config.Get().Observability.ServiceName,
+		Environment:  config.Get().Observability.Environment,
+		Level:        config.Get().Observability.Logs.Level,
+		RedactFields: config.Get().Observability.Logs.RedactFields,
+		Component:    "api",
+	})
 
 	log.Println("🚀 Starting Project...",
 		"project:", config.Get().Project.Name,

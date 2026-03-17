@@ -77,6 +77,28 @@ type RetryConfig struct {
 	Delay       time.Duration `yaml:"delay"`
 }
 
+type ObservabilityLogsConfig struct {
+	Enabled      bool     `yaml:"enabled"`
+	Level        string   `yaml:"level"`
+	RedactFields []string `yaml:"redact_fields"`
+}
+
+type ObservabilityLokiConfig struct {
+	BaseURL        string        `yaml:"base_url"`
+	TenantID       string        `yaml:"tenant_id"`
+	BearerToken    string        `yaml:"bearer_token"`
+	Timeout        time.Duration `yaml:"timeout"`
+	StreamSelector string        `yaml:"stream_selector"`
+	MaxQueryLimit  int           `yaml:"max_query_limit"`
+}
+
+type ObservabilityConfig struct {
+	ServiceName string                  `yaml:"service_name"`
+	Environment string                  `yaml:"environment"`
+	Logs        ObservabilityLogsConfig `yaml:"logs"`
+	Loki        ObservabilityLokiConfig `yaml:"loki"`
+}
+
 type AppConfig struct {
 	Project        ProjectConfig        `mapstructure:"project"`
 	Server         ServerConfig         `mapstructure:"server"`
@@ -86,4 +108,5 @@ type AppConfig struct {
 	Redis          RedisConfig          `mapstructure:"redis"`
 	CircuitBreaker CircuitBreakerConfig `yaml:"circuitbreaker"`
 	Retry          RetryConfig          `yaml:"retry"`
+	Observability  ObservabilityConfig  `yaml:"observability"`
 }

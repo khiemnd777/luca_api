@@ -28,15 +28,27 @@ func LogAndPrint(level string, msg string, err error) {
 
 	switch level {
 	case "error":
-		Error(msg, err)
+		Error(msg, "error", err)
 	case "warn":
-		Warn(msg, err)
+		Warn(msg, "error", err)
 	case "info":
-		Info(msg)
+		if err != nil {
+			Info(msg, "error", err)
+		} else {
+			Info(msg)
+		}
 	case "debug":
-		Debug(msg)
+		if err != nil {
+			Debug(msg, "error", err)
+		} else {
+			Debug(msg)
+		}
 	default:
-		Info(msg)
+		if err != nil {
+			Info(msg, "error", err)
+		} else {
+			Info(msg)
+		}
 	}
 }
 
