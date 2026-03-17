@@ -11,10 +11,15 @@ import (
 	_ "github.com/lib/pq"
 )
 
+const (
+	observabilityPermissionName  = "System Log Reader"
+	observabilityPermissionValue = "system_log.read"
+)
+
 type Role struct {
-	ID          int
-	Name        string
-	Description string
+	RoleName    string
+	DisplayName string
+	Brief       string
 }
 
 func main() {
@@ -37,28 +42,81 @@ func main() {
 	ctx := context.Background()
 
 	roles := []Role{
-		{ID: 1, Name: "user", Description: "A normal user"},
-		{ID: 2, Name: "admin", Description: "Administrator"},
-		{ID: 3, Name: "guest", Description: "Guest user with limited access"},
+		{RoleName: "user", DisplayName: "User", Brief: "A normal user"},
+		{RoleName: "admin", DisplayName: "Administrator", Brief: "Administrator"},
+		{RoleName: "guest", DisplayName: "Guest", Brief: "Guest user with limited access"},
 	}
 
 	for _, role := range roles {
-		var exists bool
-		err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM roles WHERE id = $1)`, role.ID).Scan(&exists)
+		roleID, err := ensureRole(ctx, db, role)
 		if err != nil {
-			log.Fatalf("❌ Failed to check existing role %q: %v", role.Name, err)
+			log.Fatalf("❌ Failed to ensure role %q: %v", role.RoleName, err)
 		}
-		if exists {
-			fmt.Printf("✅ Role '%s' already exists. Skipping insert.\n", role.Name)
-			continue
-		}
-
-		_, err = db.ExecContext(ctx,
-			`INSERT INTO roles (id, name, description) VALUES ($1, $2, $3)`,
-			role.ID, role.Name, role.Description)
-		if err != nil {
-			log.Fatalf("❌ Failed to insert role '%s': %v", role.Name, err)
-		}
-		fmt.Printf("✅ Inserted role '%s' successfully.\n", role.Name)
+		fmt.Printf("✅ Ensured role '%s' successfully (id=%d).\n", role.RoleName, roleID)
 	}
+
+	permID, err := ensurePermission(ctx, db, observabilityPermissionName, observabilityPermissionValue)
+	if err != nil {
+		log.Fatalf("❌ Failed to ensure permission %q: %v", observabilityPermissionValue, err)
+	}
+	adminRoleID, err := getRoleIDByName(ctx, db, "admin")
+	if err != nil {
+		log.Fatalf("❌ Failed to resolve admin role: %v", err)
+	}
+	if err := attachPermission(ctx, db, adminRoleID, permID); err != nil {
+		log.Fatalf("❌ Failed to assign permission %q to admin role: %v", observabilityPermissionValue, err)
+	}
+}
+
+func ensureRole(ctx context.Context, db *sql.DB, role Role) (int, error) {
+	var id int
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO roles (role_name, display_name, brief)
+		VALUES ($1, NULLIF($2, ''), NULLIF($3, ''))
+		ON CONFLICT (role_name) DO UPDATE
+		SET display_name = EXCLUDED.display_name,
+		    brief = EXCLUDED.brief
+		RETURNING id
+	`, role.RoleName, role.DisplayName, role.Brief).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func ensurePermission(ctx context.Context, db *sql.DB, name, value string) (int, error) {
+	var id int
+	err := db.QueryRowContext(ctx, `
+		INSERT INTO permissions (permission_name, permission_value)
+		VALUES ($1, $2)
+		ON CONFLICT (permission_value) DO UPDATE
+		SET permission_name = EXCLUDED.permission_name
+		RETURNING id
+	`, name, value).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func getRoleIDByName(ctx context.Context, db *sql.DB, roleName string) (int, error) {
+	var id int
+	err := db.QueryRowContext(ctx, `
+		SELECT id
+		FROM roles
+		WHERE role_name = $1
+	`, roleName).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func attachPermission(ctx context.Context, db *sql.DB, roleID, permID int) error {
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO role_permissions (role_id, permission_id)
+		VALUES ($1, $2)
+		ON CONFLICT (role_id, permission_id) DO NOTHING
+	`, roleID, permID)
+	return err
 }

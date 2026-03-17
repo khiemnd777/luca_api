@@ -1,6 +1,8 @@
 #!/bin/bash
+set -e
+
 # 🚀 Building project...
 ./init_project.sh
 
-#🚀 Boosting up...
+# 🚀 Boosting up...
 ./run.sh
