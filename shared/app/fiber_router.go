@@ -16,11 +16,11 @@ func RouterPost(router fiber.Router, path string, handlers ...fiber.Handler) {
 
 // Post registers POST route with Circuit Breaker + Retry
 func RouterPut(router fiber.Router, path string, handlers ...fiber.Handler) {
-	RouterRequest("PUT", router, path, WrapHandlers(path, handlers)...)
+	router.Put(path, WrapHandlers(path, handlers)...)
 }
 
 func RouterDelete(router fiber.Router, path string, handlers ...fiber.Handler) {
-	RouterRequest("DELETE", router, path, WrapHandlers(path, handlers)...)
+	router.Delete(path, WrapHandlers(path, handlers)...)
 }
 
 // Request supports any method (PUT, DELETE, etc) with Circuit Breaker + Retry

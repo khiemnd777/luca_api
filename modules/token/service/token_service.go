@@ -19,6 +19,8 @@ type TokenService struct {
 	accessTTL  time.Duration
 }
 
+var ErrInvalidRefreshToken = errors.New("invalid refresh token")
+
 func NewTokenService(repo *repository.TokenRepository, secret string) *TokenService {
 	return &TokenService{
 		repo:       repo,
@@ -96,8 +98,8 @@ func (s *TokenService) RefreshToken(ctx context.Context, refreshToken string) (*
 		return nil, fmt.Errorf("failed to validate refresh token: %w", err)
 	}
 
-	if found && !valid {
-		return nil, errors.New("invalid refresh token")
+	if !found || !valid {
+		return nil, ErrInvalidRefreshToken
 	}
 
 	perms, err := s.GetPermissionsByUserID(ctx, userID)

@@ -15,6 +15,8 @@ import (
 
 var breaker *gobreaker.CircuitBreaker
 
+var ErrClientResponse = errors.New("client response")
+
 func Init() {
 	cbCfg := config.Get().CircuitBreaker
 	settings := gobreaker.Settings{
@@ -54,6 +56,9 @@ func Run(name string, fn func(context.Context) (interface{}, error)) (interface{
 	switch {
 	case errors.Is(err, gobreaker.ErrOpenState):
 		logger.Warn("🚫 Circuit Open: blocked call [" + name + "]")
+		return nil, err
+	case errors.Is(err, ErrClientResponse):
+		logger.Warn("⚠️ Client response on [" + name + "]")
 		return nil, err
 	case err != nil:
 		if strings.Contains(err.Error(), "client error") {

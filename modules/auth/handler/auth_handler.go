@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/gofiber/fiber/v2"
 	authErrors "github.com/khiemnd777/andy_api/modules/auth/model/error"
@@ -92,7 +93,11 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 	}
 	tokens, err := h.svc.RefreshToken(c.UserContext(), body.Token)
 	if err != nil {
-		return client_error.ResponseError(c, fiber.StatusUnauthorized, err, err.Error())
+		var statusErr *app.StatusError
+		if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusUnauthorized {
+			return client_error.ResponseError(c, fiber.StatusUnauthorized, err, "invalid refresh token")
+		}
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 	return c.JSON(tokens)
 }

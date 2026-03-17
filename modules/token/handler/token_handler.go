@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/khiemnd777/andy_api/modules/token/service"
 	"github.com/khiemnd777/andy_api/shared/app"
@@ -36,7 +38,10 @@ func (h *TokenHandler) RefreshTokens(c *fiber.Ctx) error {
 	}
 	tokens, err := h.svc.RefreshToken(c.UserContext(), body.Token)
 	if err != nil {
-		return client_error.ResponseError(c, fiber.StatusUnauthorized, err, err.Error())
+		if errors.Is(err, service.ErrInvalidRefreshToken) {
+			return client_error.ResponseError(c, fiber.StatusUnauthorized, err, err.Error())
+		}
+		return client_error.ResponseError(c, fiber.StatusInternalServerError, err, err.Error())
 	}
 
 	return c.JSON(tokens)

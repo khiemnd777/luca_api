@@ -16,6 +16,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/circuitbreaker"
 	"github.com/khiemnd777/andy_api/shared/config"
 	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/sony/gobreaker"
 )
 
 // How to use:
@@ -23,6 +24,15 @@ import (
 
 type HttpClient struct {
 	client *http.Client
+}
+
+type StatusError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("status %d: %s", e.StatusCode, e.Message)
 }
 
 func NewHttpClient() *HttpClient {
@@ -70,13 +80,8 @@ func (c *HttpClient) CallRequestWithPort(ctx context.Context, method, module str
 			}
 			defer resp.Body.Close()
 
-			if resp.StatusCode >= 500 {
+			if resp.StatusCode >= 400 {
 				return nil, parseErrorResponse(resp)
-			}
-
-			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-				err := parseErrorResponse(resp)
-				return nil, fmt.Errorf("client error: %w", err)
 			}
 
 			if out != nil {
@@ -151,7 +156,10 @@ func parseErrorResponse(resp *http.Response) error {
 	if err != nil {
 		return fmt.Errorf("read body failed: %w", err)
 	}
-	return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	return &StatusError{
+		StatusCode: resp.StatusCode,
+		Message:    strings.TrimSpace(string(b)),
+	}
 }
 
 func getRetryOptions(opts []RetryOptions) RetryOptions {
@@ -162,7 +170,11 @@ func getRetryOptions(opts []RetryOptions) RetryOptions {
 			if err == nil {
 				return false
 			}
-			if strings.Contains(err.Error(), "client error:") {
+			if errors.Is(err, circuitbreaker.ErrClientResponse) || errors.Is(err, gobreaker.ErrOpenState) {
+				return false
+			}
+			var statusErr *StatusError
+			if errors.As(err, &statusErr) && statusErr.StatusCode < http.StatusInternalServerError {
 				return false
 			}
 			return true

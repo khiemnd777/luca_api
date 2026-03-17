@@ -36,22 +36,25 @@ func callerLocation(skip int) string {
 
 func ResponseError(c *fiber.Ctx, statusCode int, err error, extraMessage ...string) error {
 	message := "Server error"
+	if statusCode >= fiber.StatusBadRequest && statusCode < fiber.StatusInternalServerError {
+		message = "Client error"
+	}
 
 	if len(extraMessage) > 0 && extraMessage[0] != "" {
 		message = fmt.Sprintf("%s: %s", message, extraMessage[0])
 	}
 
-	if os.Getenv("APP_ENV") == "development" && err != nil {
+	if os.Getenv("APP_ENV") == "development" && err != nil && (len(extraMessage) == 0 || extraMessage[0] != err.Error()) {
 		message = fmt.Sprintf("%s\n%s", message, err.Error())
 	}
 
 	location := callerLocation(1)
-
-	logger.Error(fmt.Sprintf(
-		"[ERROR] %s | at %s",
-		message,
-		location,
-	))
+	logMessage := fmt.Sprintf("%s | at %s", message, location)
+	if statusCode >= fiber.StatusInternalServerError {
+		logger.Error(logMessage)
+	} else {
+		logger.Warn(logMessage)
+	}
 
 	errResp := ErrorResponse{
 		Code:    statusCode,

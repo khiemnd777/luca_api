@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/circuitbreaker"
 	"github.com/khiemnd777/andy_api/shared/config"
 	"github.com/khiemnd777/andy_api/shared/logger"
+	"github.com/sony/gobreaker"
 )
 
 // RetryOptions configures retry behavior for a route
@@ -43,6 +45,9 @@ func WrapHandler(name string, h fiber.Handler, opts ...RetryOptions) fiber.Handl
 		MaxAttempts: cfgRetry.MaxAttempts,
 		Delay:       cfgRetry.Delay,
 		ShouldRetry: func(err error) bool {
+			if errors.Is(err, circuitbreaker.ErrClientResponse) || errors.Is(err, gobreaker.ErrOpenState) {
+				return false
+			}
 			if ferr, ok := err.(*fiber.Error); ok && ferr.Code >= 400 && ferr.Code < 500 {
 				return false
 			}
@@ -67,11 +72,22 @@ func WrapHandler(name string, h fiber.Handler, opts ...RetryOptions) fiber.Handl
 				handleErr := h(c)
 
 				if ferr, ok := handleErr.(*fiber.Error); ok && ferr.Code >= 400 && ferr.Code < 500 {
-					return nil, nil
+					return nil, circuitbreaker.ErrClientResponse
+				}
+
+				if handleErr == nil {
+					statusCode := c.Response().StatusCode()
+					if statusCode >= fiber.StatusBadRequest && statusCode < fiber.StatusInternalServerError {
+						return nil, circuitbreaker.ErrClientResponse
+					}
 				}
 
 				return nil, handleErr
 			})
+
+			if errors.Is(err, circuitbreaker.ErrClientResponse) {
+				return nil
+			}
 
 			if err == nil || !retry.ShouldRetry(err) {
 				return err
