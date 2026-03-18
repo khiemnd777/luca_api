@@ -31,7 +31,7 @@ func init() {
 		Permissions: []string{"process.search"},
 		ExtraWhere: func(params policy.ExtraWhereParams, args *[]any) string {
 			*args = append(*args, params.DepartmentID)
-			return fmt.Sprintf("r.department_id = $%d::INT", len(*args))
+			return fmt.Sprintf("r.deleted_at IS NULL AND r.department_id = $%d::INT", len(*args))
 		},
 		CachePrefix: "product_process:list",
 	})

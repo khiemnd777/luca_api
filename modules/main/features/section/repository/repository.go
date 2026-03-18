@@ -46,17 +46,42 @@ func NewSectionRepository(db *generated.Client, deps *module.ModuleDeps[config.M
 	}
 }
 
+func (r *sectionRepo) clearLeaderFromOtherSections(ctx context.Context, tx *generated.Tx, leaderID *int, currentSectionID *int) error {
+	if leaderID == nil || *leaderID <= 0 {
+		return nil
+	}
+
+	q := tx.Section.Update().
+		Where(section.LeaderIDEQ(*leaderID))
+
+	if currentSectionID != nil && *currentSectionID > 0 {
+		q = q.Where(section.IDNEQ(*currentSectionID))
+	}
+
+	return q.
+		ClearLeaderID().
+		ClearLeaderName().
+		Exec(ctx)
+}
+
 func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
 	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
-		q := r.db.Section.Create().
+		if err := r.clearLeaderFromOtherSections(ctx, tx, input.LeaderID, nil); err != nil {
+			return nil, err
+		}
+
+		q := tx.Section.Create().
 			SetDepartmentID(input.DepartmentID).
-			SetNillableLeaderID(input.LeaderID).
-			SetNillableLeaderName(input.LeaderName).
 			SetActive(input.Active).
 			SetName(input.Name).
 			SetNillableCode(input.Code).
 			SetNillableColor(input.Color).
 			SetDescription(input.Description)
+
+		if input.LeaderID != nil && *input.LeaderID > 0 {
+			q.SetLeaderID(*input.LeaderID)
+			q.SetNillableLeaderName(input.LeaderName)
+		}
 
 		// custom fields
 		_, err := customfields.PrepareCustomFields(ctx,
@@ -88,15 +113,29 @@ func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*mode
 
 func (r *sectionRepo) Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
 	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
-		q := r.db.Section.UpdateOneID(input.ID).
+		if err := r.clearLeaderFromOtherSections(ctx, tx, input.LeaderID, &input.ID); err != nil {
+			return nil, err
+		}
+
+		q := tx.Section.UpdateOneID(input.ID).
 			SetDepartmentID(input.DepartmentID).
-			SetNillableLeaderID(input.LeaderID).
-			SetNillableLeaderName(input.LeaderName).
 			SetActive(input.Active).
 			SetName(input.Name).
 			SetNillableCode(input.Code).
 			SetNillableColor(input.Color).
 			SetDescription(input.Description)
+
+		if input.LeaderID != nil && *input.LeaderID > 0 {
+			q.SetLeaderID(*input.LeaderID)
+			if input.LeaderName != nil {
+				q.SetLeaderName(*input.LeaderName)
+			} else {
+				q.ClearLeaderName()
+			}
+		} else {
+			q.ClearLeaderID()
+			q.ClearLeaderName()
+		}
 
 		// custom fields
 		_, err := customfields.PrepareCustomFields(ctx,
@@ -214,6 +253,8 @@ func (r *sectionRepo) Search(ctx context.Context, deptID int, query dbutils.Sear
 
 func (r *sectionRepo) Delete(ctx context.Context, id int) error {
 	return r.db.Section.UpdateOneID(id).
+		ClearLeaderID().
+		ClearLeaderName().
 		SetDeletedAt(time.Now()).
 		Exec(ctx)
 }
