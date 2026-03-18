@@ -14,6 +14,7 @@ import (
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/orderitemprocess"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/process"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated/product"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/productprocess"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/mapper"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
@@ -625,17 +626,50 @@ func (r *orderItemProcessRepository) GetRawProcessesByProductID(
 	ctx context.Context,
 	productID int,
 ) ([]*model.ProcessDTO, error) {
-
-	const q = `
+	q := fmt.Sprintf(`
 WITH product_category AS (
-    SELECT category_id
+    SELECT id AS product_id, category_id
     FROM products
     WHERE id = $1
       AND deleted_at IS NULL
 ),
+process_candidates AS (
+    SELECT
+        pc.product_id,
+        cp.process_id,
+        1 AS source_priority,
+        cp.display_order
+    FROM product_category pc
+    JOIN %s cp
+        ON cp.category_id = pc.category_id
+
+    UNION ALL
+
+    SELECT
+        pc.product_id,
+        pp.process_id,
+        2 AS source_priority,
+        pp.display_order
+    FROM product_category pc
+    JOIN %s pp
+        ON pp.product_id = pc.product_id
+),
+ranked_processes AS (
+    SELECT
+        product_id,
+        process_id,
+        ROW_NUMBER() OVER (
+            PARTITION BY product_id, process_id
+            ORDER BY source_priority ASC, display_order ASC, process_id ASC
+        ) AS rn,
+        source_priority,
+        display_order
+    FROM process_candidates
+),
 ranked_sections AS (
     SELECT
         sp.process_id,
+        s.id AS section_id,
         s.leader_id,
         s.leader_name,
         ROW_NUMBER() OVER (
@@ -651,21 +685,21 @@ SELECT
     p.id,
     p.code,
     p.name,
-		p.color,
-		p.section_name,
+    p.color,
+    p.section_name,
+    rs.section_id,
     rs.leader_id,
     rs.leader_name
-FROM product_category pc
-JOIN category_processes cp
-    ON cp.category_id = pc.category_id
+FROM ranked_processes rp
 JOIN processes p
-    ON p.id = cp.process_id
+    ON p.id = rp.process_id
 LEFT JOIN ranked_sections rs
     ON rs.process_id = p.id
    AND rs.rn = 1
-WHERE p.deleted_at IS NULL
-ORDER BY cp.display_order ASC;
-`
+WHERE rp.rn = 1
+  AND p.deleted_at IS NULL
+ORDER BY rp.source_priority ASC, rp.display_order ASC, p.id ASC;
+`, categoryprocess.Table, productprocess.Table)
 
 	rows, err := r.db.QueryContext(ctx, q, productID)
 	if err != nil {
@@ -705,7 +739,7 @@ func (r *orderItemProcessRepository) getRawProcessesByProductIDs(
 		return map[int][]*model.ProcessDTO{}, nil
 	}
 
-	const q = `WITH product_categories AS (
+	q := fmt.Sprintf(`WITH product_categories AS (
     SELECT
         id AS product_id,
         category_id
@@ -713,10 +747,43 @@ func (r *orderItemProcessRepository) getRawProcessesByProductIDs(
     WHERE id = ANY($1)
       AND deleted_at IS NULL
 ),
+process_candidates AS (
+    SELECT
+        pc.product_id,
+        cp.process_id,
+        1 AS source_priority,
+        cp.display_order
+    FROM product_categories pc
+    JOIN %s cp
+        ON cp.category_id = pc.category_id
+
+    UNION ALL
+
+    SELECT
+        pc.product_id,
+        pp.process_id,
+        2 AS source_priority,
+        pp.display_order
+    FROM product_categories pc
+    JOIN %s pp
+        ON pp.product_id = pc.product_id
+),
+ranked_processes AS (
+    SELECT
+        product_id,
+        process_id,
+        ROW_NUMBER() OVER (
+            PARTITION BY product_id, process_id
+            ORDER BY source_priority ASC, display_order ASC, process_id ASC
+        ) AS rn,
+        source_priority,
+        display_order
+    FROM process_candidates
+),
 ranked_sections AS (
     SELECT
-				sp.process_id,
-				s.id AS section_id,
+        sp.process_id,
+        s.id AS section_id,
         s.leader_id,
         s.leader_name,
         ROW_NUMBER() OVER (
@@ -729,26 +796,25 @@ ranked_sections AS (
        AND s.deleted_at IS NULL
 )
 SELECT
-		pc.product_id,
+    rp.product_id,
     p.id,
     p.code,
     p.name,
     p.color,
     p.section_name,
-		rs.section_id,
+    rs.section_id,
     rs.leader_id,
     rs.leader_name
-FROM product_categories pc
-JOIN category_processes cp
-    ON cp.category_id = pc.category_id
+FROM ranked_processes rp
 JOIN processes p
-    ON p.id = cp.process_id
+    ON p.id = rp.process_id
    AND p.deleted_at IS NULL
 LEFT JOIN ranked_sections rs
     ON rs.process_id = p.id
    AND rs.rn = 1
-ORDER BY pc.product_id, cp.display_order ASC;
-`
+WHERE rp.rn = 1
+ORDER BY rp.product_id, rp.source_priority ASC, rp.display_order ASC, p.id ASC;
+`, categoryprocess.Table, productprocess.Table)
 
 	rows, err := r.db.QueryContext(ctx, q, pq.Array(productIDs))
 	if err != nil {
