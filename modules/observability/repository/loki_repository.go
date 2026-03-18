@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -52,7 +53,7 @@ func (r *observabilityRepository) ListLogs(ctx context.Context, query moduleMode
 	params.Set("query", r.buildStreamQuery(query))
 	params.Set("start", strconv.FormatInt(start.UnixNano(), 10))
 	params.Set("end", strconv.FormatInt(end.UnixNano(), 10))
-	params.Set("limit", strconv.Itoa(query.Limit))
+	params.Set("limit", strconv.Itoa(r.normalizeLimit(query.Limit)))
 	params.Set("direction", normalizeDirection(query.Direction))
 
 	var resp lokiRangeResponse
@@ -60,7 +61,7 @@ func (r *observabilityRepository) ListLogs(ctx context.Context, query moduleMode
 		return nil, err
 	}
 
-	items := make([]moduleModel.LogEntry, 0, query.Limit)
+	items := make([]moduleModel.LogEntry, 0, r.normalizeLimit(query.Limit))
 	for _, stream := range resp.Data.Result {
 		for _, value := range stream.Values {
 			if len(value) < 2 {
@@ -142,12 +143,17 @@ func (r *observabilityRepository) buildStreamQuery(query moduleModel.ListLogsQue
 	}
 
 	parts = append(parts, "| json")
+	parts = append(parts, `| __error__=""`)
 
 	if len(query.Levels) > 0 {
 		if len(query.Levels) == 1 {
 			parts = append(parts, fmt.Sprintf(`| level=%s`, strconv.Quote(strings.ToLower(query.Levels[0]))))
 		} else {
-			parts = append(parts, fmt.Sprintf(`| level=~%s`, strconv.Quote(strings.Join(query.Levels, "|"))))
+			levels := make([]string, 0, len(query.Levels))
+			for _, level := range query.Levels {
+				levels = append(levels, regexp.QuoteMeta(strings.ToLower(level)))
+			}
+			parts = append(parts, fmt.Sprintf(`| level=~%s`, strconv.Quote(strings.Join(levels, "|"))))
 		}
 	}
 	if query.Module != "" {
@@ -156,8 +162,17 @@ func (r *observabilityRepository) buildStreamQuery(query moduleModel.ListLogsQue
 	if query.Service != "" {
 		parts = append(parts, fmt.Sprintf(`| service=%s`, strconv.Quote(query.Service)))
 	}
+	if query.Env != "" {
+		parts = append(parts, fmt.Sprintf(`| env=%s`, strconv.Quote(query.Env)))
+	}
 	if query.RequestID != "" {
 		parts = append(parts, fmt.Sprintf(`| request_id=%s`, strconv.Quote(query.RequestID)))
+	}
+	if query.UserID != nil {
+		parts = append(parts, fmt.Sprintf(`| user_id=%s`, strconv.Quote(strconv.Itoa(*query.UserID))))
+	}
+	if query.DeptID != nil {
+		parts = append(parts, fmt.Sprintf(`| department_id=%s`, strconv.Quote(strconv.Itoa(*query.DeptID))))
 	}
 
 	return strings.Join(parts, " ")
@@ -215,19 +230,19 @@ func parseLogEntry(rawTS, rawLine string, stream map[string]string) moduleModel.
 	}
 
 	entry.Timestamp = parseTime(payload["ts"], entry.Timestamp)
-	entry.Level = toString(payload["level"])
-	entry.Message = toString(payload["message"])
+	entry.Level = firstNonEmpty(toString(payload["level"]), toString(payload["severity"]))
+	entry.Message = firstNonEmpty(toString(payload["message"]), toString(payload["msg"]))
 	entry.Service = firstNonEmpty(toString(payload["service"]), stream["service"])
 	entry.Module = firstNonEmpty(toString(payload["module"]), stream["module"])
-	entry.Environment = toString(payload["env"])
-	entry.RequestID = toString(payload["request_id"])
-	entry.UserID = toInt(payload["user_id"])
-	entry.DepartmentID = toInt(payload["department_id"])
-	entry.Method = toString(payload["method"])
-	entry.Path = toString(payload["path"])
-	entry.Source = toString(payload["source"])
-	entry.Error = toString(payload["error"])
-	entry.Stacktrace = toString(payload["stacktrace"])
+	entry.Environment = firstNonEmpty(toString(payload["env"]), toString(payload["environment"]), stream["env"])
+	entry.RequestID = firstNonEmpty(toString(payload["request_id"]), stream["request_id"])
+	entry.UserID = firstNonZero(toInt(payload["user_id"]), toInt(stream["user_id"]))
+	entry.DepartmentID = firstNonZero(toInt(payload["department_id"]), toInt(stream["department_id"]))
+	entry.Method = firstNonEmpty(toString(payload["method"]), stream["method"])
+	entry.Path = firstNonEmpty(toString(payload["path"]), stream["path"])
+	entry.Source = firstNonEmpty(toString(payload["source"]), stream["source"])
+	entry.Error = firstNonEmpty(toString(payload["error"]), stream["error"])
+	entry.Stacktrace = firstNonEmpty(toString(payload["stacktrace"]), stream["stacktrace"])
 	entry.Fields = extractExtraFields(payload)
 
 	return entry
@@ -237,10 +252,13 @@ func extractExtraFields(payload map[string]any) map[string]any {
 	known := map[string]struct{}{
 		"ts":            {},
 		"level":         {},
+		"severity":      {},
 		"message":       {},
+		"msg":           {},
 		"service":       {},
 		"module":        {},
 		"env":           {},
+		"environment":   {},
 		"request_id":    {},
 		"user_id":       {},
 		"department_id": {},
@@ -314,14 +332,53 @@ func toInt(value any) int {
 	switch vv := value.(type) {
 	case int:
 		return vv
+	case int8:
+		return int(vv)
+	case int16:
+		return int(vv)
+	case int32:
+		return int(vv)
+	case int64:
+		return int(vv)
 	case float64:
+		return int(vv)
+	case float32:
 		return int(vv)
 	case json.Number:
 		n, _ := vv.Int64()
 		return int(n)
+	case string:
+		n, err := strconv.Atoi(strings.TrimSpace(vv))
+		if err != nil {
+			return 0
+		}
+		return n
 	default:
 		return 0
 	}
+}
+
+func firstNonZero(values ...int) int {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func (r *observabilityRepository) normalizeLimit(limit int) int {
+	maxLimit := r.cfg.Loki.MaxQueryLimit
+	if maxLimit <= 0 {
+		maxLimit = 200
+	}
+	if limit <= 0 {
+		return 50
+	}
+	if limit > maxLimit {
+		return maxLimit
+	}
+	return limit
 }
 
 func firstNonEmpty(values ...string) string {

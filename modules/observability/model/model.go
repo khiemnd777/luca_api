@@ -6,7 +6,10 @@ type ListLogsQuery struct {
 	Levels    []string
 	Module    string
 	Service   string
+	Env       string
 	RequestID string
+	UserID    *int
+	DeptID    *int
 	Keyword   string
 	Direction string
 	From      time.Time

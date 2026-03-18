@@ -34,6 +34,9 @@ flyway.conf
 *.secret.yaml
 *.yaml
 !version.yaml
+!docker-compose.observability.yml
+!observability/
+!observability/**/*.yaml
 
 # === IDEs ===
 .vscode/

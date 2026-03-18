@@ -41,9 +41,6 @@ func normalizeQuery(query model.ListLogsQuery) model.ListLogsQuery {
 	if query.Limit <= 0 {
 		query.Limit = 50
 	}
-	if query.Limit > 200 {
-		query.Limit = 200
-	}
 
 	if query.To.IsZero() {
 		query.To = time.Now()
@@ -60,8 +57,15 @@ func normalizeQuery(query model.ListLogsQuery) model.ListLogsQuery {
 	}
 	query.Module = strings.TrimSpace(query.Module)
 	query.Service = strings.TrimSpace(query.Service)
+	query.Env = strings.TrimSpace(query.Env)
 	query.RequestID = strings.TrimSpace(query.RequestID)
 	query.Keyword = strings.TrimSpace(query.Keyword)
+	if query.UserID != nil && *query.UserID < 0 {
+		query.UserID = nil
+	}
+	if query.DeptID != nil && *query.DeptID < 0 {
+		query.DeptID = nil
+	}
 
 	return query
 }

@@ -1,0 +1,39 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: luca_api
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: luca_api
+          app: luca_api
+          source: app_stdout
+          __path__: /var/log/luca/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            ts: ts
+            level: level
+            message: message
+            service: service
+            module: module
+            env: env
+            request_id: request_id
+            user_id: user_id
+            department_id: department_id
+            source: source
+            stacktrace: stacktrace
+      - labels:
+          level:
+          service:
+          module:
+          env:

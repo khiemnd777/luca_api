@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -83,11 +84,23 @@ func parseListLogsQuery(c *fiber.Ctx) (model.ListLogsQuery, error) {
 		levels = splitCSV(c.Query("levels"))
 	}
 
+	userID, err := parseOptionalIntQuery(c, "user_id")
+	if err != nil {
+		return model.ListLogsQuery{}, err
+	}
+	deptID, err := parseOptionalIntQuery(c, "department_id")
+	if err != nil {
+		return model.ListLogsQuery{}, err
+	}
+
 	return model.ListLogsQuery{
 		Levels:    levels,
 		Module:    c.Query("module"),
 		Service:   c.Query("service"),
+		Env:       c.Query("env"),
 		RequestID: c.Query("request_id"),
+		UserID:    userID,
+		DeptID:    deptID,
 		Keyword:   c.Query("keyword"),
 		Direction: c.Query("direction"),
 		From:      from,
@@ -127,4 +140,17 @@ func splitCSV(raw string) []string {
 		}
 	}
 	return out
+}
+
+func parseOptionalIntQuery(c *fiber.Ctx, key string) (*int, error) {
+	raw := strings.TrimSpace(c.Query(key))
+	if raw == "" {
+		return nil, nil
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "invalid "+key)
+	}
+	return &value, nil
 }
