@@ -46,30 +46,8 @@ func NewSectionRepository(db *generated.Client, deps *module.ModuleDeps[config.M
 	}
 }
 
-func (r *sectionRepo) clearLeaderFromOtherSections(ctx context.Context, tx *generated.Tx, leaderID *int, currentSectionID *int) error {
-	if leaderID == nil || *leaderID <= 0 {
-		return nil
-	}
-
-	q := tx.Section.Update().
-		Where(section.LeaderIDEQ(*leaderID))
-
-	if currentSectionID != nil && *currentSectionID > 0 {
-		q = q.Where(section.IDNEQ(*currentSectionID))
-	}
-
-	return q.
-		ClearLeaderID().
-		ClearLeaderName().
-		Exec(ctx)
-}
-
 func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
 	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
-		if err := r.clearLeaderFromOtherSections(ctx, tx, input.LeaderID, nil); err != nil {
-			return nil, err
-		}
-
 		q := tx.Section.Create().
 			SetDepartmentID(input.DepartmentID).
 			SetActive(input.Active).
@@ -113,10 +91,6 @@ func (r *sectionRepo) Create(ctx context.Context, input model.SectionDTO) (*mode
 
 func (r *sectionRepo) Update(ctx context.Context, input model.SectionDTO) (*model.SectionDTO, error) {
 	return dbutils.WithTx(ctx, r.db, func(tx *generated.Tx) (*model.SectionDTO, error) {
-		if err := r.clearLeaderFromOtherSections(ctx, tx, input.LeaderID, &input.ID); err != nil {
-			return nil, err
-		}
-
 		q := tx.Section.UpdateOneID(input.ID).
 			SetDepartmentID(input.DepartmentID).
 			SetActive(input.Active).

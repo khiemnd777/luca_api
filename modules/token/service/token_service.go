@@ -21,6 +21,14 @@ type TokenService struct {
 
 var ErrInvalidRefreshToken = errors.New("invalid refresh token")
 
+func userPermissionCacheKey(id int) string {
+	return fmt.Sprintf("user:%d:perms", id)
+}
+
+func userDepartmentCacheKey(id int) string {
+	return fmt.Sprintf("user:%d:dept", id)
+}
+
 func NewTokenService(repo *repository.TokenRepository, secret string) *TokenService {
 	return &TokenService{
 		repo:       repo,
@@ -31,13 +39,13 @@ func NewTokenService(repo *repository.TokenRepository, secret string) *TokenServ
 }
 
 func (s *TokenService) GetPermissionsByUserID(ctx context.Context, id int) (*map[string]struct{}, error) {
-	return cache.Get("user:%d:perms", cache.TTLLong, func() (*map[string]struct{}, error) {
+	return cache.Get(userPermissionCacheKey(id), cache.TTLLong, func() (*map[string]struct{}, error) {
 		return s.repo.GetPermissionsByUserID(ctx, id)
 	})
 }
 
 func (s *TokenService) GetDepartmentByUserID(ctx context.Context, id int) (*int, error) {
-	return cache.Get("user:%d:dept", cache.TTLLong, func() (*int, error) {
+	return cache.Get(userDepartmentCacheKey(id), cache.TTLLong, func() (*int, error) {
 		return s.repo.GetDepartmentByUserID(ctx, id)
 	})
 }

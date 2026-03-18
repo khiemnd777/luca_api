@@ -28,7 +28,7 @@ func (s *Hub) InitPubSubEvents() {
 	pubsub.Subscribe("realtime:broadcast:dept", func(payload *realtime_model.RealtimeRequest) error {
 		msg, _ := json.Marshal(payload.Message)
 		if payload.DeptID != nil {
-			s.BroadcastToUser(*payload.DeptID, msg)
+			s.BroadcastToDept(*payload.DeptID, msg)
 		}
 		return nil
 	})

@@ -63,6 +63,7 @@ func StartModule[T any](opts ModuleOptions[T]) {
 	cfg, err := utils.LoadConfig[T](opts.ConfigPath)
 	if err != nil {
 		logger.Error(fmt.Sprintf("❌ Failed to load module config: %v", err))
+		return
 	}
 
 	// Should use `go run scripts/module_runner status` instead.
@@ -75,11 +76,13 @@ func StartModule[T any](opts ModuleOptions[T]) {
 	dbClient, err := db.NewDatabaseClient(dbCfg)
 	if err != nil {
 		logger.Error(fmt.Sprintf("❌ Cannot create database client: %v", err))
+		return
 	}
 	defer dbClient.Close()
 
 	if err := dbClient.Connect(); err != nil {
 		logger.Error(fmt.Sprintf("❌ Failed to connect to database: %v", err))
+		return
 	}
 
 	// Step 3: Init Ent client
@@ -89,6 +92,7 @@ func StartModule[T any](opts ModuleOptions[T]) {
 		entClient, err = opts.InitEntClient(any(cfg).(interface{ GetDatabase() config.DatabaseConfig }).GetDatabase().Provider, sqlDB, cfg)
 		if err != nil {
 			logger.Error(fmt.Sprintf("❌ Failed to init Ent client: %v", err))
+			return
 		}
 	}
 
@@ -98,6 +102,7 @@ func StartModule[T any](opts ModuleOptions[T]) {
 		sharedEntClient, err = (opts.InitSharedEntClient)(any(cfg).(interface{ GetSharedDatabase() config.DatabaseConfig }).GetSharedDatabase().Provider, sqlDB, cfg)
 		if err != nil {
 			logger.Error(fmt.Sprintf("❌ Failed to init Shared Ent client: %v", err))
+			return
 		}
 	}
 

@@ -19,6 +19,7 @@ var (
 	channelHandlers   = make(map[string][]JsonHandler)
 	pubsubCancelFuncs = make(map[string]context.CancelFunc)
 	messageWgMap      = sync.Map{}
+	channelMu         sync.RWMutex
 )
 
 type asyncMessage struct {
@@ -29,6 +30,9 @@ type asyncMessage struct {
 // Publish sends a raw string message to a channel.
 func publish(channel string, message string) error {
 	rdb := redis.GetInstance("pubsub")
+	if rdb == nil {
+		return fmt.Errorf("redis instance 'pubsub' not available")
+	}
 	err := rdb.Publish(ctx, channel, message).Err()
 	if err != nil {
 		logger.Error("❌ Redis PUBLISH error:", err)
@@ -63,7 +67,9 @@ func PublishAsync(channel string, payload any) error {
 		return err
 	}
 
-	handlers := channelHandlers[channel]
+	channelMu.RLock()
+	handlers := append([]JsonHandler(nil), channelHandlers[channel]...)
+	channelMu.RUnlock()
 	wg := &sync.WaitGroup{}
 	wg.Add(len(handlers))
 	messageWgMap.Store(msgID, wg)
@@ -93,43 +99,74 @@ func PublishAsync(channel string, payload any) error {
 
 // Subscribe listens for messages from a Redis channel and runs a handler.
 func subscribe(channel string, handler JsonHandler) {
+	channelMu.Lock()
 	if _, exists := channelHandlers[channel]; !exists {
 		channelHandlers[channel] = []JsonHandler{}
 	}
-
 	channelHandlers[channel] = append(channelHandlers[channel], handler)
-
 	if _, exists := pubsubCancelFuncs[channel]; exists {
+		channelMu.Unlock()
+		return
+	}
+	subCtx, cancel := context.WithCancel(ctx)
+	pubsubCancelFuncs[channel] = cancel
+	channelMu.Unlock()
+
+	rdb := redis.GetInstance("pubsub")
+	if rdb == nil {
+		logger.Warn("⚠️ Redis instance 'pubsub' not available for channel: " + channel)
 		return
 	}
 
-	rdb := redis.GetInstance("pubsub")
-	sub := rdb.Subscribe(ctx, channel)
-	ch := sub.Channel()
-
-	subCtx, cancel := context.WithCancel(ctx)
-	pubsubCancelFuncs[channel] = cancel
-
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("❌ Redis SUBSCRIBE loop panic [%s]: %v", channel, r))
+			}
+		}()
+
 		logger.Debug("🔔 Redis SUBSCRIBED to channel: " + channel)
 		for {
-			select {
-			case msg := <-ch:
-				logger.Debug("📨 Redis RECEIVED [" + msg.Channel + "]: " + msg.Payload)
+			sub := rdb.Subscribe(ctx, channel)
+			ch := sub.Channel()
 
-				var wg sync.WaitGroup
-				for _, h := range channelHandlers[channel] {
-					wg.Add(1)
-					go func(handler JsonHandler) {
-						defer wg.Done()
-						_ = handler(msg.Payload) // ignore error for now
-					}(h)
+			for {
+				select {
+				case msg, ok := <-ch:
+					if !ok || msg == nil {
+						logger.Warn("⚠️ Redis subscription channel closed, retrying: " + channel)
+						_ = sub.Close()
+						time.Sleep(time.Second)
+						goto retry
+					}
+
+					logger.Debug("📨 Redis RECEIVED [" + msg.Channel + "]: " + msg.Payload)
+
+					channelMu.RLock()
+					handlers := append([]JsonHandler(nil), channelHandlers[channel]...)
+					channelMu.RUnlock()
+
+					var wg sync.WaitGroup
+					for _, h := range handlers {
+						wg.Add(1)
+						go func(handler JsonHandler) {
+							defer wg.Done()
+							defer func() {
+								if r := recover(); r != nil {
+									logger.Error(fmt.Sprintf("❌ Redis handler panic [%s]: %v", channel, r))
+								}
+							}()
+							_ = handler(msg.Payload)
+						}(h)
+					}
+					wg.Wait()
+				case <-subCtx.Done():
+					_ = sub.Close()
+					logger.Debug("🔕 Redis UNSUBSCRIBED from channel: " + channel)
+					return
 				}
-				wg.Wait()
-			case <-subCtx.Done():
-				logger.Debug("🔕 Redis UNSUBSCRIBED from channel: " + channel)
-				return
 			}
+		retry:
 		}
 	}()
 }
@@ -185,6 +222,9 @@ func equalHandlers(a, b func(msg string) error) bool {
 
 // Unsubscribe cancels listening to a Redis channel.
 func Unsubscribe(channel string, handlerToRemove JsonHandler) {
+	channelMu.Lock()
+	defer channelMu.Unlock()
+
 	handlers := channelHandlers[channel]
 	newHandlers := make([]JsonHandler, 0, len(handlers))
 

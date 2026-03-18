@@ -3,31 +3,60 @@ package service
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gofiber/websocket/v2"
 )
 
 type Hub struct {
 	mu          sync.RWMutex
-	clients     map[int][]*websocket.Conn // userID -> []*Conn
-	deptClients map[int][]*websocket.Conn // deptID -> []*Conn
-	Register    chan ClientConn
-	Unregister  chan ClientConn
+	clients     map[int][]*ClientConn // userID -> []*Conn
+	deptClients map[int][]*ClientConn // deptID -> []*Conn
+	Register    chan *ClientConn
+	Unregister  chan *ClientConn
 }
 
 type ClientConn struct {
-	UserID int
-	DeptID int
-	Conn   *websocket.Conn
+	UserID  int
+	DeptID  int
+	Conn    *websocket.Conn
+	writeMu sync.Mutex
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:     make(map[int][]*websocket.Conn),
-		deptClients: make(map[int][]*websocket.Conn),
-		Register:    make(chan ClientConn),
-		Unregister:  make(chan ClientConn),
+		clients:     make(map[int][]*ClientConn),
+		deptClients: make(map[int][]*ClientConn),
+		Register:    make(chan *ClientConn),
+		Unregister:  make(chan *ClientConn),
 	}
+}
+
+func (c *ClientConn) WriteMessage(messageType int, msg []byte, deadline time.Duration) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	if deadline > 0 {
+		_ = c.Conn.SetWriteDeadline(time.Now().Add(deadline))
+	}
+	return c.Conn.WriteMessage(messageType, msg)
+}
+
+func (c *ClientConn) WriteControl(messageType int, data []byte, deadline time.Duration) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	writeDeadline := time.Now()
+	if deadline > 0 {
+		writeDeadline = writeDeadline.Add(deadline)
+	}
+	return c.Conn.WriteControl(messageType, data, writeDeadline)
+}
+
+func (c *ClientConn) Close() error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.Conn.Close()
 }
 
 func (h *Hub) Run() {
@@ -35,8 +64,8 @@ func (h *Hub) Run() {
 		select {
 		case c := <-h.Register:
 			h.mu.Lock()
-			h.clients[c.UserID] = append(h.clients[c.UserID], c.Conn)
-			h.deptClients[c.DeptID] = append(h.deptClients[c.DeptID], c.Conn)
+			h.clients[c.UserID] = append(h.clients[c.UserID], c)
+			h.deptClients[c.DeptID] = append(h.deptClients[c.DeptID], c)
 			h.mu.Unlock()
 			log.Printf("✅ User %d connected", c.UserID)
 
@@ -44,7 +73,7 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			if conns, ok := h.clients[c.UserID]; ok {
 				for i, conn := range conns {
-					if conn == c.Conn {
+					if conn == c {
 						h.clients[c.UserID] = append(conns[:i], conns[i+1:]...)
 						break
 					}
@@ -55,7 +84,7 @@ func (h *Hub) Run() {
 			}
 			if conns, ok := h.deptClients[c.DeptID]; ok {
 				for i, conn := range conns {
-					if conn == c.Conn {
+					if conn == c {
 						h.deptClients[c.DeptID] = append(conns[:i], conns[i+1:]...)
 						break
 					}
@@ -76,7 +105,7 @@ func (h *Hub) SendToUser(userID int, msg []byte) {
 	defer h.mu.RUnlock()
 	if conns, ok := h.clients[userID]; ok {
 		for _, conn := range conns {
-			conn.WriteMessage(websocket.TextMessage, msg)
+			_ = conn.WriteMessage(websocket.TextMessage, msg, 5*time.Second)
 		}
 	}
 }
@@ -86,7 +115,7 @@ func (h *Hub) BroadcastToUser(userID int, msg []byte) {
 	defer h.mu.RUnlock()
 	if conns, ok := h.clients[userID]; ok {
 		for _, conn := range conns {
-			conn.WriteMessage(websocket.TextMessage, msg)
+			_ = conn.WriteMessage(websocket.TextMessage, msg, 5*time.Second)
 		}
 	}
 }
@@ -96,7 +125,7 @@ func (h *Hub) BroadcastAll(msg []byte) {
 	defer h.mu.RUnlock()
 	for _, conns := range h.clients {
 		for _, conn := range conns {
-			conn.WriteMessage(websocket.TextMessage, msg)
+			_ = conn.WriteMessage(websocket.TextMessage, msg, 5*time.Second)
 		}
 	}
 }
@@ -106,7 +135,7 @@ func (h *Hub) BroadcastToDept(deptID int, msg []byte) {
 	defer h.mu.RUnlock()
 	if conns, ok := h.deptClients[deptID]; ok {
 		for _, conn := range conns {
-			conn.WriteMessage(websocket.TextMessage, msg)
+			_ = conn.WriteMessage(websocket.TextMessage, msg, 5*time.Second)
 		}
 	}
 }

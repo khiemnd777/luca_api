@@ -78,7 +78,7 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 			return
 		}
 
-		client := service.ClientConn{
+		client := &service.ClientConn{
 			UserID: userID,
 			DeptID: deptID,
 			Conn:   c,
@@ -87,7 +87,7 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 		h.hub.Register <- client
 		defer func() {
 			h.hub.Unregister <- client
-			_ = c.Close()
+			_ = client.Close()
 		}()
 
 		// Message-level heartbeat for proxy/gateway environments
@@ -95,7 +95,7 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 
 		stopPing := make(chan struct{})
 		defer close(stopPing)
-		go h.pingLoopMessage(c, stopPing)
+		go h.pingLoop(client, stopPing)
 
 		for {
 			mt, msg, err := c.ReadMessage()
@@ -115,7 +115,7 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 					continue
 				case "ping":
 					// client-initiated ping; reply immediately
-					_ = h.writeText(c, "pong")
+					_ = h.writeText(client, "pong")
 					_ = c.SetReadDeadline(time.Now().Add(h.pongWait))
 					continue
 				}
@@ -155,7 +155,7 @@ func (h *Handler) setupMessageHeartbeat(c *websocket.Conn) {
 	_ = c.SetReadDeadline(time.Now().Add(h.pongWait))
 }
 
-func (h *Handler) pingLoopMessage(c *websocket.Conn, stop <-chan struct{}) {
+func (h *Handler) pingLoop(client *service.ClientConn, stop <-chan struct{}) {
 	ticker := time.NewTicker(h.pingPeriod)
 	defer ticker.Stop()
 
@@ -164,16 +164,15 @@ func (h *Handler) pingLoopMessage(c *websocket.Conn, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
-			if err := h.writeText(c, "ping"); err != nil {
+			if err := h.writeText(client, "ping"); err != nil {
 				return
 			}
 		}
 	}
 }
 
-func (h *Handler) writeText(c *websocket.Conn, s string) error {
-	_ = c.SetWriteDeadline(time.Now().Add(h.writeWait))
-	return c.WriteMessage(websocket.TextMessage, []byte(s))
+func (h *Handler) writeText(client *service.ClientConn, s string) error {
+	return client.WriteMessage(websocket.TextMessage, []byte(s), h.writeWait)
 }
 
 func (h *Handler) parseDeptIDFromJWT(c *websocket.Conn) (int, error) {

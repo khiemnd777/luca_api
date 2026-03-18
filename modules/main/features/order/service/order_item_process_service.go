@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/db/ent/generated/department"
 	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
@@ -133,6 +134,29 @@ func kAssignedInProgressList(assignedID int64, q table.TableQuery) string {
 		orderBy = *q.OrderBy
 	}
 	return fmt.Sprintf("order:assigned:%d:inprogresses:l%d:p%d:o%s:d%s", assignedID, q.Limit, q.Page, orderBy, q.Direction)
+}
+
+func (s *orderItemProcessService) getDepartmentAdminID(ctx context.Context, deptID int) (*int, error) {
+	if deptID <= 0 {
+		return nil, nil
+	}
+
+	dept, err := s.deps.Ent.(*generated.Client).Department.
+		Query().
+		Where(department.IDEQ(deptID)).
+		Select(department.FieldAdministratorID).
+		Only(ctx)
+	if err != nil {
+		if generated.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if dept.AdministratorID == nil || *dept.AdministratorID <= 0 {
+		return nil, nil
+	}
+
+	return dept.AdministratorID, nil
 }
 
 func (s *orderItemProcessService) GetRawProcessesByProductID(ctx context.Context, productID int) ([]*model.ProcessDTO, error) {
@@ -295,10 +319,11 @@ func (s *orderItemProcessService) CheckInOrOut(
 	cache.InvalidateKeys(kOrderAll(deptID)...)
 
 	shouldNotifyNextLeader := dto.CompletedAt != nil && dto.NextProcessID != nil && dto.NextLeaderID != nil
+	shouldNotifyDepartmentAdmin := dto.CompletedAt != nil && dto.NextProcessID == nil
 
 	// notify to next process's leader
 	if shouldNotifyNextLeader {
-		notification.Notify(*dto.NextLeaderID, userID, "order:checkout", map[string]any{
+		notification.Notify(*dto.NextLeaderID, userID, notification.TypeOrderCheckoutToLeader, map[string]any{
 			"leader_id":       dto.NextLeaderID,
 			"leader_name":     dto.NextLeaderName,
 			"order_item_id":   dto.OrderItemID,
@@ -314,6 +339,38 @@ func (s *orderItemProcessService) CheckInOrOut(
 			"process_id", dto.ProcessID,
 			"next_process_id", dto.NextProcessID,
 		)
+	}
+	if shouldNotifyDepartmentAdmin {
+		adminID, adminErr := s.getDepartmentAdminID(ctx, deptID)
+		if adminErr != nil {
+			logger.Warn(
+				"order_checkout_final_notification_admin_lookup_failed",
+				"dept_id", deptID,
+				"order_id", dto.OrderID,
+				"order_item_id", dto.OrderItemID,
+				"process_id", dto.ProcessID,
+				"error", adminErr.Error(),
+			)
+		} else if adminID != nil {
+			notification.Notify(*adminID, userID, notification.TypeOrderProcessCompleted, map[string]any{
+				"department_id":    deptID,
+				"admin_id":         adminID,
+				"order_id":         dto.OrderID,
+				"order_item_id":    dto.OrderItemID,
+				"order_item_code":  dto.OrderItemCode,
+				"section_name":     dto.SectionName,
+				"process_name":     dto.ProcessName,
+				"is_final_process": true,
+			})
+		} else {
+			logger.Warn(
+				"order_checkout_final_notification_skipped_missing_department_admin",
+				"dept_id", deptID,
+				"order_id", dto.OrderID,
+				"order_item_id", dto.OrderItemID,
+				"process_id", dto.ProcessID,
+			)
+		}
 	}
 
 	if dto.CompletedAt != nil && dto.NextProcessID != nil && orderstatus != nil && "completed" == *orderstatus && orderitem != nil {
