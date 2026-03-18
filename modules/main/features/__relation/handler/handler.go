@@ -41,6 +41,9 @@ func (h *RelationHandler) Get1(c *fiber.Ctx) error {
 	if err != nil {
 		return client_error.ResponseError(c, fiber.StatusBadRequest, err, err.Error())
 	}
+	if mainID <= 0 {
+		return c.JSON(nil)
+	}
 
 	cfg, err := relation.GetConfig1(key)
 	if err != nil {

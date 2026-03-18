@@ -887,8 +887,10 @@ func (r *orderItemProcessInProgressRepository) syncOrderAndItemStatus(
 		Query().
 		Where(orderitem.IDEQ(orderItemID)).
 		Select(
+			orderitem.FieldCreatedAt,
 			orderitem.FieldCustomFields,
 			orderitem.FieldOrderID,
+			orderitem.FieldRemakeCount,
 		).
 		Only(ctx)
 	if err != nil {
@@ -1041,7 +1043,7 @@ func (r *orderItemProcessInProgressRepository) checkoutWithData(ctx context.Cont
 	return dto, nil
 }
 
-func (r *orderItemProcessInProgressRepository) ProcessInfoByProcessID1(ctx context.Context, tx *generated.Tx, processID *int64) (*int, *string, *string, *string, error) {
+func (r *orderItemProcessInProgressRepository) processInfoFromSection(ctx context.Context, tx *generated.Tx, processID *int64) (*int, *string, *string, *string, error) {
 	if processID == nil {
 		return nil, nil, nil, nil, nil
 	}
@@ -1132,6 +1134,25 @@ func (r *orderItemProcessInProgressRepository) ProcessInfoByProcessID(
 	}
 	if oip.ProcessName != nil {
 		processName = oip.ProcessName
+	}
+
+	if leaderID == nil || leaderName == nil || sectionName == nil || processName == nil {
+		fallbackLeaderID, fallbackLeaderName, fallbackSectionName, fallbackProcessName, err := r.processInfoFromSection(ctx, tx, processID)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if leaderID == nil {
+			leaderID = fallbackLeaderID
+		}
+		if leaderName == nil {
+			leaderName = fallbackLeaderName
+		}
+		if sectionName == nil {
+			sectionName = fallbackSectionName
+		}
+		if processName == nil {
+			processName = fallbackProcessName
+		}
 	}
 
 	return leaderID, leaderName, sectionName, processName, nil

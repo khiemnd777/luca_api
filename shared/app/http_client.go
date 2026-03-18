@@ -35,6 +35,10 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("status %d: %s", e.StatusCode, e.Message)
 }
 
+func (e *StatusError) HTTPStatusCode() int {
+	return e.StatusCode
+}
+
 func NewHttpClient() *HttpClient {
 	return &HttpClient{
 		client: http.DefaultClient,

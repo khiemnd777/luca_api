@@ -10,6 +10,7 @@ import (
 	"github.com/khiemnd777/andy_api/modules/main/features/order/repository"
 	"github.com/khiemnd777/andy_api/shared/cache"
 	"github.com/khiemnd777/andy_api/shared/db/ent/generated"
+	"github.com/khiemnd777/andy_api/shared/logger"
 	"github.com/khiemnd777/andy_api/shared/metadata/customfields"
 	"github.com/khiemnd777/andy_api/shared/module"
 	auditlogmodel "github.com/khiemnd777/andy_api/shared/modules/auditlog/model"
@@ -293,8 +294,10 @@ func (s *orderItemProcessService) CheckInOrOut(
 	cache.InvalidateKeys(keys...)
 	cache.InvalidateKeys(kOrderAll(deptID)...)
 
+	shouldNotifyNextLeader := dto.CompletedAt != nil && dto.NextProcessID != nil && dto.NextLeaderID != nil
+
 	// notify to next process's leader
-	if dto.CompletedAt != nil && dto.NextProcessID != nil {
+	if shouldNotifyNextLeader {
 		notification.Notify(*dto.NextLeaderID, userID, "order:checkout", map[string]any{
 			"leader_id":       dto.NextLeaderID,
 			"leader_name":     dto.NextLeaderName,
@@ -303,38 +306,46 @@ func (s *orderItemProcessService) CheckInOrOut(
 			"section_name":    dto.NextSectionName,
 			"process_name":    dto.NextProcessName,
 		})
+	} else if dto.CompletedAt != nil && dto.NextProcessID != nil {
+		logger.Warn(
+			"order_checkout_notification_skipped_missing_next_leader",
+			"order_id", dto.OrderID,
+			"order_item_id", dto.OrderItemID,
+			"process_id", dto.ProcessID,
+			"next_process_id", dto.NextProcessID,
+		)
+	}
 
-		if orderstatus != nil && "completed" == *orderstatus {
-			pubsub.PublishAsync("dashboard:daily:turnaround:stats", &model.CaseDailyStatsUpsert{
-				DepartmentID: deptID,
-				CompletedAt:  *dto.CompletedAt,
-				ReceivedAt:   orderitem.CreatedAt,
-			})
+	if dto.CompletedAt != nil && dto.NextProcessID != nil && orderstatus != nil && "completed" == *orderstatus && orderitem != nil {
+		pubsub.PublishAsync("dashboard:daily:turnaround:stats", &model.CaseDailyStatsUpsert{
+			DepartmentID: deptID,
+			CompletedAt:  *dto.CompletedAt,
+			ReceivedAt:   orderitem.CreatedAt,
+		})
 
-			realtime.BroadcastToDept(deptID, "dashboard:daily:turnaround:stats", nil)
+		realtime.BroadcastToDept(deptID, "dashboard:daily:turnaround:stats", nil)
 
-			pubsub.PublishAsync("dashboard:daily:remake:stats", &model.CaseDailyRemakeStatsUpsert{
-				DepartmentID: deptID,
-				CompletedAt:  *dto.CompletedAt,
-				IsRemake:     orderitem.RemakeCount > 0,
-			})
+		pubsub.PublishAsync("dashboard:daily:remake:stats", &model.CaseDailyRemakeStatsUpsert{
+			DepartmentID: deptID,
+			CompletedAt:  *dto.CompletedAt,
+			IsRemake:     orderitem.RemakeCount > 0,
+		})
 
-			realtime.BroadcastToDept(deptID, "dashboard:daily:remake:stats", nil)
+		realtime.BroadcastToDept(deptID, "dashboard:daily:remake:stats", nil)
 
-			pubsub.PublishAsync("dashboard:daily:completed:stats", &model.CaseDailyCompletedStatsUpsert{
-				DepartmentID: deptID,
-				CompletedAt:  *dto.CompletedAt,
-			})
+		pubsub.PublishAsync("dashboard:daily:completed:stats", &model.CaseDailyCompletedStatsUpsert{
+			DepartmentID: deptID,
+			CompletedAt:  *dto.CompletedAt,
+		})
 
-			realtime.BroadcastToDept(deptID, "dashboard:daily:completed:stats", nil)
+		realtime.BroadcastToDept(deptID, "dashboard:daily:completed:stats", nil)
 
-			pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
-				DepartmentID: deptID,
-				StatAt:       time.Now(),
-			})
+		pubsub.PublishAsync("dashboard:daily:active:stats", &model.CaseDailyActiveStatsUpsert{
+			DepartmentID: deptID,
+			StatAt:       time.Now(),
+		})
 
-			realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
-		}
+		realtime.BroadcastToDept(deptID, "dashboard:daily:active:stats", nil)
 	}
 
 	realtime.BroadcastAll("order:inprogress", nil)
